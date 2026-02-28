@@ -82,8 +82,12 @@
 3. 在部署机器上新建一个文件夹，命名为「BiliPS5」，将下载的三个文件放入该文件夹（确保三个文件在同一目录，无其他多余文件）
 
 方式二：克隆项目（需有 Git 基础）
+打开部署机器的命令行（Windows 用 CMD/PowerShell，Linux/macOS 用终端），先确认已安装 Git（未安装可参考 Git 官方教程：https://git-scm.com/downloads），安装完成后执行以下通用命令（无需修改，直接复制粘贴）：
 
-打开部署机器的命令行（Windows 用 CMD/PowerShell，Linux/macOS 用终端），执行以下命令：
+git clone https://github.com/你的GitHub用户名/BiliPS5.git
+cd BiliPS5
+
+说明：将命令中的「你的GitHub用户名」替换为你实际的GitHub用户名即可（仅需修改这一处，其余无需改动），若你已将项目上传至GitHub，可直接复制仓库的「Clone HTTPS」链接，替换上述命令中的克隆链接。
 
 git clone 本项目GitHub仓库地址
 cd BiliPS5
@@ -101,6 +105,7 @@ cd BiliPS5
 执行以下命令，查看服务运行日志，确认无报错：
 
 docker compose logs -f
+
 
 ✅ 正常状态：日志中会显示「Web配置界面已启动」「IRC服务已启动」「开始监听B站直播间」等字样，无红色错误提示。
 
