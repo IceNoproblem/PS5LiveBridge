@@ -1,8 +1,6 @@
 # PS5BiliDanmaku
 让Ps5游戏机不使用采集卡进行直播（B站），把 Bilibili 直播弹幕转发到 PS5屏幕上的轻量工具，全 Web 配置、Docker 一键部署。
 
-BiliPS5
-
 一款轻量级工具，通过IRC协议将B站直播弹幕转发到PS5，支持全Web界面配置，Docker一键部署，可配合PS5内置直播程序使用。
 
 🔍 核心原理（简单介绍）
