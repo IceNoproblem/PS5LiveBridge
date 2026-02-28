@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  # B站弹幕转发服务（无deploy/resources，无报错）
+  ps5-bilibili-danmaku:
+    build: .
+    container_name: ps5-bilibili-danmaku
+    restart: always
+    network_mode: host
+    volumes:
+      - ./logs:/app/logs
+      - ./config.json:/app/config.json
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONIOENCODING=utf-8
+      - LC_ALL=C.UTF-8
+      - LANG=C.UTF-8
+      - PYTHONWARNINGS="ignore::urllib3.connectionpool:UserWarning"
+      - URLLIB3_LOG_LEVEL=CRITICAL
+      - LOG_LEVEL=INFO
+      - TZ=Asia/Shanghai
+
+  # ps5living服务推流 需要路由器dns劫持重映射给本机
+  ps5living:
+    image: bao3/playstation
+    container_name: ps5living
+    restart: always
+    stdin_open: true
+    tty: true
+    ports:
+      - "8081:80/tcp"
+      - "1935:1935/tcp"
+    privileged: true
+    volumes:
+      - ./ps5living/config:/app/config
+      - ./ps5living/data:/app/data
+    environment:
+      - TZ=Asia/Shanghai
+      - PS5_IP=192.168.110.2
+      - STREAM_QUALITY=1080p     # 可选：480p / 720p / 1080p
+      - STREAM_BITRATE=8000     # 码率（kbps）：480p→1500，720p→3000，
+      - STREAM_FPS=60         # 帧率：25/30/60（PS5一般建议60）
