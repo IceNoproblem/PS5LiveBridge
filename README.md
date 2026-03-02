@@ -85,9 +85,9 @@
 
 #### 方式一：下载核心文件（推荐新手）
 
-1. 打开本项目 GitHub 仓库（https://github.com/IceNoproblem/PS5BiliDanmaku），找到「danmaku_forward.py、Dockerfile、docker-compose.yml」三个文件
+1. 打开本项目 GitHub 仓库https://github.com/IceNoproblem/PS5BiliDanmaku，找到「danmaku_forward.py、Dockerfile、docker-compose.yml」三个文件。
 
-2. 分别点击每个文件，点击右上角「Download raw file」下载（确保下载的文件无后缀、无修改）
+2. 分别点击每个文件，点击右上角「Download raw file」下载 确保下载的文件后缀无修改。
 
 3. 在部署机器上新建一个文件夹，命名为「PS5BiliDanmaku」，将下载的三个文件放入该文件夹（确保三个文件在同一目录，无其他多余文件）
 
