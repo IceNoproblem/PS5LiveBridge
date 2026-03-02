@@ -73,7 +73,7 @@
 
 确保你的部署机器（电脑/服务器）已满足「部署要求」，重点确认：
 
-- 已安装 Docker，一般Nas或者软路由自带docker（若未安装，可参考 Docker 官方教程：https://docs.docker.com/get-docker/）
+- 已安装 Docker，一般Nas或者软路由自带docker（ 若未安装，可参考 Docker 官方教程：https://docs.docker.com/get-docker ）
 
 - 部署机器和 PS5 连接同一个路由器（确保在同一局域网）
 
