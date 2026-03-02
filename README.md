@@ -56,7 +56,8 @@
 
 - 权限要求：部署机器需拥有管理员/root权限（用于Docker操作、端口占用）
 
-- 网络访问：部署机器需能正常访问B站直播API（无网络代理限制）
+- 网络访问：部署机器需能正常访问B站直播API（无网络代理限制）,ps5有加速器。
+  
 
 ## 🚀 快速部署（新手友好版）
 
@@ -66,7 +67,7 @@
 
 确保你的部署机器（电脑/服务器）已满足「部署要求」，重点确认：
 
-- 已安装 Docker 和 Docker Compose（若未安装，可参考 Docker 官方教程：https://docs.docker.com/get-docker/）
+- 已安装 Docker，一般Nas或者软路由自带docker（若未安装，可参考 Docker 官方教程：https://docs.docker.com/get-docker/）
 
 - 部署机器和 PS5 连接同一个路由器（确保在同一局域网）
 
@@ -88,9 +89,8 @@
 
 适合有基础、想快速获取项目的用户，全程无需手动修改命令，跟着来即可：
 
-✅ 新手提示：全程无需手动修改任何命令，克隆链接直接从你自己的 GitHub 仓库复制，粘贴后回车即可，出错直接换方式一。
 
-打开部署机器的命令行（Windows 用 CMD/PowerShell，Linux/macOS 用终端），先确认已安装 Git（未安装可参考 Git 官方教程：https://git-scm.com/downloads），安装完成后执行以下通用命令（无需修改，直接复制粘贴）：
+打开部署机器的命令行（Windows 用 CMD/PowerShell，Linux/macOS 用终端）（未安装可参考 Git 官方教程：https://git-scm.com/downloads），安装完成后执行以下通用命令（无需修改，直接复制粘贴）：
 
 ```bash
 git clone https://github.com/IceNoproblem/PS5BiliDanmaku.git
@@ -102,8 +102,12 @@ cd PS5BiliDanmaku
 1. 打开命令行/终端，进入「PS5BiliDanmaku」文件夹（新手可通过「cd 文件夹路径」进入，例如 Windows：cd C:\PS5BiliDanmaku）
 
 2. 复制粘贴以下命令，按下回车，等待自动构建镜像并启动服务（首次启动会下载依赖，耗时1-5分钟，耐心等待即可）：
+   ```bash
+docker compose build --no-cache
+docker compose up -d
+```
 
-3. 启动完成后，命令行不会报错，说明服务启动成功。
+4. 启动完成后，命令行不会报错，说明服务启动成功。
 
 ### 4. 查看运行状态（确认服务正常）
 
