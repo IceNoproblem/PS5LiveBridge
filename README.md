@@ -103,6 +103,7 @@ cd PS5BiliDanmaku
 
 2. 复制粘贴以下命令，按下回车，等待自动构建镜像并启动服务（首次启动会下载依赖，耗时1-5分钟，耐心等待即可）：
 ```bash
+cd ps5-bilibili-danmaku
 docker compose build --no-cache
 docker compose up -d
 ```
