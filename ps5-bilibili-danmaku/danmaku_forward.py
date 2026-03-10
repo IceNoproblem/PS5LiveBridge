@@ -22,12 +22,12 @@ CONFIG_FILE = "config.json"
 DEFAULT_CONFIG = {
     "WEB_PORT": 5000,
     "BILIBILI_ROOM_ID": 669827,
-    "TWITCH_CHANNEL": "yu332506767",
+    "TWITCH_CHANNEL": "icenoproblem",
     "IRC_HOST": "0.0.0.0",
     "IRC_PORT": 6667,
     "DANMAKU_POLL_INTERVAL": 3,
     "MAX_SEEN_DANMAKU": 1000,
-    "HEARTBEAT_TIMEOUT": 300,
+    "HEARTBEAT_TIMEOUT": 20000,
     "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 CONFIG = DEFAULT_CONFIG.copy()
@@ -246,7 +246,7 @@ class IRCServer:
         await client.send_safe(msg)
         logger.info(f"转发弹幕 [{user}]: {text}")
 
-# ===================== B站弹幕抓取（核心修复SEEN_DANMAKU_RND）=====================
+# ===================== B站弹幕抓取 =====================
 # 全局Session，复用连接
 SESSION = requests.Session()
 SESSION.verify = False  # 禁用SSL验证
@@ -259,7 +259,7 @@ def update_session_headers():
     })
 
 def get_danmaku():
-    """抓取B站直播间弹幕（修复SEEN_DANMAKU_RND作用域）"""
+    """抓取B站直播间弹幕"""
     global DANMAKU_RUNNING, SEEN_DANMAKU_RND  # 显式声明使用全局变量
     try:
         DANMAKU_RUNNING = True
@@ -324,7 +324,7 @@ async def danmaku_worker(irc_srv):
 
 # ===================== Web服务（全配置项可视化管理）=====================
 def start_web():
-    """启动Web配置界面（所有配置项可修改）"""
+    """启动Web配置界面"""
     web_port = CONFIG.get("WEB_PORT", 5000)
     app = Flask("ps5-danmaku-web")
 
