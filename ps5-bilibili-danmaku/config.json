@@ -1,0 +1,15 @@
+{
+    "WEB_PORT": 5000,
+    "BILIBILI_ROOM_ID": 669827,
+    "TWITCH_CHANNEL": "icenoproblem",
+    "IRC_HOST": "0.0.0.0",
+    "IRC_PORT": 6667,
+    "DANMAKU_POLL_INTERVAL": 3,
+    "GIFT_POLL_INTERVAL": 5,
+    "MAX_SEEN_DANMAKU": 1000,
+    "MAX_SEEN_GIFT": 500,
+    "HEARTBEAT_TIMEOUT": 30000,
+    "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "ENABLE_GIFT": true,
+    "MAX_LOG_ITEMS": 20
+}
