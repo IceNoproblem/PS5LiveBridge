@@ -1,0 +1,863 @@
+2026-03-21 04:26:17,259 [INFO] 测试RTMP服务器连接...
+2026-03-21 04:26:17,263 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:26:17,264 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:26:17,265 [INFO] ✓ RTMP服务器连接成功
+2026-03-21 04:26:17,265 [INFO] 测试Danmaku API连接...
+2026-03-21 04:26:17,266 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:26:17,267 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:26:17,268 [INFO] ✓ Danmaku API连接成功
+2026-03-21 04:26:17,268 [INFO] ============================================================
+2026-03-21 04:26:17,268 [INFO] RTMP推流监控服务启动
+2026-03-21 04:26:17,268 [INFO]   RTMP服务器: http://127.0.0.1:8080/stat
+2026-03-21 04:26:17,268 [INFO]   RTMP类型: nginx-rtmp
+2026-03-21 04:26:17,268 [INFO]   监控间隔: 2秒
+2026-03-21 04:26:17,268 [INFO]   Danmaku API: http://127.0.0.1:5000/api/rtmp/status/update
+2026-03-21 04:26:17,268 [INFO] ============================================================
+2026-03-21 04:26:17,269 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:26:17,270 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:26:17,279 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6581kbps
+2026-03-21 04:26:17,279 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6581, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:26:17,280 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:26:17,282 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:26:17,282 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:26:17,283 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:26:19,283 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:26:19,284 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:26:19,284 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6581kbps
+2026-03-21 04:26:19,285 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6581, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:26:19,285 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:26:19,297 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:26:19,298 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:26:19,298 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:26:21,298 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:26:21,299 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:26:21,299 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6581kbps
+2026-03-21 04:26:21,300 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6581, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:26:21,300 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:26:21,311 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:26:21,312 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:26:21,312 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:26:23,313 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:26:23,314 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:26:23,315 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6581kbps
+2026-03-21 04:26:23,315 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6581, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:26:23,316 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:26:23,317 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:26:23,317 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:26:23,317 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:26:25,319 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:26:25,320 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:26:25,321 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6581kbps
+2026-03-21 04:26:25,321 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6581, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:26:25,322 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:26:25,323 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:26:25,323 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:26:25,323 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:26:27,324 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:26:27,325 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:26:27,326 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6700kbps
+2026-03-21 04:26:27,326 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6700, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:26:27,327 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:26:27,328 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:26:27,329 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:26:27,329 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:26:29,330 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:26:29,341 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:26:29,342 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6700kbps
+2026-03-21 04:26:29,342 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6700, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:26:29,343 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:26:29,345 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:26:29,345 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:26:29,345 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:26:31,346 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:26:31,358 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:26:31,358 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6700kbps
+2026-03-21 04:26:31,359 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6700, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:26:31,359 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:26:31,361 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:26:31,361 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:26:31,361 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:26:33,362 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:26:33,374 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:26:33,374 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6700kbps
+2026-03-21 04:26:33,374 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6700, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:26:33,376 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:26:33,377 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:26:33,377 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:26:33,377 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:26:35,379 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:26:35,380 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:26:35,381 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6700kbps
+2026-03-21 04:26:35,381 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6700, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:26:35,382 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:26:35,384 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:26:35,384 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:26:35,384 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:26:37,385 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:26:37,396 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:26:37,396 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6597kbps
+2026-03-21 04:26:37,396 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6597, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:26:37,397 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:26:37,399 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:26:37,399 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:26:37,399 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:26:39,401 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:26:39,402 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:26:39,403 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6597kbps
+2026-03-21 04:26:39,403 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6597, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:26:39,403 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:26:39,405 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:26:39,405 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:26:39,405 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:26:41,407 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:26:41,418 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:26:41,418 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6597kbps
+2026-03-21 04:26:41,418 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6597, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:26:41,419 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:26:41,421 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:26:41,421 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:26:41,422 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:26:43,423 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:26:43,424 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:26:43,425 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6597kbps
+2026-03-21 04:26:43,425 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6597, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:26:43,426 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:26:43,427 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:26:43,427 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:26:43,427 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:26:45,428 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:26:45,429 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:26:45,429 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6597kbps
+2026-03-21 04:26:45,430 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6597, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:26:45,430 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:26:45,432 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:26:45,432 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:26:45,432 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:26:47,433 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:26:47,434 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:26:47,434 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6597kbps
+2026-03-21 04:26:47,435 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6597, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:26:47,435 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:26:47,437 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:26:47,437 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:26:47,437 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:26:49,439 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:26:49,440 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:26:49,441 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6655kbps
+2026-03-21 04:26:49,441 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6655, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:26:49,442 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:26:49,444 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:26:49,445 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:26:49,445 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:26:51,446 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:26:51,447 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:26:51,447 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6655kbps
+2026-03-21 04:26:51,448 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6655, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:26:51,448 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:26:51,450 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:26:51,450 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:26:51,450 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:26:53,451 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:26:53,453 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:26:53,453 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6655kbps
+2026-03-21 04:26:53,453 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6655, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:26:53,454 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:26:53,455 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:26:53,456 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:26:53,456 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:26:55,458 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:26:55,459 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:26:55,459 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6655kbps
+2026-03-21 04:26:55,459 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6655, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:26:55,460 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:26:55,462 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:26:55,462 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:26:55,462 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:26:57,463 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:26:57,464 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:26:57,465 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6655kbps
+2026-03-21 04:26:57,465 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6655, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:26:57,465 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:26:57,467 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:26:57,468 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:26:57,468 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:26:59,469 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:26:59,470 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:26:59,470 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6588kbps
+2026-03-21 04:26:59,471 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6588, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:26:59,471 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:26:59,473 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:26:59,473 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:26:59,473 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:01,474 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:01,485 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:01,485 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6588kbps
+2026-03-21 04:27:01,485 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6588, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:01,486 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:01,488 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:01,488 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:01,488 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:03,489 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:03,490 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:03,491 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6588kbps
+2026-03-21 04:27:03,491 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6588, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:03,492 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:03,503 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:03,504 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:03,504 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:05,504 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:05,505 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:05,505 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6588kbps
+2026-03-21 04:27:05,505 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6588, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:05,507 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:05,509 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:05,509 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:05,509 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:07,536 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:07,537 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:07,537 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6588kbps
+2026-03-21 04:27:07,538 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6588, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:07,539 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:07,543 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:07,544 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:07,544 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:09,545 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:09,546 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:09,546 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6588kbps
+2026-03-21 04:27:09,547 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6588, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:09,547 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:09,549 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:09,549 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:09,549 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:11,550 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:11,551 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:11,551 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6632kbps
+2026-03-21 04:27:11,552 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6632, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:11,552 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:11,564 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:11,565 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:11,565 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:13,565 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:13,566 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:13,567 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6632kbps
+2026-03-21 04:27:13,567 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6632, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:13,569 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:13,571 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:13,572 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:13,572 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:15,573 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:15,575 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:15,575 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6632kbps
+2026-03-21 04:27:15,576 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6632, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:15,577 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:15,587 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:15,588 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:15,588 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:17,589 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:17,590 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:17,590 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6632kbps
+2026-03-21 04:27:17,590 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6632, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:17,591 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:17,593 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:17,593 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:17,593 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:19,594 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:19,595 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:19,596 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6632kbps
+2026-03-21 04:27:19,596 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6632, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:19,596 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:19,598 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:19,598 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:19,598 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:21,599 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:21,600 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:21,601 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6569kbps
+2026-03-21 04:27:21,601 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6569, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:21,602 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:21,612 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:21,613 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:21,613 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:23,614 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:23,615 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:23,616 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6569kbps
+2026-03-21 04:27:23,616 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6569, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:23,617 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:23,618 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:23,618 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:23,618 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:25,621 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:25,622 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:25,622 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6569kbps
+2026-03-21 04:27:25,622 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6569, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:25,623 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:25,625 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:25,625 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:25,625 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:27,627 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:27,627 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:27,628 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6569kbps
+2026-03-21 04:27:27,628 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6569, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:27,629 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:27,631 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:27,631 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:27,631 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:29,633 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:29,634 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:29,634 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6569kbps
+2026-03-21 04:27:29,634 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6569, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:29,635 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:29,636 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:29,637 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:29,637 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:31,637 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:31,648 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:31,648 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6569kbps
+2026-03-21 04:27:31,648 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6569, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:31,649 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:31,661 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:31,662 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:31,662 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:33,663 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:33,664 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:33,665 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6705kbps
+2026-03-21 04:27:33,665 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6705, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:33,666 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:33,667 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:33,668 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:33,668 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:35,669 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:35,681 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:35,682 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6705kbps
+2026-03-21 04:27:35,682 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6705, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:35,683 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:35,684 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:35,684 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:35,684 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:37,686 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:37,697 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:37,697 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6705kbps
+2026-03-21 04:27:37,697 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6705, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:37,698 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:37,700 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:37,700 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:37,700 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:39,702 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:39,702 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:39,703 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6705kbps
+2026-03-21 04:27:39,703 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6705, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:39,704 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:39,715 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:39,716 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:39,716 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:41,717 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:41,718 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:41,718 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6705kbps
+2026-03-21 04:27:41,719 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6705, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:41,719 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:41,731 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:41,732 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:41,732 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:43,732 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:43,744 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:43,744 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6549kbps
+2026-03-21 04:27:43,745 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6549, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:43,745 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:43,747 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:43,747 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:43,747 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:45,749 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:45,750 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:45,750 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6549kbps
+2026-03-21 04:27:45,751 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6549, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:45,751 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:45,753 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:45,753 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:45,753 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:47,754 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:47,765 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:47,765 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6549kbps
+2026-03-21 04:27:47,765 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6549, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:47,766 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:47,768 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:47,768 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:47,768 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:49,769 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:49,770 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:49,771 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6549kbps
+2026-03-21 04:27:49,771 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6549, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:49,772 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:49,782 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:49,783 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:49,783 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:51,784 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:51,785 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:51,786 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6549kbps
+2026-03-21 04:27:51,786 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6549, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:51,787 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:51,788 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:51,788 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:51,789 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:53,790 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:53,801 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:53,801 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6549kbps
+2026-03-21 04:27:53,802 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6549, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:53,802 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:53,804 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:53,804 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:53,805 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:55,806 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:55,807 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:55,808 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6706kbps
+2026-03-21 04:27:55,808 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6706, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:55,809 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:55,819 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:55,820 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:55,820 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:57,821 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:57,822 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:57,823 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6706kbps
+2026-03-21 04:27:57,823 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6706, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:57,823 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:57,835 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:57,836 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:57,836 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:27:59,837 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:27:59,838 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:27:59,838 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6706kbps
+2026-03-21 04:27:59,838 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6706, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:27:59,839 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:27:59,841 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:27:59,841 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:27:59,841 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:01,842 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:01,853 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:01,853 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6706kbps
+2026-03-21 04:28:01,853 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6706, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:01,854 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:01,865 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:01,866 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:01,866 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:03,867 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:03,868 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:03,868 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6706kbps
+2026-03-21 04:28:03,868 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6706, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:03,869 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:03,871 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:03,871 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:03,871 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:05,873 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:05,873 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:05,874 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6524kbps
+2026-03-21 04:28:05,874 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6524, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:05,875 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:05,877 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:05,877 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:05,877 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:07,878 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:07,890 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:07,890 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6524kbps
+2026-03-21 04:28:07,890 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6524, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:07,891 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:07,903 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:07,904 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:07,904 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:09,905 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:09,906 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:09,906 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6524kbps
+2026-03-21 04:28:09,907 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6524, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:09,907 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:09,908 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:09,908 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:09,908 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:11,910 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:11,921 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:11,922 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6524kbps
+2026-03-21 04:28:11,922 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6524, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:11,923 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:11,924 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:11,925 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:11,925 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:13,927 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:13,927 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:13,928 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6524kbps
+2026-03-21 04:28:13,928 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6524, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:13,929 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:13,939 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:13,940 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:13,940 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:15,942 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:15,943 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:15,944 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6524kbps
+2026-03-21 04:28:15,944 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6524, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:15,945 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:15,946 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:15,947 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:15,947 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:17,947 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:17,948 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:17,948 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6643kbps
+2026-03-21 04:28:17,948 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6643, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:17,949 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:17,960 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:17,961 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:17,961 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:19,962 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:19,974 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:19,975 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6643kbps
+2026-03-21 04:28:19,975 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6643, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:19,975 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:19,977 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:19,977 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:19,977 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:21,978 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:21,990 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:21,991 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6643kbps
+2026-03-21 04:28:21,991 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6643, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:21,992 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:21,994 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:21,994 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:21,994 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:23,995 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:24,006 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:24,006 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6643kbps
+2026-03-21 04:28:24,006 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6643, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:24,007 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:24,020 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:24,021 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:24,021 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:26,023 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:26,024 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:26,025 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6643kbps
+2026-03-21 04:28:26,025 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6643, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:26,026 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:26,028 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:26,028 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:26,028 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:28,028 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:28,029 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:28,030 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6578kbps
+2026-03-21 04:28:28,030 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6578, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:28,030 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:28,032 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:28,032 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:28,032 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:30,034 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:30,035 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:30,035 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6578kbps
+2026-03-21 04:28:30,036 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6578, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:30,036 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:30,038 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:30,038 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:30,038 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:32,040 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:32,041 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:32,042 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6578kbps
+2026-03-21 04:28:32,043 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6578, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:32,043 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:32,045 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:32,046 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:32,046 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:34,047 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:34,048 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:34,048 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6578kbps
+2026-03-21 04:28:34,048 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6578, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:34,049 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:34,051 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:34,051 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:34,051 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:36,052 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:36,053 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:36,053 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6578kbps
+2026-03-21 04:28:36,053 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6578, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:36,054 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:36,055 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:36,056 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:36,056 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:38,056 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:38,057 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:38,058 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6721kbps
+2026-03-21 04:28:38,058 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6721, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:38,058 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:38,060 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:38,060 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:38,060 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:40,062 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:40,063 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:40,063 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6721kbps
+2026-03-21 04:28:40,064 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6721, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:40,065 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:40,066 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:40,066 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:40,066 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:42,067 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:42,079 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:42,079 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6721kbps
+2026-03-21 04:28:42,079 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6721, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:42,080 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:42,082 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:42,083 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:42,083 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:44,090 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:44,099 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:44,099 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6721kbps
+2026-03-21 04:28:44,100 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6721, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:44,101 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:44,113 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:44,114 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:44,114 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:46,116 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:46,127 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:46,127 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6721kbps
+2026-03-21 04:28:46,127 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6721, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:46,128 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:46,129 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:46,130 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:46,130 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:48,130 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:48,131 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:48,131 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6721kbps
+2026-03-21 04:28:48,131 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6721, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:48,132 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:48,143 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:48,144 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:48,144 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:50,145 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:50,156 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:50,156 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6578kbps
+2026-03-21 04:28:50,157 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6578, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:50,157 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:50,159 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:50,159 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:50,159 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:52,160 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:52,161 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:52,162 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6578kbps
+2026-03-21 04:28:52,162 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6578, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:52,163 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:52,165 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:52,165 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:52,165 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:54,166 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:54,177 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:54,177 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6578kbps
+2026-03-21 04:28:54,177 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6578, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:54,178 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:54,189 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:54,190 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:54,190 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:56,192 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:56,193 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:56,194 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6578kbps
+2026-03-21 04:28:56,194 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6578, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:56,195 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:56,197 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:56,197 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:56,197 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:28:58,198 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:28:58,199 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:28:58,200 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6578kbps
+2026-03-21 04:28:58,200 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6578, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:28:58,201 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:28:58,207 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:28:58,208 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:28:58,208 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:29:00,209 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:29:00,220 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:29:00,220 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6616kbps
+2026-03-21 04:29:00,220 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6616, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:29:00,222 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:29:00,223 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:29:00,224 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:29:00,224 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:29:02,226 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:29:02,227 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:29:02,227 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6616kbps
+2026-03-21 04:29:02,227 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6616, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:29:02,229 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:29:02,230 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:29:02,231 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:29:02,231 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:29:04,232 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:29:04,244 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:29:04,245 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6616kbps
+2026-03-21 04:29:04,245 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6616, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:29:04,245 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:29:04,256 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:29:04,257 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:29:04,257 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:29:06,258 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:29:06,259 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:29:06,259 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6616kbps
+2026-03-21 04:29:06,260 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6616, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:29:06,260 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:29:06,271 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:29:06,272 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:29:06,272 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:29:08,272 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:29:08,273 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:29:08,273 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6616kbps
+2026-03-21 04:29:08,273 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6616, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:29:08,274 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:29:08,286 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:29:08,287 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:29:08,287 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:29:10,288 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:29:10,299 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:29:10,299 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6616kbps
+2026-03-21 04:29:10,299 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6616, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:29:10,300 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:29:10,311 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:29:10,312 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:29:10,312 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:29:12,312 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:29:12,313 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:29:12,313 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6580kbps
+2026-03-21 04:29:12,313 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6580, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:29:12,314 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:29:12,315 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:29:12,316 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:29:12,316 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:29:14,317 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:29:14,329 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:29:14,329 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6580kbps
+2026-03-21 04:29:14,330 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6580, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:29:14,330 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:29:14,342 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:29:14,343 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:29:14,343 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:29:16,344 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:29:16,355 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:29:16,355 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6580kbps
+2026-03-21 04:29:16,356 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6580, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:29:16,357 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:29:16,359 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:29:16,359 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:29:16,359 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:29:18,360 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:29:18,371 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:29:18,371 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6580kbps
+2026-03-21 04:29:18,371 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6580, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:29:18,372 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:29:18,384 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:29:18,385 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:29:18,385 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:29:20,386 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:29:20,397 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:29:20,397 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6580kbps
+2026-03-21 04:29:20,397 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6580, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:29:20,398 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:29:20,409 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:29:20,410 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:29:20,410 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:29:22,410 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:29:22,411 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:29:22,412 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6672kbps
+2026-03-21 04:29:22,412 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6672, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:29:22,413 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:29:22,414 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:29:22,414 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:29:22,414 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:29:24,415 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:29:24,416 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:29:24,417 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6672kbps
+2026-03-21 04:29:24,417 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6672, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:29:24,417 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:29:24,419 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:29:24,419 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:29:24,419 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:29:26,420 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:29:26,422 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:29:26,423 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6672kbps
+2026-03-21 04:29:26,423 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6672, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:29:26,424 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:29:26,436 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:29:26,437 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:29:26,437 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:29:28,437 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:29:28,438 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:29:28,439 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6672kbps
+2026-03-21 04:29:28,439 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6672, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:29:28,439 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:29:28,441 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:29:28,442 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:29:28,442 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:29:30,444 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:29:30,455 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:29:30,455 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6672kbps
+2026-03-21 04:29:30,456 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6672, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:29:30,457 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:29:30,458 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:29:30,459 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:29:30,459 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:29:32,459 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:8080
+2026-03-21 04:29:32,460 [DEBUG] http://127.0.0.1:8080 "GET /stat HTTP/1.1" 200 1661
+2026-03-21 04:29:32,461 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6672kbps
+2026-03-21 04:29:32,461 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6672, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:29:32,463 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:5000
+2026-03-21 04:29:32,464 [DEBUG] http://127.0.0.1:5000 "POST /api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:29:32,464 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:29:32,464 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:29:34,467 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:33210
+2026-03-21 04:29:34,469 [DEBUG] http://127.0.0.1:33210 "GET http://127.0.0.1:8080/stat HTTP/1.1" 200 1661
+2026-03-21 04:29:34,469 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6591kbps
+2026-03-21 04:29:34,469 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6591, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:29:34,470 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:33210
+2026-03-21 04:29:34,475 [DEBUG] http://127.0.0.1:33210 "POST http://127.0.0.1:5000/api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:29:34,475 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:29:34,476 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:29:36,476 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:33210
+2026-03-21 04:29:36,478 [DEBUG] http://127.0.0.1:33210 "GET http://127.0.0.1:8080/stat HTTP/1.1" 200 1661
+2026-03-21 04:29:36,479 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6591kbps
+2026-03-21 04:29:36,479 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6591, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:29:36,480 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:33210
+2026-03-21 04:29:36,482 [DEBUG] http://127.0.0.1:33210 "POST http://127.0.0.1:5000/api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:29:36,482 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:29:36,482 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:29:38,484 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:33210
+2026-03-21 04:29:38,486 [DEBUG] http://127.0.0.1:33210 "GET http://127.0.0.1:8080/stat HTTP/1.1" 200 1661
+2026-03-21 04:29:38,486 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6591kbps
+2026-03-21 04:29:38,486 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6591, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:29:38,487 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:33210
+2026-03-21 04:29:38,490 [DEBUG] http://127.0.0.1:33210 "POST http://127.0.0.1:5000/api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:29:38,490 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:29:38,490 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:29:40,494 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:33210
+2026-03-21 04:29:40,501 [DEBUG] http://127.0.0.1:33210 "GET http://127.0.0.1:8080/stat HTTP/1.1" 200 1661
+2026-03-21 04:29:40,501 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6591kbps
+2026-03-21 04:29:40,501 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6591, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:29:40,503 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:33210
+2026-03-21 04:29:40,506 [DEBUG] http://127.0.0.1:33210 "POST http://127.0.0.1:5000/api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:29:40,507 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:29:40,507 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:29:42,508 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:33210
+2026-03-21 04:29:42,510 [DEBUG] http://127.0.0.1:33210 "GET http://127.0.0.1:8080/stat HTTP/1.1" 200 1661
+2026-03-21 04:29:42,510 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6591kbps
+2026-03-21 04:29:42,510 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6591, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:29:42,511 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:33210
+2026-03-21 04:29:42,513 [DEBUG] http://127.0.0.1:33210 "POST http://127.0.0.1:5000/api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:29:42,514 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:29:42,514 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:29:44,514 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:33210
+2026-03-21 04:29:44,516 [DEBUG] http://127.0.0.1:33210 "GET http://127.0.0.1:8080/stat HTTP/1.1" 200 1661
+2026-03-21 04:29:44,517 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6655kbps
+2026-03-21 04:29:44,517 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6655, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:29:44,518 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:33210
+2026-03-21 04:29:44,520 [DEBUG] http://127.0.0.1:33210 "POST http://127.0.0.1:5000/api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:29:44,520 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:29:44,520 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:29:46,523 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:33210
+2026-03-21 04:29:46,525 [DEBUG] http://127.0.0.1:33210 "GET http://127.0.0.1:8080/stat HTTP/1.1" 200 1661
+2026-03-21 04:29:46,526 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6655kbps
+2026-03-21 04:29:46,526 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6655, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:29:46,528 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:33210
+2026-03-21 04:29:46,531 [DEBUG] http://127.0.0.1:33210 "POST http://127.0.0.1:5000/api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:29:46,531 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:29:46,531 [DEBUG] RTMP状态已更新到danmaku_forward.py
+2026-03-21 04:29:48,534 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:33210
+2026-03-21 04:29:48,536 [DEBUG] http://127.0.0.1:33210 "GET http://127.0.0.1:8080/stat HTTP/1.1" 200 1661
+2026-03-21 04:29:48,536 [INFO] 推流中 - live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8 | 1920x1080 | 59fps | 6655kbps
+2026-03-21 04:29:48,536 [DEBUG] update_danmaku_status: 发送数据 = {'active': True, 'stream_key': 'live_1348515979_DGbH2broJeGMhclrsyQ3zRu3TzZvw8', 'encoding': 'H264', 'bitrate': 6655, 'resolution': '1920x1080', 'fps': 59}
+2026-03-21 04:29:48,537 [DEBUG] Starting new HTTP connection (1): 127.0.0.1:33210
+2026-03-21 04:29:48,539 [DEBUG] http://127.0.0.1:33210 "POST http://127.0.0.1:5000/api/rtmp/status/update HTTP/1.1" 200 54
+2026-03-21 04:29:48,540 [DEBUG] update_danmaku_status: 响应 = {'code': 0, 'msg': 'RTMP状态已更新'}
+2026-03-21 04:29:48,540 [DEBUG] RTMP状态已更新到danmaku_forward.py

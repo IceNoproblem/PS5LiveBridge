@@ -1,0 +1,2 @@
+2026/03/21 01:37:13 [notice] 2636#15428: signal process started
+2026/03/21 02:33:30 [emerg] 16048#15684: unknown directive "max_bitrate" in C:\ps5-bilibili-danmaku\nginx-rtmp\conf\nginx.conf:21
