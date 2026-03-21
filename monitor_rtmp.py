@@ -36,14 +36,14 @@ from typing import Dict, Optional
 DANMAKU_API_URL = "http://127.0.0.1:5000/api/rtmp/status/update"
 
 # RTMP服务器监控API地址（根据实际使用的服务调整）
-# 方式1: 如果使用本地nginx-rtmp（推荐）
+# 方式1: 如果使用本地nginx-rtmp（当前使用）
 RTMP_MONITOR_URL = "http://127.0.0.1:8080/stat"
 
-# 方式2: 如果使用远程bao3/playstation
-# RTMP_MONITOR_URL = "http://192.168.1.100:8080"
+# 方式2: 如果使用SRS
+# RTMP_MONITOR_URL = "http://127.0.0.1:1985/api/v1/streams"
 
-# 方式3: 如果使用nginx-rtmp-module（本地）
-# RTMP_MONITOR_URL = "http://127.0.0.1:8080/stat"
+# 方式3: 如果使用远程bao3/playstation
+# RTMP_MONITOR_URL = "http://192.168.1.100:8080"
 
 # 方式4: 如果使用自定义API，填写实际地址
 # RTMP_MONITOR_URL = "http://192.168.1.100:8080/api/status"
@@ -51,7 +51,7 @@ RTMP_MONITOR_URL = "http://127.0.0.1:8080/stat"
 # 监控间隔（秒）
 CHECK_INTERVAL = 2
 
-# RTMP服务器类型：'playstation', 'nginx-rtmp', 'custom'
+# RTMP服务器类型：'playstation', 'nginx-rtmp', 'srs', 'custom'
 RTMP_SERVER_TYPE = 'nginx-rtmp'
 
 # 推流码前缀（PS5推流时通常会生成）
@@ -97,6 +97,8 @@ class RTMPMonitor:
                 return self._get_playstation_status()
             elif self.server_type == 'nginx-rtmp':
                 return self._get_nginx_status()
+            elif self.server_type == 'srs':
+                return self._get_srs_status()
             elif self.server_type == 'custom':
                 return self._get_custom_status()
             else:
@@ -246,6 +248,112 @@ class RTMPMonitor:
 
         except Exception as e:
             logger.error(f"解析自定义API状态失败: {e}")
+            return {"active": False}
+
+    def _get_srs_status(self) -> Dict:
+        """
+        获取SRS (Simple Realtime Server) 的状态
+        SRS提供JSON格式的API: /api/v1/streams
+        """
+        try:
+            resp = requests.get(self.rtmp_url, timeout=5)
+            if resp.status_code != 200:
+                logger.warning(f"SRS API返回状态码: {resp.status_code}")
+                return {"active": False}
+
+            data = resp.json()
+            
+            # SRS API返回格式:
+            # {
+            #   "code": 0,
+            #   "server": {...},
+            #   "streams": {
+            #     "live_xxx": {
+            #       "name": "live_xxx",
+            #       "vhost": "__defaultVhost__",
+            #       "app": "live",
+            #       "stream": "live_xxx",
+            #       "publish": true,
+            #       "active": true,
+            #       "video": {
+            #         "codec": "H264",
+            #         "profile": "High",
+            #         "level": "4.2",
+            #         "width": 1920,
+            #         "height": 1080,
+            #         "frame_rate": 60.0,
+            #         "bitrate": 15000,
+            #         "pix_fmt": "yuv420p"
+            #       },
+            #       "audio": {
+            #         "codec": "AAC",
+            #         "sample_rate": 48000,
+            #         "channel": 2,
+            #         "bitrate": 384
+            #       }
+            #     }
+            #   }
+            # }
+
+            if data.get("code") != 0:
+                logger.warning(f"SRS API返回错误: {data.get('message')}")
+                return {"active": False}
+
+            streams = data.get("streams", {})
+            
+            # 查找活跃的推流
+            for stream_name, stream_info in streams.items():
+                is_publishing = stream_info.get("publish", False)
+                is_active = stream_info.get("active", False)
+                
+                if is_publishing and is_active:
+                    # 提取视频信息
+                    video = stream_info.get("video", {})
+                    audio = stream_info.get("audio", {})
+                    
+                    # 提取分辨率
+                    width = video.get("width", 1920)
+                    height = video.get("height", 1080)
+                    resolution = f"{width}x{height}"
+                    
+                    # 提取帧率
+                    fps = int(video.get("frame_rate", 60))
+                    
+                    # 提取码率 (kbps)
+                    video_bitrate = video.get("bitrate", 0)
+                    audio_bitrate = audio.get("bitrate", 0)
+                    total_bitrate = video_bitrate + audio_bitrate
+                    
+                    # 编码格式
+                    codec = video.get("codec", "H264")
+                    profile = video.get("profile", "High")
+                    encoding = f"{codec} {profile}"
+                    
+                    logger.info(
+                        f"检测到推流: {stream_name} | "
+                        f"{resolution} | {fps}fps | "
+                        f"视频:{video_bitrate}kbps 音频:{audio_bitrate}kbps"
+                    )
+
+                    return {
+                        "active": True,
+                        "stream_key": stream_name,
+                        "encoding": encoding,
+                        "bitrate": total_bitrate,
+                        "resolution": resolution,
+                        "fps": fps
+                    }
+
+            logger.debug("没有检测到活跃推流")
+            return {"active": False}
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"连接SRS API失败: {e}")
+            return {"active": False}
+        except Exception as e:
+            logger.error(f"解析SRS状态失败: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
             return {"active": False}
 
     def update_danmaku_status(self, status: Dict) -> bool:
