@@ -76,11 +76,16 @@ PS5直播请求流程：
 端口：6667
 
 劫持目标：
-contribute.live-video.net
-global-contribute.live-video.net
-apn20.contribute.live-video.net
-tmi.twitch.tv
-irc.twitch.tv
+192.168.110.99 contribute.live-video.net
+192.168.110.99 global-contribute.live-video.net
+192.168.110.99 apn20.contribute.live-video.net
+192.168.110.99 tmi.twitch.tv
+192.168.110.99 irc.twitch.tv
+192.168.110.99 ingest.global-contribute.live-video.net
+192.168.110.99 hkg06.contribute.live-video.net
+192.168.110.99 dus01.contribute.live-video.net
+192.168.110.99 cph.contribute.live-video.net
+192.168.110.99 fra06.contribute.live-video.net
 
 1、Windows系统
 
