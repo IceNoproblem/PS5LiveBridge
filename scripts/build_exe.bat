@@ -54,10 +54,15 @@ if exist tools\ffmpeg.exe (
   echo     otherwise the relay (PS5 -> Bilibili) will not start.
 )
 
-copy /y README.md "dist\PS5LiveBridge\使用说明.md" >nul 2>nul
+REM Output names must stay ASCII - no Chinese filenames anywhere in this file,
+REM not even in comments. cmd.exe garbles multi-byte text and then parses the
+REM rest of the line as commands; that silently kills the tail of this script.
+REM (Symptoms seen: "'dge' is not recognized", "|| was unexpected at this time".)
+REM If a Chinese README/launcher name is wanted, rename it afterwards with
+REM PowerShell - this file itself only deals in ASCII names.
+copy /y README.md "dist\PS5LiveBridge\README.md" >nul 2>nul
 copy /y LICENSE "dist\PS5LiveBridge\LICENSE.txt" >nul 2>nul
 if exist config.example.json copy /y config.example.json "dist\PS5LiveBridge\" >nul
-if exist 启动.bat copy /y 启动.bat "dist\PS5LiveBridge\" >nul 2>nul
 
 echo.
 echo ============================================================
