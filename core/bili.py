@@ -37,7 +37,8 @@ BASE_HEADERS = {
 APP_KEY = "aae92bc66f3edfab"
 APP_SEC = "af125a0d5279fd576c1b4418a3e8276d"
 
-CRED_FILE = os.path.join(paths.BASE_DIR, "bili_credential.json")
+# 凭据落在可写目录：桌面版是 exe 同级，容器里是挂进来的 /data（重启不丢登录）
+CRED_FILE = os.path.join(paths.DATA_DIR, "bili_credential.json")
 
 # 开播失败码 → 人话
 START_LIVE_ERRORS = {

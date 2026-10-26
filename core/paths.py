@@ -7,6 +7,12 @@ core/paths.py —— 路径、配置、日志（全项目唯一真相源）
        只有 nginx 例外 —— nginx 打不开中文路径，会被搬到 %LOCALAPPDATA%。
     2. 配置写入用「临时文件 + 替换」，避免断电/崩溃留下半个 JSON。
     3. 所有模块都从这里取路径，禁止各自 os.getcwd()。
+
+两种运行形态（PLATFORM）：
+    windows  桌面版。WinDivert 端口劫持，可以替用户改 PS5 网络。
+    docker   容器版。加速器必须在路由器上，PS5 保持自动获取；
+             容器动不了宿主机的网络栈，所以没有劫持、没有防火墙、没有窗口，
+             可写目录由 PS5LB_DATA_DIR 指定（挂卷进来）。
 """
 from __future__ import annotations
 
@@ -21,10 +27,10 @@ APP_TITLE = "PS5 直播桥"
 
 IS_WINDOWS = sys.platform == "win32"
 
-# nginx/ffmpeg 对非 ASCII 路径的容忍度极差，统一搬到这个纯英文目录
-ASCII_SAFE_DIR = os.path.join(
-    os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), APP_NAME
-) if IS_WINDOWS else os.path.join(os.path.expanduser("~"), "." + APP_NAME.lower())
+# 容器判定：显式指定了数据目录，或跑在 Docker 里
+IN_CONTAINER = bool(os.environ.get("PS5LB_DATA_DIR")) or os.path.exists("/.dockerenv")
+
+PLATFORM = "docker" if IN_CONTAINER else ("windows" if IS_WINDOWS else "linux")
 
 
 def is_frozen() -> bool:
@@ -32,19 +38,65 @@ def is_frozen() -> bool:
 
 
 def base_dir() -> str:
-    """程序主目录（只读资源 + 用户配置都在这）。"""
+    """程序主目录（随程序分发的只读资源在这）。"""
     if is_frozen():
         return os.path.dirname(os.path.abspath(sys.executable))
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 BASE_DIR = base_dir()
-LOGS_DIR = os.path.join(BASE_DIR, "logs")
-CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
+
+
+def data_dir() -> str:
+    """
+    可写目录：配置、日志、nginx 临时文件、B 站凭据都落这里。
+
+    桌面版就是 exe 同级目录（用户能看见、能备份）；
+    容器版由 PS5LB_DATA_DIR 指定（一般挂 /data），镜像本身保持只读。
+    """
+    forced = (os.environ.get("PS5LB_DATA_DIR") or "").strip()
+    if forced:
+        return os.path.abspath(forced)
+    return BASE_DIR
+
+
+DATA_DIR = data_dir()
+LOGS_DIR = os.path.join(DATA_DIR, "logs")
+CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
+
+# nginx/ffmpeg 对非 ASCII 路径的容忍度极差，统一搬到这个纯英文目录
+if IS_WINDOWS:
+    ASCII_SAFE_DIR = os.path.join(
+        os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), APP_NAME)
+else:
+    ASCII_SAFE_DIR = os.path.join(DATA_DIR, "nginx")
+
+
+def caps() -> dict:
+    """
+    当前形态能干什么。界面据此决定显示哪些步骤，不要在前端猜平台。
+
+    divert        端口劫持（WinDivert 驱动，只有 Windows 能跑）
+    ps5_net_step  是否需要引导用户去 PS5 填四个数（只有电脑加速器需要）
+    builtin_dns   内置 DNS 服务（容器要绑 53 且被路由器指过来才有意义）
+    gui           有没有原生窗口
+    shutdown      界面上「退出」按钮是否有意义
+    """
+    docker = PLATFORM == "docker"
+    allow_dns = (os.environ.get("PS5LB_ALLOW_DNS") or "").strip().lower() in ("1", "true", "yes")
+    return {
+        "platform": PLATFORM,
+        "divert": IS_WINDOWS,
+        "ps5_net_step": not docker,
+        "builtin_dns": (not docker) or allow_dns,
+        "gui": not docker,
+        "shutdown": not docker,
+        "firewall": IS_WINDOWS,
+    }
 
 
 def ensure_dirs() -> None:
-    for d in (LOGS_DIR, ASCII_SAFE_DIR):
+    for d in (DATA_DIR, LOGS_DIR, ASCII_SAFE_DIR):
         try:
             os.makedirs(d, exist_ok=True)
         except OSError:
@@ -141,13 +193,73 @@ DEFAULT_CONFIG = {
 _lock = threading.RLock()
 _config_cache = None
 
+# ──────────────────────────────────────────────────────────────
+# 环境变量覆盖（容器部署用；桌面版不设这些变量就等于没这段代码）
+#
+# 分两类，界限是「这个值要不要跟容器启动参数绑死」：
+#   STRICT  界面没有入口改它（端口、IP、域名表），每次启动都以环境变量为准。
+#   SEED    界面能改（分区、标题、输出方式），只在第一次生成 config.json 时
+#           当默认值；之后以文件为准 —— 否则用户点完保存、重启又变回去，
+#           对小白来说就是「这软件坏了」。
+# ──────────────────────────────────────────────────────────────
+ENV_STRICT = {
+    "WEB_PORT": "PS5LB_WEB_PORT",
+    "WEB_HOST": "PS5LB_WEB_HOST",
+    "LAN_IP": "PS5LB_LAN_IP",
+    "RTMP_PORT": "PS5LB_RTMP_PORT",
+    "IRC_PORT": "PS5LB_IRC_PORT",
+    "STAT_PORT": "PS5LB_STAT_PORT",
+    "HIJACK_MODE": "PS5LB_HIJACK_MODE",
+    "HIJACK_DOMAINS": "PS5LB_DOMAINS",
+}
+
+ENV_SEED = {
+    "OUTPUT_MODE": "PS5LB_OUTPUT_MODE",
+    "BILIBILI_ROOM_ID": "PS5LB_ROOM_ID",
+    "BILIBILI_AREA_ID": "PS5LB_AREA_ID",
+    "BILIBILI_TITLE": "PS5LB_TITLE",
+    "AUTO_START_LIVE": "PS5LB_AUTO_START_LIVE",
+    "TWITCH_CHANNEL": "PS5LB_CHANNEL",
+}
+
+_TRUE = ("1", "true", "yes", "on")
+
+
+def _env_value(key: str, raw: str):
+    """把字符串按默认值的类型转过去，转不动就返回 None（视为没设置）。"""
+    default = DEFAULT_CONFIG.get(key)
+    raw = raw.strip()
+    if not raw:
+        return None
+    if isinstance(default, bool):
+        return raw.lower() in _TRUE
+    if isinstance(default, int):
+        try:
+            return int(raw)
+        except ValueError:
+            return None
+    if isinstance(default, list):
+        return [x.strip() for x in raw.replace("，", ",").split(",") if x.strip()]
+    return raw
+
+
+def _apply_env(cfg: dict, keys: dict) -> None:
+    for key, env_name in keys.items():
+        raw = os.environ.get(env_name)
+        if raw is None:
+            continue
+        val = _env_value(key, raw)
+        if val is not None:
+            cfg[key] = val
+
 
 def load_config() -> dict:
     """读配置，缺项用默认值补齐（不落盘，避免频繁 IO）。"""
     global _config_cache
     with _lock:
         cfg = json.loads(json.dumps(DEFAULT_CONFIG))  # deep copy
-        if os.path.exists(CONFIG_FILE):
+        first_run = not os.path.exists(CONFIG_FILE)
+        if not first_run:
             try:
                 with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                     loaded = json.load(f)
@@ -160,6 +272,10 @@ def load_config() -> dict:
                                 cfg[k] = v
             except Exception:
                 pass
+        # 容器部署：SEED 只在首次生成配置时当默认值，STRICT 每次都盖
+        if first_run:
+            _apply_env(cfg, ENV_SEED)
+        _apply_env(cfg, ENV_STRICT)
         _config_cache = cfg
         return cfg
 

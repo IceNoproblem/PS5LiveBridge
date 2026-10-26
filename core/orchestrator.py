@@ -70,7 +70,8 @@ class Orchestrator(object):
     # 启动 / 停止
     # ══════════════════════════════════════════════
     def start(self) -> None:
-        logbus.step("PS5 直播桥启动，本机 IP：%s" % (self.lan_ip or "未探测到"))
+        logbus.step("PS5 直播桥启动（%s），本机 IP：%s"
+                    % (paths.PLATFORM, self.lan_ip or "未探测到"))
         if not self.lan_ip:
             logbus.error("没有探测到局域网 IP，PS5 无法连到本机。请检查网络。")
 
@@ -81,8 +82,9 @@ class Orchestrator(object):
         if self.bili.logged_in:
             threading.Thread(target=self._verify_login_bg, daemon=True).start()
 
-        # 端口劫持：默认方案。DNS 只在不经过加速器时才用得上。
-        if self.cfg.get("HIJACK_MODE", "divert") == "divert":
+        # 端口劫持：只有桌面版能用。容器里容器动不了宿主机的网络栈，
+        # 那种场景靠路由器把域名/端口转过来，不需要（也没法）劫持。
+        if paths.caps()["divert"] and self.cfg.get("HIJACK_MODE", "divert") == "divert":
             # 放到后台起：WinDivertOpen 要等驱动，别把主窗口卡在启动画面
             threading.Thread(target=self._auto_enable_divert, daemon=True).start()
 
@@ -159,7 +161,7 @@ class Orchestrator(object):
         }
 
     def export_router_files(self) -> list:
-        return routercfg.write_files(paths.BASE_DIR, self.lan_ip,
+        return routercfg.write_files(paths.DATA_DIR, self.lan_ip,
                                      self.cfg.get("HIJACK_DOMAINS", []))
 
     # ══════════════════════════════════════════════
@@ -284,6 +286,14 @@ class Orchestrator(object):
         return divert.pick_target_ip(self.lan_ip, "")
 
     def enable_divert(self) -> dict:
+        if not paths.caps()["divert"]:
+            detail = ("容器里没有端口劫持。这个能力要改本机的网络栈，只能在 Windows 上跑。"
+                      "容器版靠路由器把推流域名或端口转到这台机器，"
+                      "加速器要开在路由器上，PS5 保持自动。")
+            self.hijack_error = detail
+            logbus.error(detail, tag="劫持")
+            return {"ok": False, "detail": detail, "unavailable": True}
+
         if self.divert and self.divert.running:
             return {"ok": True, "detail": "端口劫持已在运行", **self.divert.snapshot()}
 
@@ -342,8 +352,9 @@ class Orchestrator(object):
         return {"ok": True}
 
     def divert_status(self) -> dict:
+        caps = paths.caps()
         if not self.divert:
-            return {"running": False, "available": divert.pyk_available(),
+            return {"running": False, "available": bool(caps["divert"]) and divert.pyk_available(),
                     "target": self._divert_target(), "total": 0,
                     "error": self.hijack_error}
         return self.divert.snapshot()
@@ -356,8 +367,11 @@ class Orchestrator(object):
         """
         d = self.divert_status()
         running = bool(d.get("running")) or bool(self.dns and self.dns.running)
+        # 没有劫持能力（容器）时一律报 router：界面据此只走「改路由器」那条分支，
+        # 不会去渲染一个永远点不动的按钮。
+        mode = self.cfg.get("HIJACK_MODE", "divert") if paths.caps()["divert"] else "router"
         return {
-            "mode": self.cfg.get("HIJACK_MODE", "divert"),
+            "mode": mode,
             "running": running,
             "divert": d,
             "dns_running": bool(self.dns and self.dns.running),
@@ -560,9 +574,19 @@ class Orchestrator(object):
         """1 秒一拍：看 PS5 推没推、要不要自动开播。"""
         was_publishing = False
         last_pub = 0.0
+        nginx_retry_at = 0.0
         while not self._stop:
             try:
                 now = time.time()
+
+                # 收流服务是整条链路的地基，它没了后面全是空转。
+                # 容器里尤其重要：容器重启策略只保主进程，nginx 是子进程，
+                # 崩了就再也不会自己回来。限频 30 秒，避免端口真被占时刷屏。
+                if not self.nginx.running() and now >= nginx_retry_at:
+                    nginx_retry_at = now + 30
+                    logbus.warn("收流服务不在了，重新拉起", tag="收流")
+                    self.ensure_nginx()
+
                 pub = self.nginx.publisher() if self.nginx.running() else {"publishing": False}
                 publishing = bool(pub.get("publishing"))
                 with self.lock:
@@ -885,6 +909,8 @@ class Orchestrator(object):
             live = dict(self.live)
         dns_state = self.dns_status()
         return {
+            "caps": paths.caps(),
+            "platform": paths.PLATFORM,
             "step": self.progress.get("step", 1),
             "progress_dns_ok": bool(self.progress.get("dns_verified"))
                                or bool(self.dns and self.dns.running)
