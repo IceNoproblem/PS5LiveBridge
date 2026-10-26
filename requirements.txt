@@ -1,0 +1,29 @@
+# PS5 直播桥 · Python 依赖
+# 安装： python -m pip install -r requirements.txt
+#
+# 说明：全部为纯 Python 包，Windows 上不需要编译环境。
+
+# 界面与本地 HTTP 服务
+flask>=3.0,<4
+requests>=2.31
+
+# 弹幕 WebSocket
+aiohttp>=3.9
+
+# 端口级劫持（WinDivert 的 Python 绑定，wheel 里自带 WinDivert64.dll/.sys）
+# 这是核心组件：没有它，PS5 走加速器时推流截不下来。
+# 装不上的话程序仍可启动，只是「直播桥」那一步会显示缺少组件。
+pydivert>=3.0
+
+# 扫码登录的二维码图
+qrcode>=7.4
+Pillow>=10.0
+
+# B 站弹幕的 brotli 压缩帧（缺了会丢一部分弹幕，装上更稳）
+brotli>=1.0.9
+
+# ── 可选 ──────────────────────────────────────────────
+# 想要「原生窗口」而不是 Edge app 模式，就额外装它：
+#   python -m pip install pywebview
+# 不装也能用：程序会自动退回 Edge/Chrome 的 --app 模式（同样没有地址栏）。
+# pywebview>=4.4

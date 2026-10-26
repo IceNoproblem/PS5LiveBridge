@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PS5 直播桥</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-mark">PS</div>
+    <div>PS5 直播桥 <small>PS5 → B 站</small></div>
+  </div>
+
+  <div class="lights">
+    <span class="light" id="lt-hijack"><i class="dot"></i><span>直播桥</span></span>
+    <span class="light" id="lt-ps5"><i class="dot"></i><span>PS5 推流</span></span>
+    <span class="light" id="lt-bili"><i class="dot"></i><span>B 站直播</span></span>
+    <span class="light" id="lt-dm"><i class="dot"></i><span>弹幕</span></span>
+  </div>
+
+  <div class="topbar-actions">
+    <span class="ipchip" id="ipchip">本机 IP 探测中</span>
+    <button class="btn sm" onclick="toggleLog()">日志</button>
+    <button class="btn sm ghost" onclick="quitApp()">退出</button>
+  </div>
+</div>
+
+<div class="shell">
+  <aside class="rail">
+    <h4>设置顺序</h4>
+    <nav class="stepnav" id="stepnav">
+      <a data-step="1" href="#"><span class="num">1</span><span>配路由器<small>把推流地址指到本机</small></span></a>
+      <a data-step="2" href="#"><span class="num">2</span><span>检测<small>看有没有生效</small></span></a>
+      <a data-step="3" href="#"><span class="num">3</span><span>填 PS5<small>抄加速器的四个数</small></span></a>
+      <a data-step="4" href="#"><span class="num">4</span><span>登录 B 站<small>扫码</small></span></a>
+      <a data-step="5" href="#"><span class="num">5</span><span>开播<small>PS5 点开始直播</small></span></a>
+    </nav>
+
+    <div class="rail-foot">
+      <div class="k">本机 IP</div>
+      <div class="v" id="rail-ip">—</div>
+      <div class="k">直播桥</div>
+      <div class="v" id="rail-mode">—</div>
+    </div>
+  </aside>
+
+  <main class="content">
+
+    <!-- ══════════ 1 · 配路由器 ══════════ -->
+    <section class="stepc" id="step-1">
+      <div class="card">
+        <div class="card-h">
+          <h2>第 1 步 · 把推流地址指到这台电脑</h2>
+          <span class="badge" id="s1-badge">未配置</span>
+        </div>
+        <p class="card-sub">
+          PS5 开播时把画面推给 Twitch 的服务器。让下面这几个域名答成这台电脑
+          （<span class="mono" id="s1-ip">—</span>），画面就先进电脑，再转去 B 站。
+        </p>
+
+        <div class="note">
+          只改这 5 个域名。PS5 上网、PSN、连索尼服务器都照常。
+        </div>
+
+        <h3>用加速器：不用改路由器</h3>
+        <p class="small dim" style="margin-top:-4px">
+          UU、迅游这类加速器会接管 PS5 的域名解析，改路由器不生效。这种情况直接开直播桥。
+        </p>
+        <div class="flexline">
+          <button class="btn primary" id="s1-btn-bridge" onclick="toggleBridge()">开启直播桥</button>
+          <span class="small" id="s1-bridge-state">未开启</span>
+        </div>
+        <div id="s1-msg"></div>
+
+        <hr class="sep">
+        <h3>改路由器：先选型号</h3>
+        <div class="tabs" id="router-tabs"></div>
+        <div id="router-body"></div>
+
+        <div class="btn-row">
+          <button class="btn" onclick="exportRouterFiles()">导出配置文件</button>
+          <div class="spacer"></div>
+          <button class="btn primary lg" onclick="goStep(2)">配好了，去检测 →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ 2 · 检测 ══════════ -->
+    <section class="stepc" id="step-2">
+      <div class="card">
+        <div class="card-h">
+          <h2>第 2 步 · 看看有没有生效</h2>
+          <span class="badge" id="s2-badge">没检测</span>
+        </div>
+        <p class="card-sub">
+          拿上面那几个域名分别问路由器、本机、系统 DNS。答的是本机就算通了。
+        </p>
+
+        <div class="btn-row">
+          <button class="btn primary" id="s2-btn" onclick="runVerify()">开始检测</button>
+        </div>
+
+        <div id="s2-verdict"></div>
+        <div id="s2-results"></div>
+      </div>
+    </section>
+
+    <!-- ══════════ 3 · 填 PS5 ══════════ -->
+    <section class="stepc" id="step-3">
+      <div class="card">
+        <div class="card-h">
+          <h2>第 3 步 · 把加速器的四个数填进 PS5</h2>
+          <span class="badge" id="s3-badge">—</span>
+        </div>
+        <p class="card-sub">
+          PS5 开 Twitch 直播要走加速器。加速器给四个数，四个都照抄进 PS5。
+        </p>
+
+        <div id="s3-accel"></div>
+
+        <div class="note warn">
+          这台电脑的 IP（<span class="mono" id="s3-lanip">—</span>）不要填进 PS5，哪一栏都不填。
+        </div>
+
+        <table class="kvtable">
+          <tr>
+            <th style="width:92px">PS5 上的项</th>
+            <th>填什么</th>
+            <th style="width:186px">加速器给的值</th>
+          </tr>
+          <tr>
+            <td><b>IP 地址</b></td>
+            <td class="small dim">加速器的「IP 地址」</td>
+            <td><input id="in-ip" placeholder="172.22.111.117"></td>
+          </tr>
+          <tr>
+            <td><b>子网掩码</b></td>
+            <td class="small dim">加速器的「子网掩码」</td>
+            <td><input id="in-mask" placeholder="255.255.0.0"></td>
+          </tr>
+          <tr>
+            <td><b>默认网关</b></td>
+            <td class="small dim">加速器的「网关」</td>
+            <td><input id="in-gw" placeholder="172.22.110.117"></td>
+          </tr>
+          <tr>
+            <td><b>DNS</b></td>
+            <td class="small dim">加速器的「DNS」</td>
+            <td><input id="in-dns" placeholder="6.6.6.6"></td>
+          </tr>
+        </table>
+
+        <div class="flexline">
+          <button class="btn primary" onclick="saveNet()">保存</button>
+          <button class="btn sm" onclick="autofillNet()">检测加速器</button>
+          <span class="small dim" id="s3-fillnote"></span>
+        </div>
+        <p class="small dim" style="margin-top:8px">
+          「检测加速器」只填网关和 DNS，IP 和掩码要自己抄。这四个数只是备查，可以不动，填错不影响软件。
+        </p>
+
+        <hr class="sep">
+        <h3>PS5 上怎么点</h3>
+        <ol class="steps">
+          <li>设定 → 网络 → 设定互联网连接，选正在用的网络。</li>
+          <li>手柄按 Options → 高级设定。</li>
+          <li>IP 地址设置改为「手动」。DNS 会一起变成手动，PS5 不让一个自动一个手动。</li>
+          <li>四个数填进去，保存。</li>
+          <li>加速器关掉后 PS5 会断网。加速器一直开着就行。</li>
+        </ol>
+
+        <div class="btn-row">
+          <button class="btn" onclick="goStep(2)">← 上一步</button>
+          <button class="btn primary" onclick="goStep(4)">填好了 →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ 4 · 登录 ══════════ -->
+    <section class="stepc" id="step-4">
+      <div class="card">
+        <div class="card-h">
+          <h2>第 4 步 · 扫码登录 B 站</h2>
+          <span class="badge" id="s4-badge">未登录</span>
+        </div>
+        <p class="card-sub">
+          登录后能拿弹幕和推流地址，也能替你在 B 站开播。凭据只存本机
+          <span class="mono">bili_credential.json</span>。
+        </p>
+
+        <div class="qrwrap">
+          <div class="qrbox empty" id="qrbox">点右边按钮生成二维码</div>
+          <div class="qrmeta">
+            <div id="s4-status"><p class="dim">还没开始。</p></div>
+            <div class="btn-row" style="margin-top:12px">
+              <button class="btn primary" id="s4-btn-qr" onclick="newQr()">生成二维码</button>
+              <button class="btn danger hidden" id="s4-btn-logout" onclick="doLogout()">退出登录</button>
+            </div>
+            <hr class="sep">
+            <div class="grid2">
+              <div class="field">
+                <label>分区</label>
+                <select id="sel-area"><option>登录后可选</option></select>
+              </div>
+              <div class="field">
+                <label>标题（留空用 PS5 的）</label>
+                <input id="in-title" placeholder="留空">
+              </div>
+            </div>
+            <button class="btn sm" onclick="saveArea()">保存</button>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn" onclick="goStep(3)">← 上一步</button>
+          <button class="btn primary" onclick="goStep(5)">登录好了 →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ 5 · 开播 ══════════ -->
+    <section class="stepc" id="step-5">
+      <div class="card">
+        <div class="card-h">
+          <h2>第 5 步 · 在 PS5 上开始直播</h2>
+          <span class="badge" id="s5-badge">等 PS5</span>
+        </div>
+        <p class="card-sub">
+          PS5 点「开始直播」，选 Twitch。推流起来后这边自动开 B 站并转发，电脑上不用点按钮。
+        </p>
+
+        <div class="livegrid">
+          <div class="metric"><div class="k">PS5 推流</div><div class="v" id="m-ps5">等待</div></div>
+          <div class="metric"><div class="k">B 站开播</div><div class="v" id="m-bili">—</div></div>
+          <div class="metric"><div class="k">转发</div><div class="v" id="m-relay">—</div></div>
+          <div class="metric"><div class="k">画质 / 码率</div><div class="v" id="m-quality">—</div></div>
+        </div>
+
+        <div id="s5-msg"></div>
+
+        <div class="btn-row">
+          <button class="btn" onclick="goStep(4)">← 上一步</button>
+          <button class="btn" onclick="manualStart()">手动开播</button>
+          <button class="btn danger" onclick="stopLive()">停止直播</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><h2 style="font-size:15px">直播中</h2>
+          <span class="badge" id="s6-badge">—</span></div>
+        <div class="livegrid">
+          <div class="metric"><div class="k">已播</div><div class="v" id="m-uptime">—</div></div>
+          <div class="metric"><div class="k">弹幕</div><div class="v" id="m-dmcount">0</div></div>
+          <div class="metric"><div class="k">PS5 弹幕通道</div><div class="v" id="m-irc">未连</div></div>
+          <div class="metric"><div class="k">直播间</div><div class="v" id="m-room">—</div></div>
+        </div>
+        <h3>最近弹幕</h3>
+        <div class="dmlist" id="dmlist"><div class="dmrow"><span class="m dim">还没有</span></div></div>
+        <div class="btn-row">
+          <button class="btn sm" onclick="testInject()">发条测试弹幕</button>
+          <a class="btn sm" id="link-room" target="_blank" href="#" style="display:none">打开直播间</a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="logbar" id="logbar">
+  <div class="handle" onclick="toggleLog()">
+    <span>日志</span><span class="grow"></span>
+    <span id="loghint" class="small">点击展开</span>
+  </div>
+  <div class="logbody" id="logbody"></div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

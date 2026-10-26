@@ -1,0 +1,29 @@
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.spec
+build/
+dist/
+*.egg-info/
+venv/
+.venv/
+
+# ── 运行时产物 ──
+logs/
+config.json
+bili_credential.json
+路由器配置/
+*.log
+
+# ── 二进制：不入库（自行放入 tools/ffmpeg.exe 与 nginx-rtmp/nginx.exe）──
+tools/ffmpeg.exe
+nginx-rtmp/nginx.exe
+nginx-rtmp/logs/*
+nginx-rtmp/temp/*
+!nginx-rtmp/logs/.gitkeep
+!nginx-rtmp/temp/.gitkeep
+
+# ── 系统 ──
+.DS_Store
+Thumbs.db
+desktop.ini
