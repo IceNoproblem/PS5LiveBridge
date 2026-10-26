@@ -124,8 +124,39 @@ class Orchestrator(object):
                                                         self.bili.room_id), tag="B站")
             if self.bili.room_id:
                 self.services.start_danmaku(self.bili.room_id)
+            self._clear_login_error()
         else:
             logbus.warn("上次的登录已失效，需要重新扫码", tag="B站")
+
+    def _clear_login_error(self) -> None:
+        """
+        登录成功后，把「还没登录 B 站」那条已经不成立的错误摘掉。
+
+        不摘的话它会一直挂在第 5 步上：用户先在 PS5 试推流（报没登录），
+        再去第 4 步扫码，登成功了界面还是红的，看起来就像登录没生效。
+        """
+        cleared = False
+        with self.lock:
+            if self.live["state"] == "error":
+                err = self.live.get("error") or ""
+                if "登录" in err or "扫码" in err:
+                    self.live["state"] = "idle"
+                    self.live["error"] = ""
+                    self.live["since"] = 0.0
+                    cleared = True
+        if not cleared:
+            return
+
+        # PS5 还在推流的话接着开播，省得再回 PS5 点一次
+        try:
+            pub = self.nginx.publisher()
+        except Exception:
+            pub = {}
+        if pub.get("publishing") and self.output_mode() == "direct":
+            logbus.info("PS5 还在推流，登录后自动接着开播", tag="直播")
+            threading.Thread(target=self._start_bili_and_relay,
+                             args=(pub.get("app", "app"), pub.get("name", "")),
+                             name="start-live", daemon=True).start()
 
     # ══════════════════════════════════════════════
     # 环境 / 向导数据
@@ -529,6 +560,7 @@ class Orchestrator(object):
             if self.bili.room_id:
                 self.services.start_danmaku(self.bili.room_id)
             self._apply_saved_area()
+            self._clear_login_error()
             return {
                 "status": "success",
                 "uname": r.get("uname", ""),
@@ -661,18 +693,13 @@ class Orchestrator(object):
     def _on_ps5_unpublish(self) -> None:
         state = self.live["state"]
         logbus.warn("PS5 停止推流了", tag="推流")
-        if state == "local":
-            # 本地取流模式没在 B 站开播，也没什么要收尾的
-            with self.lock:
-                self.live["state"] = "idle"
-                self.live["ps5"] = {}
-                self.live["local"] = {}
-        elif state in ("relaying", "live", "starting"):
+        if state in ("relaying", "live", "starting"):
             self.stop_live(reason="PS5 停止推流")
-        else:
-            with self.lock:
-                self.live["state"] = "idle"
-                self.live["ps5"] = {}
+        with self.lock:
+            self.live["state"] = "idle"
+            self.live["ps5"] = {}
+            self.live["local"] = {}
+            self.live["since"] = 0.0
 
     def _start_bili_and_relay(self, app: str, name: str) -> None:
         area = str(self.cfg.get("BILIBILI_AREA_ID", "236"))
@@ -789,6 +816,9 @@ class Orchestrator(object):
         with self.lock:
             self.live["state"] = "error"
             self.live["error"] = msg
+            # since 一并清掉：开播没成，「已播」时长没有意义，
+            # 留着的话界面会在没直播的时候一直跳秒。
+            self.live["since"] = 0.0
         self.services.notify_ps5("开播失败，详见电脑上的提示")
 
     def start_live_manual(self) -> dict:
@@ -950,7 +980,11 @@ class Orchestrator(object):
                 "ps5": live.get("ps5", {}),
                 "output_mode": self.output_mode(),
                 "local_url": self.local_play_url(),
-                "uptime": int(time.time() - live["since"]) if live.get("since") else 0,
+                # 只有真的在播才算时长；idle / error 状态给 0，
+                # 否则「已播」会在没开播的时候自己往上跳。
+                "uptime": (int(time.time() - live["since"])
+                           if live.get("since") and live.get("state")
+                           in ("local", "relaying", "live") else 0),
             },
             "danmaku_recent": list(self.danmaku_recent)[:20],
             "config": {
