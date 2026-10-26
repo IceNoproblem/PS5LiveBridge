@@ -342,6 +342,28 @@ table.kvtable input:focus { border-color: #2f5ea8; box-shadow: 0 0 0 3px rgba(76
 }
 .advlink:hover { color: var(--text-2); border-color: #2f5ea8; }
 
+/* ── 第 5 步：输出方式二选一 ── */
+.pickrow { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 8px 0 12px; }
+.pick {
+  text-align: left; padding: 12px 14px; border-radius: 10px; cursor: pointer;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+  transition: border-color .15s, background .15s;
+}
+.pick:hover { border-color: #2f5ea8; }
+.pick.on { border-color: var(--brand); background: rgba(76, 141, 255, .08); }
+.pick b { display: block; font-size: 13.5px; margin-bottom: 4px; }
+.pick span { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.urlbox {
+  display: flex; align-items: center; gap: 10px; margin: 8px 0;
+  padding: 10px 12px; border-radius: 10px;
+  background: var(--panel-3); border: 1px solid var(--line);
+}
+.urlbox .mono { flex: 1; font-size: 12.5px; word-break: break-all; }
+
+@media (max-width: 880px) {
+  .pickrow { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 880px) {
   .shell { grid-template-columns: 1fr; }
   .rail { display: none; }

@@ -232,6 +232,19 @@
           PS5 点「开始直播」，选 Twitch。推流起来后这边自动开 B 站并转发，电脑上不用点按钮。
         </p>
 
+        <h3>画面怎么用</h3>
+        <div class="pickrow">
+          <button class="pick" id="pick-direct" onclick="setOutputMode('direct')">
+            <b>直接推流到 B 站</b>
+            <span>软件收流后自动开播并转发，直播间直接看到画面</span>
+          </button>
+          <button class="pick" id="pick-local" onclick="setOutputMode('local')">
+            <b>本地取流</b>
+            <span>只把画面接住，给你一个地址，用 OBS 等软件自己拉</span>
+          </button>
+        </div>
+        <div id="s5-local"></div>
+
         <div class="livegrid">
           <div class="metric"><div class="k">PS5 推流</div><div class="v" id="m-ps5">等待</div></div>
           <div class="metric"><div class="k">B 站开播</div><div class="v" id="m-bili">—</div></div>

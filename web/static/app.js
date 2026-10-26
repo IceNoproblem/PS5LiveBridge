@@ -122,7 +122,7 @@ async function tick() {
   // 第 5 步面板
   const stateMap = {
     idle: '未开始', waiting: '等 PS5', starting: '正在开播',
-    relaying: '转发中', live: '直播中', error: '出错',
+    relaying: '转发中', live: '直播中', local: '本地取流', error: '出错',
   };
   if ($('m-ps5')) {
     $('m-ps5').textContent = ps5.publishing ? '已收到' : '等待';
@@ -149,6 +149,9 @@ async function tick() {
       $('s5-msg').innerHTML = `<div class="note ok">B 站直播间已在播 PS5 画面。手机发条弹幕，会显示在 PS5 画面上。</div>`;
     } else if (live.state === 'relaying') {
       $('s5-msg').innerHTML = `<div class="note">等 B 站确认开播，一般 3 到 10 秒。</div>`;
+    } else if (live.state === 'local') {
+      $('s5-msg').innerHTML = `<div class="note ok">画面已接住。复制下面的地址，
+        在 OBS 里加一个「媒体源」拉取，再用 OBS 推流到 B 站。</div>`;
     } else if (st.bili && !st.bili.logged_in) {
       $('s5-msg').innerHTML = `<div class="note warn">还没登录 B 站，先去
         <a href="#" onclick="goStep(4);return false">第 4 步</a> 扫码。</div>`;
@@ -163,6 +166,7 @@ async function tick() {
       $('link-room').style.display = '';
       $('link-room').href = 'https://live.bilibili.com/' + st.bili.room_id;
     }
+    renderOutputMode();
   }
 
   if (st.bili && st.bili.logged_in && $('s4-badge')) {
@@ -548,6 +552,47 @@ function renderLive() {
     $('s5-msg').innerHTML = `<div class="note warn">还没登录 B 站，先去
       <a href="#" onclick="goStep(4);return false">第 4 步</a> 扫码。</div>`;
   }
+}
+
+function renderOutputMode() {
+  const st = S.state || {};
+  const live = st.live || {};
+  const mode = live.output_mode || 'direct';
+  if ($('pick-direct')) {
+    $('pick-direct').classList.toggle('on', mode === 'direct');
+    $('pick-local').classList.toggle('on', mode === 'local');
+  }
+  const box = $('s5-local');
+  if (!box) return;
+  if (mode !== 'local') { box.innerHTML = ''; return; }
+
+  const url = live.local_url || '';
+  const ready = live.state === 'local';
+  box.innerHTML = `
+    <div class="urlbox">
+      <span class="mono" id="s5-url">${esc(url || '等 PS5 开始直播后出现地址')}</span>
+      ${ready ? '<button class="btn sm" onclick="copyUrl()">复制</button>' : ''}
+    </div>
+    <p class="small dim">
+      OBS 里加「媒体源」→ 取消勾选「本地文件」→ 把这个地址填进去。
+      拉流后由 OBS 推流到 B 站。这一模式不会替你开播，也不需要登录 B 站。
+    </p>`;
+}
+
+function copyUrl() {
+  const el = $('s5-url');
+  if (!el) return;
+  navigator.clipboard.writeText(el.textContent.trim()).then(() => {
+    el.textContent = '已复制';
+    setTimeout(renderOutputMode, 1200);
+  });
+}
+
+async function setOutputMode(mode) {
+  const r = await api('/api/output/mode', { mode });
+  if (r && !r.ok) { alert('切换失败：' + (r.msg || '未知原因')); return; }
+  await tick();
+  renderOutputMode();
 }
 
 async function manualStart() {

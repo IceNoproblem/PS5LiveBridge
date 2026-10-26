@@ -54,6 +54,7 @@ class Orchestrator(object):
             "since": 0.0,
             "ps5": {},
             "bili": {},
+            "local": {},
             "confirm_tries": 0,
         }
         self.danmaku_recent = deque(maxlen=60)
@@ -558,23 +559,25 @@ class Orchestrator(object):
     def _monitor_loop(self) -> None:
         """1 秒一拍：看 PS5 推没推、要不要自动开播。"""
         was_publishing = False
-        idle_ticks = 0
+        last_pub = 0.0
         while not self._stop:
             try:
+                now = time.time()
                 pub = self.nginx.publisher() if self.nginx.running() else {"publishing": False}
                 publishing = bool(pub.get("publishing"))
                 with self.lock:
                     self.live["ps5"] = pub
 
-                if publishing and not was_publishing:
-                    self._on_ps5_publish(pub)
-                elif not publishing and was_publishing:
-                    idle_ticks += 1
-                    if idle_ticks >= 3:      # 连续 3 秒没有 publisher 才算真停
+                if publishing:
+                    last_pub = now
+                    if not was_publishing:
+                        self._on_ps5_publish(pub)
+                elif last_pub and (now - last_pub) >= 3.0:
+                    # 按「最后一次看到推流的时间」判断，而不是连续计数：
+                    # 断流瞬间 /stat 会抖几下，连续计数被反复清零，状态会卡住不回落。
+                    if self.live["state"] in ("local", "waiting", "starting", "relaying", "live"):
                         self._on_ps5_unpublish()
-                        idle_ticks = 0
-                else:
-                    idle_ticks = 0
+                    last_pub = 0.0
 
                 was_publishing = publishing
 
@@ -598,6 +601,20 @@ class Orchestrator(object):
         logbus.ok("PS5 开始推流了：%s/%s（%s，%s kbps）"
                   % (app, name[:10] + "***" if len(name) > 10 else name, res, pub.get("bw_in", 0)),
                   tag="推流")
+
+        # 本地取流模式：只把流留在这里，等 OBS 之类的软件来拉。
+        # 不开 B 站、不转发，也不需要登录 B 站。
+        if self.output_mode() == "local":
+            with self.lock:
+                self.live["ps5"] = pub
+                self.live["state"] = "local"
+                self.live["since"] = time.time()
+                self.live["error"] = ""
+                self.live["local"] = {"app": app, "name": name}
+            logbus.ok("本地流已就绪：%s" % self.local_play_url(app, name), tag="推流")
+            self.services.notify_ps5("画面已就绪，可在电脑上拉取")
+            return
+
         with self.lock:
             self.live["ps5"] = pub
             self.live["state"] = "starting" if self.cfg.get("AUTO_START_LIVE", True) else "waiting"
@@ -617,7 +634,13 @@ class Orchestrator(object):
     def _on_ps5_unpublish(self) -> None:
         state = self.live["state"]
         logbus.warn("PS5 停止推流了", tag="推流")
-        if state in ("relaying", "live", "starting"):
+        if state == "local":
+            # 本地取流模式没在 B 站开播，也没什么要收尾的
+            with self.lock:
+                self.live["state"] = "idle"
+                self.live["ps5"] = {}
+                self.live["local"] = {}
+        elif state in ("relaying", "live", "starting"):
             self.stop_live(reason="PS5 停止推流")
         else:
             with self.lock:
@@ -756,6 +779,55 @@ class Orchestrator(object):
                          name="start-live-manual", daemon=True).start()
         return {"ok": True}
 
+    # ══════════════════════════════════════════════
+    # 输出方式：直推 B 站 / 本地取流
+    # ══════════════════════════════════════════════
+    def output_mode(self) -> str:
+        return "local" if self.cfg.get("OUTPUT_MODE") == "local" else "direct"
+
+    def local_play_url(self, app: str = "", name: str = "") -> str:
+        """
+        给 OBS 之类软件拉的地址。
+
+        优先用局域网 IP：OBS 和本程序不在同一台机器上时也能拉。
+        传空则取当前正在推的流。
+        """
+        cur = self.live.get("local") or {}
+        app = app or cur.get("app") or "app"
+        name = name or cur.get("name") or ""
+        if not name:
+            ps5 = self.live.get("ps5") or {}
+            app = ps5.get("app") or app
+            name = ps5.get("name") or ""
+        host = self.lan_ip or "127.0.0.1"
+        port = int(self.cfg.get("RTMP_PORT", 1935))
+        return "rtmp://%s:%d/%s/%s" % (host, port, app, name)
+
+    def set_output_mode(self, mode: str) -> dict:
+        """
+        切换输出方式。正在直播时先收尾，避免 B 站挂着没有画面的直播。
+        """
+        mode = "local" if str(mode) == "local" else "direct"
+        if mode == self.output_mode():
+            return {"ok": True, "mode": mode, "unchanged": True}
+        if self.live["state"] in ("relaying", "live", "starting"):
+            self.stop_live(reason="切换输出方式")
+        self.cfg = paths.save_config({"OUTPUT_MODE": mode})
+        if mode == "local":
+            logbus.info("已切换为本地取流：PS5 推流后不再自动开播 B 站", tag="推流")
+        else:
+            logbus.info("已切换为直接推流：PS5 推流后自动开播并转发到 B 站", tag="推流")
+
+        # 切换时如果 PS5 正在推流，按新方式立刻接管一次，
+        # 否则监控循环以为「推流没断过」，不会重新触发。
+        try:
+            pub = self.nginx.publisher() if self.nginx.running() else {"publishing": False}
+            if pub.get("publishing"):
+                self._on_ps5_publish(pub)
+        except Exception as e:
+            logbus.warn("切换输出方式后接管当前推流失败：%s" % e, tag="推流")
+        return {"ok": True, "mode": mode}
+
     def stop_live(self, reason: str = "") -> dict:
         logbus.step("停止直播%s" % (("（%s）" % reason) if reason else ""))
         self.relay.stop()
@@ -847,6 +919,8 @@ class Orchestrator(object):
                 "since": live.get("since", 0),
                 "bili": live.get("bili", {}),
                 "ps5": live.get("ps5", {}),
+                "output_mode": self.output_mode(),
+                "local_url": self.local_play_url(),
                 "uptime": int(time.time() - live["since"]) if live.get("since") else 0,
             },
             "danmaku_recent": list(self.danmaku_recent)[:20],
