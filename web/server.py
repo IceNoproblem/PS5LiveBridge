@@ -192,6 +192,11 @@ def create_app(orch, on_exit=None) -> Flask:
     # ──────────────────────────────────────────────
     # 步骤 5/6：直播
     # ──────────────────────────────────────────────
+    @app.post("/api/output/mode")
+    def api_output_mode():
+        body = request.get_json(silent=True) or {}
+        return jsonify(orch.set_output_mode(body.get("mode", "direct")))
+
     @app.post("/api/live/start")
     def api_live_start():
         return jsonify(orch.start_live_manual())

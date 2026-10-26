@@ -125,6 +125,11 @@ DEFAULT_CONFIG = {
     "TWITCH_CHANNEL": "",           # 空=用 PS5 上报的频道名
     "RELAY_VIDEO_BITRATE": 0,       # 0=不限制，纯 copy
 
+    # 输出方式
+    #   direct = 软件收流后自己转推到 B 站，并替你开播（默认）
+    #   local  = 软件只收流，给出一个本地地址，你自己在 OBS 等软件里拉
+    "OUTPUT_MODE": "direct",
+
     # 行为
     "AUTO_START_LIVE": True,        # PS5 一推流就自动开播
     "AUTO_RELAY": True,             # 自动把截到的流转发到 B 站

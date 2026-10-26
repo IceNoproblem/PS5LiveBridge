@@ -21,7 +21,7 @@ import time
 
 from core import logbus, netutil, paths
 
-APP_VERSION = "4.1"
+APP_VERSION = "4.2"
 
 
 # ──────────────────────────────────────────────────────────────
