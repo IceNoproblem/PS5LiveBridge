@@ -4,6 +4,8 @@
     "DNS_MODE": "router",
     "DNS_UPSTREAM": "",
     "DNS_PORT": 53,
+    "HIJACK_MODE": "divert",
+    "DIVERT_PORTS": [1935, 6667],
     "PS5_NET": {
         "ip": "",
         "mask": "",
@@ -17,6 +19,7 @@
     "IRC_PORT": 6667,
     "STAT_PORT": 8080,
     "TWITCH_CHANNEL": "",
+    "OUTPUT_MODE": "direct",
     "AUTO_START_LIVE": true,
     "AUTO_RELAY": true,
     "ENABLE_GIFT": true,
