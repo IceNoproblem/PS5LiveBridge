@@ -3,6 +3,8 @@
 把 PS5 的原生直播画面转到 B 站，并把 B 站弹幕送回 PS5 画面。
 不破解、不装采集卡，全部在网络层完成。
 
+成品在 [Releases](https://github.com/IceNoproblem/PS5BiliDanmaku/releases) 下载，解压即用。
+
 | 第 1 步 · 配路由器 | 第 2 步 · 填 PS5 |
 |---|---|
 | ![](docs/screens/01-配路由器.png) | ![](docs/screens/02-填PS5.png) |
@@ -157,4 +159,15 @@ python scripts\selftest.py
 
 ## 许可证
 
-MIT
+本项目使用 MIT 许可证，全文见 [LICENSE](LICENSE)。
+
+分发包里还包含以下第三方组件，再分发时请保留各自的许可证与版权声明：
+
+| 组件 | 许可证 |
+|---|---|
+| nginx 与 nginx-rtmp-module | BSD-2-Clause |
+| ffmpeg | LGPL 2.1 或 GPL，取决于构建；可用 `ffmpeg -version` 查看 |
+| WinDivert | LGPL 3.0 / GPL 2.0 双许可 |
+| pydivert | LGPL 3.0 |
+
+本项目的代码不包含上述组件的源码，仅以二进制形式随发行包分发。
