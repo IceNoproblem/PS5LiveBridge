@@ -164,7 +164,9 @@ async function tick() {
     $('m-quality').innerHTML = ps5.publishing
       ? `${ps5.width || 0}×${ps5.height || 0}<br><small>${ps5.bw_in || 0} kbps</small>`
       : '—';
-    $('m-uptime').textContent = fmtDur(live.uptime);
+    // 「已播」只在真播着的时候给秒数，其余显示 —（idle / error 时不要跳秒）
+    const onAir = live.state === 'local' || live.state === 'relaying' || live.state === 'live';
+    $('m-uptime').textContent = onAir ? fmtDur(live.uptime) : '—';
     $('m-dmcount').textContent = dm.count || 0;
     $('m-irc').textContent = (sv.irc && sv.irc.ps5) ? '已连' : '未连';
     $('m-room').textContent = (st.bili && st.bili.room_id) ? st.bili.room_id : '—';
