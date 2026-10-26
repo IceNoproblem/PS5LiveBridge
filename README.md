@@ -11,7 +11,7 @@
 | **容器版** | 有 NAS / 常年开机的 Linux 机器 | 必须装在路由器上 |
 
 桌面版成品在 [Releases](https://github.com/IceNoproblem/PS5LiveBridge/releases) 下载，解压即用。
-容器版用本仓库的 `Dockerfile` 自己构建，见[这里](#容器版nas--linux)。
+容器版用本仓库的 `Dockerfile` 自己构建，见[容器版部署](#docker)。
 
 | 第 1 步 · 配路由器 | 第 2 步 · 填 PS5 |
 |---|---|
@@ -141,6 +141,8 @@ python main.py
 
 `nginx-rtmp\` 和 `tools\ffmpeg.exe` 需要自行放入，不进仓库。
 
+<a id="docker"></a>
+
 ### 容器版（NAS / Linux）
 
 ```bash
@@ -256,5 +258,8 @@ python scripts\selftest.py
 | ffmpeg | LGPL 2.1 或 GPL，取决于构建；可用 `ffmpeg -version` 查看 |
 | WinDivert | LGPL 3.0 / GPL 2.0 双许可 |
 | pydivert | LGPL 3.0 |
+
+容器镜像另外基于 `python:3.11-slim-bookworm`，其中的 Debian 组件（nginx、
+libnginx-mod-rtmp、ffmpeg 等）沿用各自发行版的许可证。
 
 本项目的代码不包含上述组件的源码，仅以二进制形式随发行包分发。
