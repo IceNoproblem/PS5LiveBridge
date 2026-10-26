@@ -599,7 +599,10 @@ class Orchestrator(object):
                 elif last_pub and (now - last_pub) >= 3.0:
                     # 按「最后一次看到推流的时间」判断，而不是连续计数：
                     # 断流瞬间 /stat 会抖几下，连续计数被反复清零，状态会卡住不回落。
-                    if self.live["state"] in ("local", "waiting", "starting", "relaying", "live"):
+                    # error 也要收：开播失败（比如没登录）后 PS5 停流，
+                    # 状态不回落的话界面会一直挂着一条已经不成立的错误。
+                    if self.live["state"] in ("local", "waiting", "starting",
+                                              "relaying", "live", "error"):
                         self._on_ps5_unpublish()
                     last_pub = 0.0
 
