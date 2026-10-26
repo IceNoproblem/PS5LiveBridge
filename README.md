@@ -3,7 +3,7 @@
 把 PS5 的原生直播画面转到 B 站，并把 B 站弹幕送回 PS5 画面。
 不破解、不装采集卡，全部在网络层完成。
 
-成品在 [Releases](https://github.com/IceNoproblem/PS5BiliDanmaku/releases) 下载，解压即用。
+成品在 [Releases](https://github.com/IceNoproblem/PS5LiveBridge/releases) 下载，解压即用。
 
 | 第 1 步 · 配路由器 | 第 2 步 · 填 PS5 |
 |---|---|
