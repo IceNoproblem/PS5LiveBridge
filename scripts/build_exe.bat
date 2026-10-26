@@ -32,6 +32,7 @@ python -m PyInstaller --noconfirm --clean --noconsole ^
   --add-data "web;web" ^
   --add-data "nginx-rtmp;nginx-rtmp" ^
   --add-data "README.md;." ^
+  --add-data "LICENSE;." ^
   --hidden-import brotli ^
   --hidden-import qrcode ^
   --hidden-import PIL._imaging ^
@@ -54,6 +55,7 @@ if exist tools\ffmpeg.exe (
 )
 
 copy /y README.md "dist\PS5LiveBridge\使用说明.md" >nul 2>nul
+copy /y LICENSE "dist\PS5LiveBridge\LICENSE.txt" >nul 2>nul
 if exist config.example.json copy /y config.example.json "dist\PS5LiveBridge\" >nul
 if exist 启动.bat copy /y 启动.bat "dist\PS5LiveBridge\" >nul 2>nul
 
