@@ -152,9 +152,10 @@ async function tick() {
     } else if (live.state === 'local') {
       $('s5-msg').innerHTML = `<div class="note ok">画面已接住。复制下面的地址，
         在 OBS 里加一个「媒体源」拉取，再用 OBS 推流到 B 站。</div>`;
-    } else if (st.bili && !st.bili.logged_in) {
+    } else if (st.bili && !st.bili.logged_in && live.output_mode !== 'local') {
       $('s5-msg').innerHTML = `<div class="note warn">还没登录 B 站，先去
-        <a href="#" onclick="goStep(4);return false">第 4 步</a> 扫码。</div>`;
+        <a href="#" onclick="goStep(4);return false">第 4 步</a> 扫码。`
+        + `用本地取流的话不需要登录，可以直接在 PS5 开播。</div>`;
     } else if (!hj.running && !st.progress_dns_ok) {
       // 路由器方案成功时不需要直播桥，这种不算错
       $('s5-msg').innerHTML = `<div class="note err">直播桥没开，DNS 也没指到本机。回
@@ -548,7 +549,8 @@ async function saveArea() {
 function renderLive() {
   const st = S.state || {};
   const b = st.bili || {};
-  if (!b.logged_in && $('s5-msg')) {
+  const local = (st.live && st.live.output_mode) === 'local';
+  if (!b.logged_in && !local && $('s5-msg')) {
     $('s5-msg').innerHTML = `<div class="note warn">还没登录 B 站，先去
       <a href="#" onclick="goStep(4);return false">第 4 步</a> 扫码。</div>`;
   }
