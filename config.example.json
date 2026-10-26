@@ -1,0 +1,24 @@
+{
+    "WEB_PORT": 5000,
+    "LAN_IP": "",
+    "DNS_MODE": "router",
+    "DNS_UPSTREAM": "",
+    "DNS_PORT": 53,
+    "PS5_NET": {
+        "ip": "",
+        "mask": "",
+        "gateway": "",
+        "dns": ""
+    },
+    "BILIBILI_ROOM_ID": 0,
+    "BILIBILI_AREA_ID": "236",
+    "BILIBILI_TITLE": "",
+    "RTMP_PORT": 1935,
+    "IRC_PORT": 6667,
+    "STAT_PORT": 8080,
+    "TWITCH_CHANNEL": "",
+    "AUTO_START_LIVE": true,
+    "AUTO_RELAY": true,
+    "ENABLE_GIFT": true,
+    "ENABLE_SC": true
+}
