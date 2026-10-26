@@ -76,6 +76,81 @@ http {{
 }}
 """
 
+# Linux / 容器用的版本。三处必须和 Windows 版不同：
+#   load_module   系统装的 nginx 不带 rtmp，要显式加载 .so（Debian/Ubuntu 包）
+#   daemon off    nginx 默认后台跑、父进程立刻退出，我们就管不到它的死活，
+#                 running() 永远 False、崩溃也看不见。必须前台跑。
+#   绝对路径      prefix 不在编译时的默认位置，logs/pid 用绝对路径最稳
+CONF_TEMPLATE_POSIX = r"""# 由 PS5 直播桥生成，请勿手改（每次启动会覆盖）
+{user}{load_module}worker_processes 1;
+error_log {prefix}/logs/error.log warn;
+pid {prefix}/logs/nginx.pid;
+daemon off;
+
+events {{
+    worker_connections 1024;
+}}
+
+rtmp {{
+    server {{
+        listen {rtmp_port};
+        chunk_size 4096;
+        application app {{
+            live on;
+            record off;
+            interleave on;
+            drop_idle_publisher 5s;
+            allow play all;
+        }}
+        application live {{
+            live on;
+            record off;
+            drop_idle_publisher 5s;
+            allow play all;
+        }}
+        application stream {{
+            live on;
+            record off;
+            drop_idle_publisher 5s;
+            allow play all;
+        }}
+    }}
+}}
+
+http {{
+    access_log off;
+    client_body_temp_path {prefix}/temp/client_body;
+    proxy_temp_path {prefix}/temp/proxy;
+    fastcgi_temp_path {prefix}/temp/fastcgi;
+    uwsgi_temp_path {prefix}/temp/uwsgi;
+    scgi_temp_path {prefix}/temp/scgi;
+    server {{
+        listen {stat_port};
+        location /stat {{
+            rtmp_stat all;
+        }}
+        location /ping {{
+            return 200 "ok";
+        }}
+    }}
+}}
+"""
+
+# nginx-rtmp 模块在各发行版里的落点
+RTMP_MODULE_CANDIDATES = (
+    "/usr/lib/nginx/modules/ngx_rtmp_module.so",       # Debian / Ubuntu
+    "/usr/lib64/nginx/modules/ngx_rtmp_module.so",     # Fedora / RHEL
+    "/usr/lib/nginx/modules/ngx_rtmp.so",
+    "/etc/nginx/modules/ngx_rtmp_module.so",
+)
+
+
+def find_rtmp_module() -> str:
+    for p in RTMP_MODULE_CANDIDATES:
+        if os.path.exists(p):
+            return p
+    return ""
+
 
 class NginxManager(object):
     def __init__(self, rtmp_port=1935, stat_port=8080):
@@ -84,6 +159,7 @@ class NginxManager(object):
         self.proc = None
         self.prefix = ""
         self.exe = ""
+        self.module = ""
         self.last_error = ""
         # 串行化 start()：见 start() 里的注释
         self._start_lock = threading.Lock()
@@ -101,9 +177,15 @@ class NginxManager(object):
     def prepare(self) -> bool:
         """
         选定 nginx 运行目录。
-        程序路径本身就是纯英文时原地跑（用户能看到日志）；
-        否则整棵树复制到 %LOCALAPPDATA%\\PS5LiveBridge\\nginx-rtmp。
+
+        Windows：程序路径本身就是纯英文时原地跑（用户能看到日志）；
+                 否则整棵树复制到 %LOCALAPPDATA%\\PS5LiveBridge\\nginx-rtmp。
+        Linux / 容器：不随包分发二进制，直接用系统装的 nginx + rtmp 模块，
+                     prefix 落在可写目录（容器里是 /data/nginx）。
         """
+        if not netutil.IS_WINDOWS:
+            return self._prepare_posix()
+
         src = paths.resource_path("nginx-rtmp")
         if not os.path.isdir(src):
             self.last_error = "找不到 nginx-rtmp 目录：%s" % src
@@ -140,6 +222,34 @@ class NginxManager(object):
         self._write_conf()
         return True
 
+    def _prepare_posix(self) -> bool:
+        exe = shutil.which("nginx") or ""
+        for cand in ("/usr/sbin/nginx", "/usr/local/sbin/nginx", "/usr/bin/nginx"):
+            if not exe and os.path.exists(cand):
+                exe = cand
+        if not exe:
+            self.last_error = ("找不到 nginx。容器镜像里要有 nginx 和 nginx-rtmp 模块；"
+                               "自己装的话：apt install nginx libnginx-mod-rtmp")
+            return False
+
+        self.module = find_rtmp_module()
+        if not self.module:
+            self.last_error = ("nginx 缺少 rtmp 模块，收流用不了。"
+                               "Debian/Ubuntu 执行：apt install libnginx-mod-rtmp")
+            return False
+
+        self.exe = exe
+        self.prefix = os.path.join(paths.DATA_DIR, "nginx")
+        for sub in ("logs", "temp", "conf"):
+            try:
+                os.makedirs(os.path.join(self.prefix, sub), exist_ok=True)
+            except Exception as e:
+                self.last_error = "建 nginx 工作目录失败：%s" % e
+                return False
+
+        self._write_conf()
+        return True
+
     def _sync_tree(self, src: str, dst: str) -> None:
         os.makedirs(dst, exist_ok=True)
         for name in os.listdir(src):
@@ -155,7 +265,23 @@ class NginxManager(object):
     def _write_conf(self) -> None:
         conf_dir = os.path.join(self.prefix, "conf")
         os.makedirs(conf_dir, exist_ok=True)
-        text = CONF_TEMPLATE.format(rtmp_port=self.rtmp_port, stat_port=self.stat_port)
+        if netutil.IS_WINDOWS:
+            text = CONF_TEMPLATE.format(rtmp_port=self.rtmp_port, stat_port=self.stat_port)
+        else:
+            # 容器里 master 是 root，而 error_log 目录 root:root 755，worker 若按
+            # 编译默认落到 nobody 会写不进日志、启动直接失败。所以显式让 worker
+            # 也用 root。非 root 跑时 nginx 会忽略这条并发一句警告，无害。
+            try:
+                is_root = os.geteuid() == 0
+            except AttributeError:
+                is_root = False
+            text = CONF_TEMPLATE_POSIX.format(
+                user="user root;\n" if is_root else "",
+                load_module='load_module %s;\n' % self.module if self.module else "",
+                prefix=self.prefix,
+                rtmp_port=self.rtmp_port,
+                stat_port=self.stat_port,
+            )
         # nginx 配置文件用 \n 即可，但 Windows 下按 UTF-8 写不会出问题
         with open(os.path.join(conf_dir, "nginx.conf"), "w", encoding="utf-8") as f:
             f.write(text)
@@ -197,16 +323,23 @@ class NginxManager(object):
                 return False
 
         startup = {}
+        cmd = [self.exe]
         if netutil.IS_WINDOWS:
             startup["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
             si = subprocess.STARTUPINFO()
             si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             si.wShowWindow = subprocess.SW_HIDE
             startup["startupinfo"] = si
+        else:
+            # nginx 的默认 prefix 是编译时写死的（Debian 是 /etc/nginx），
+            # 光改 cwd 不够，必须显式给 -p 和 -c，否则它跑去读系统那份配置：
+            # 里面既没有 rtmp 段也没有我们的端口，表现为「起来了但 1935 没人听」。
+            cmd += ["-p", self.prefix + "/",
+                    "-c", os.path.join(self.prefix, "conf", "nginx.conf")]
 
         try:
             self.proc = subprocess.Popen(
-                [self.exe], cwd=self.prefix,
+                cmd, cwd=self.prefix,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
                 **startup)
@@ -242,8 +375,13 @@ class NginxManager(object):
     def stop(self) -> None:
         # 优先用 nginx -s quit 优雅退出（让 RTMP 会话正常结束）
         if self.exe and os.path.exists(self.exe):
+            sig_cmd = [self.exe, "-s", "quit"]
+            if not netutil.IS_WINDOWS:
+                # -s 要靠 conf 里的 pid 指令找到进程，所以同样得给 -c
+                sig_cmd += ["-p", self.prefix + "/",
+                            "-c", os.path.join(self.prefix, "conf", "nginx.conf")]
             try:
-                subprocess.run([self.exe, "-s", "quit"], cwd=self.prefix or None,
+                subprocess.run(sig_cmd, cwd=self.prefix or None,
                                timeout=5, stdout=subprocess.DEVNULL,
                                stderr=subprocess.DEVNULL,
                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))

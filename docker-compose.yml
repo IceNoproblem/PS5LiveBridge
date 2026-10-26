@@ -1,0 +1,51 @@
+# PS5 直播桥 · 容器版
+#
+#   docker compose up -d --build
+#   然后浏览器打开 http://<这台机器的 IP>:5000
+#
+# 前提：加速器开在路由器上，路由器的 hosts（或 DNS 静态解析）把下面这些域名
+#       指到这台机器。域名清单在第 1 步的界面里，可以直接复制。
+
+services:
+  ps5-live-bridge:
+    build: .
+    image: ps5livebridge:latest
+    container_name: ps5-live-bridge
+    restart: unless-stopped
+
+    # 必须是 host 网络。原因有两个：
+    #   1. PS5 要直连这台机器的 1935/6667，桥接 + 端口映射会多一层，出问题难查；
+    #   2. 界面要显示「这台机器的局域网 IP」给用户去配路由器，
+    #      桥接网络里探测到的是容器内网 IP，用户照着填必然填错。
+    network_mode: host
+
+    # 让 docker 塞一个 init 进程当 PID 1：主进程不是 init，长期跑会攒僵尸子进程
+    init: true
+
+    volumes:
+      # 配置、日志、B 站凭据、nginx 工作目录都在这里，别删
+      - ./data:/data
+
+    environment:
+      # 注意：这个块只能有一种写法（全是 key: value，或全是 - KEY=VALUE），混用会直接解析失败
+      TZ: "Asia/Shanghai"
+
+      # 这台机器（NAS）的局域网 IP。留空自动探测。
+      # 探测到的不对时（比如有多个网卡）手填，例如 "192.168.1.10"
+      PS5LB_LAN_IP: ""
+
+      # 界面端口。改了以后访问地址跟着变。
+      PS5LB_WEB_PORT: "5000"
+
+      # nginx 的 /stat 端口，只给程序自己读，不用开放给别人。
+      # 默认 8080 在 NAS 上常被 lucky 之类占用，所以单独留出来。
+      PS5LB_STAT_PORT: "8099"
+
+      # 可选：
+      # PS5LB_OUTPUT_MODE: "direct"      direct=自动开播并转发 / local=只收流给 OBS 拉
+      # PS5LB_ROOM_ID: ""                B 站直播间号
+      # PS5LB_AREA_ID: "236"             分区，236 是主机游戏
+      # PS5LB_AUTO_START_LIVE: "true"    PS5 一推流就自动开播
+
+    # 停止时要给 B 站发关播请求，别让容器 3 秒就把进程砍了
+    stop_grace_period: 30s

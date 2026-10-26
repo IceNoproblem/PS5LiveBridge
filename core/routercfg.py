@@ -9,6 +9,8 @@ core/routercfg.py —— 路由器 DNS 重定向的「照着做就行」文案�
 """
 from __future__ import annotations
 
+from . import paths
+
 # ──────────────────────────────────────────────────────────────
 # 片段生成
 # ──────────────────────────────────────────────────────────────
@@ -43,7 +45,7 @@ def guides(ip: str, domains) -> list:
     返回方案列表。第一个是主推（小米），第二个是软路由（OpenWrt），
     其余是备选，UI 收在「其他路由器」里。
     """
-    return [
+    items = [
         {
             "key": "xiaomi",
             "title": "小米 / 红米路由器",
@@ -126,6 +128,17 @@ def guides(ip: str, domains) -> list:
             "snippet": hosts_snippet(ip, domains),
         },
     ]
+
+    if paths.PLATFORM == "docker":
+        # 容器版没有「改本机 hosts」这条路（讲的是 Windows 路径，只会让人更乱），
+        # 而且容器本来也影响不到 PS5 的解析。直接去掉这一项。
+        items = [x for x in items if x["key"] != "hostsfile"]
+        for x in items:
+            if x["key"] == "openwrt":
+                x["note"] = ("如果路由器上开了加速器并接管了 53 端口，dnsmasq 这条会被绕过。"
+                             "那种情况要么把规则加到加速器的 DNS 上游，要么改用端口转发——"
+                             "把 1935 和 6667 两个端口转到 %s。" % ip)
+    return items
 
 
 def write_files(base_dir: str, ip: str, domains) -> list:

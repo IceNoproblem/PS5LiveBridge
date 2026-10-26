@@ -92,6 +92,8 @@ def parse_args():
     p.add_argument("--no-elevate", action="store_true", help="不尝试提权（仅调试用）")
     p.add_argument("--no-browser", action="store_true", help="不自动打开界面")
     p.add_argument("--no-window", action="store_true", help="不用原生窗口，直接开浏览器")
+    p.add_argument("--headless", action="store_true",
+                   help="纯服务模式：不建窗口、不开浏览器，收到 SIGTERM 就收工（容器用）")
     p.add_argument("--check", action="store_true", help="只做环境体检，然后退出")
     p.add_argument("--version", action="store_true", help="显示版本")
     return p.parse_args()
@@ -169,6 +171,9 @@ def main() -> int:
     if args.check:
         return do_check()
 
+    # 容器里没有桌面可交互：不提权、不开窗口、不探浏览器
+    headless = args.headless or paths.PLATFORM == "docker"
+
     # 提权：非管理员跑起来，内置 DNS 与防火墙都会失败，用户会一头雾水
     if netutil.IS_WINDOWS and not netutil.is_admin() and not args.no_elevate:
         if netutil.elevate(sys.argv[1:]):
@@ -186,7 +191,7 @@ def main() -> int:
             print("已经有一个实例在运行。")
         return 2
 
-    logbus.step("PS5 直播桥 v%s 启动" % APP_VERSION)
+    logbus.step("PS5 直播桥 v%s 启动（%s）" % (APP_VERSION, paths.PLATFORM))
 
     # 让 nginx / ffmpeg 跟着本进程一起收掉，避免强杀后端口被僵尸进程占住
     if netutil.add_kill_on_close_job():
@@ -204,12 +209,17 @@ def main() -> int:
     orch = Orchestrator()
     cfg = paths.load_config()
     port = args.port or int(cfg.get("WEB_PORT", 5000))
+    # 桌面版只听回环（不需要把控制台暴露到局域网）；
+    # 容器版必须对外，否则宿主机浏览器进不来。
+    host = str(cfg.get("WEB_HOST") or ("0.0.0.0" if headless else "127.0.0.1"))
     url = "http://127.0.0.1:%d/" % port
 
-    orch.start()
+    # 先把收流服务拉起来，再起编排器。
+    # 顺序反过来的话，监控线程第一拍会看到「nginx 还没起」，白打一条警告。
     r = orch.ensure_nginx()
     if not r["ok"]:
         logbus.error("收流服务启动失败：%s" % r["detail"], tag="收流")
+    orch.start()
 
     # 「退出」按钮和窗口关闭都通过这个事件让主线程收工
     stop_event = threading.Event()
@@ -217,11 +227,25 @@ def main() -> int:
     def request_exit():
         stop_event.set()
 
+    # 容器停容器时发的是 SIGTERM，要抓住它做优雅退出（否则 B 站那边还在播）
+    if headless:
+        import signal as _signal
+
+        def _on_signal(signum, _frame):
+            logbus.info("收到退出信号（%d），正在收尾" % signum)
+            stop_event.set()
+
+        for sig in (_signal.SIGTERM, _signal.SIGINT):
+            try:
+                _signal.signal(sig, _on_signal)
+            except Exception:
+                pass
+
     # Web 线程
     from web import server as webserver
     web_thread = threading.Thread(
         target=webserver.serve,
-        args=(orch, "127.0.0.1", port),
+        args=(orch, host, port),
         kwargs={"on_exit": request_exit},
         name="web", daemon=True)
     web_thread.start()
@@ -235,6 +259,18 @@ def main() -> int:
             break
     if not ready:
         logbus.warn("界面服务似乎没起来，仍尝试打开 %s" % url)
+
+    if headless:
+        logbus.ok("界面地址：http://<这台机器的 IP>:%d/" % port)
+        try:
+            while not stop_event.wait(1):
+                pass
+        except KeyboardInterrupt:
+            pass
+        orch.shutdown()
+        logbus.info("退出完成")
+        logbus.close()
+        return 0
 
     if args.no_browser:
         logbus.info("界面地址：%s（按 Ctrl+C 退出）" % url)

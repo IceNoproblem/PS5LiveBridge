@@ -294,13 +294,17 @@ def _list_adapters() -> list:
                 items.append({"alias": alias.strip(), "ip": ip.strip()})
     else:
         rc, out = run(["ifconfig"], timeout=5)
+        if "inet " not in out and "inet addr" not in out:
+            # 精简镜像里没有 net-tools，退到 iproute2；两者格式不同，下面的
+            # 正则同时兼容（ifconfig: "eth0: ..." / ip: "2: eth0: <...>"）
+            rc, out = run(["ip", "-4", "addr"], timeout=5)
         cur = ""
         for line in out.splitlines():
-            m = re.match(r"^(\w+):", line)
+            m = re.match(r"^\s*(?:\d+:\s*)?([A-Za-z][\w.@-]*):", line)
             if m:
                 cur = m.group(1)
                 continue
-            m2 = re.search(r"inet (\d+\.\d+\.\d+\.\d+)", line)
+            m2 = re.search(r"inet\s+(?:addr:)?(\d+\.\d+\.\d+\.\d+)", line)
             if m2:
                 items.append({"alias": cur, "ip": m2.group(1)})
 
@@ -560,8 +564,39 @@ def port_listening(port: int, proto: str = "tcp") -> bool:
             if needle in line and "LISTENING" in line.upper():
                 return True
         return False
+    # Linux 先读 /proc/net/tcp：不依赖任何外部命令，容器里最可靠。
+    # （镜像里没有 lsof 是常态，早先的版本在这里会误判成「端口没在听」，
+    #   于是又起一组 nginx，两组抢 1935。）
+    if sys.platform.startswith("linux") and proto == "tcp":
+        found = _proc_net_listening(port)
+        if found is not None:
+            return found
     rc, out = run(["lsof", "-nP", "-i%s:%d" % (proto.upper(), port), "-sTCP:LISTEN"], timeout=8)
     return "(LISTEN)" in out
+
+
+def _proc_net_listening(port: int):
+    """返回 True/False；读不到 /proc 时返回 None（交给调用方换办法）。"""
+    seen = False
+    for path in ("/proc/net/tcp", "/proc/net/tcp6"):
+        try:
+            with open(path, "r") as f:
+                next(f, None)
+                for line in f:
+                    parts = line.split()
+                    if len(parts) < 4:
+                        continue
+                    if parts[3] != "0A":        # 0A = TCP_LISTEN
+                        continue
+                    seen = True
+                    try:
+                        if int(parts[1].rsplit(":", 1)[1], 16) == port:
+                            return True
+                    except (IndexError, ValueError):
+                        continue
+        except Exception:
+            continue
+    return False if seen else None
 
 
 def port_owner(port: int, proto: str = "tcp"):
@@ -599,6 +634,17 @@ def port_owner(port: int, proto: str = "tcp"):
 def kill_pid(pid: int) -> bool:
     if not pid:
         return False
+    if not IS_WINDOWS:
+        import signal
+        try:
+            os.kill(pid, signal.SIGTERM)
+            return True
+        except Exception:
+            try:
+                os.kill(pid, signal.SIGKILL)
+                return True
+            except Exception:
+                return False
     rc, _ = run(["taskkill", "/PID", str(pid), "/F"], timeout=10)
     return rc == 0
 

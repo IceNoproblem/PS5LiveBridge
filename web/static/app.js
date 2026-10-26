@@ -1,6 +1,10 @@
 /* PS5 直播桥 · 前端
    界面只渲染 /api/state 的结果，不自己推断状态。
-   五个步骤：配路由器 / 检测 / 填 PS5 / 登录 / 开播。 */
+   五个步骤：配路由器 / 检测 / 填 PS5 / 登录 / 开播。
+
+   两种形态共用这套界面，差别由后端给的 caps 决定（前端不许自己猜平台）：
+     桌面版  有端口劫持，电脑加速器要走「填 PS5 四个数」
+     容器版  动不了宿主机网络，只能改路由器；PS5 保持自动，第 3 步只是确认 */
 
 const S = {
   step: 1,
@@ -15,10 +19,15 @@ const S = {
   curRouter: 0,
 };
 
+let CAPS = { platform: 'windows', divert: true, ps5_net_step: true,
+             builtin_dns: true, gui: true, shutdown: true };
+
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;');
+
+const isDocker = () => CAPS.platform === 'docker';
 
 async function api(path, body) {
   const opt = { headers: {} };
@@ -39,6 +48,29 @@ function fmtDur(sec) {
   sec = Math.max(0, Math.floor(sec || 0));
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
   return (h ? h + ':' : '') + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+
+/* ── 形态适配：容器版把界面收窄到它真能做的事 ── */
+function applyCaps(st) {
+  if (!st || !st.caps) return;
+  CAPS = st.caps;
+  if (!isDocker()) return;
+
+  const setHtml = (id, html) => { const el = $(id); if (el) el.innerHTML = html; };
+  const show = (id, on) => { const el = $(id); if (el) el.style.display = on ? '' : 'none'; };
+
+  setHtml('s1-title', '第 1 步 · 把推流地址指到这台机器');
+  setHtml('s1-sub', 'PS5 开播时把画面推给 Twitch 的服务器。让下面这几个域名答成这台机器'
+    + '（<span class="mono" id="s1-ip">—</span>），画面就先进来，再转去 B 站。');
+  if ($('s1-ip')) $('s1-ip').textContent = st.lan_ip || '—';
+
+  show('s1-docker-note', true);
+  show('s1-bridge-block', false);
+  show('s3-desktop', false);
+  show('s3-docker', true);
+  show('btn-quit', false);
+  if ($('s3-docker-ip')) $('s3-docker-ip').textContent = st.lan_ip || '—';
+  setHtml('nav-3-label', 'PS5<small>保持自动就行</small>');
 }
 
 /* ── 步骤切换 ── */
@@ -158,8 +190,11 @@ async function tick() {
         + `用本地取流的话不需要登录，可以直接在 PS5 开播。</div>`;
     } else if (!hj.running && !st.progress_dns_ok) {
       // 路由器方案成功时不需要直播桥，这种不算错
-      $('s5-msg').innerHTML = `<div class="note err">直播桥没开，DNS 也没指到本机。回
-        <a href="#" onclick="goStep(1);return false">第 1 步</a> 处理。</div>`;
+      const back = '回 <a href="#" onclick="goStep(1);return false">第 1 步</a> 处理。';
+      $('s5-msg').innerHTML = '<div class="note err">'
+        + (isDocker() ? '路由器还没把推流指过来。' + back
+                      : '直播桥没开，DNS 也没指到本机。' + back)
+        + '</div>';
     } else {
       $('s5-msg').innerHTML = `<div class="note">去 PS5 点「开始直播」，选 Twitch。</div>`;
     }
@@ -272,8 +307,17 @@ async function runVerify() {
 
   $('s2-badge').textContent = r.ok ? '通过' : '没通过';
   $('s2-badge').className = 'badge ' + (r.ok ? 'ok' : 'err');
-  $('s2-verdict').innerHTML = r.ok
-    ? `<div class="verdict ok"><div class="icon">✓</div><div>
+
+  if (r.ok && isDocker()) {
+    // 容器版只有「加速器在路由器上」这一条路，所以不用问装哪儿
+    $('s2-verdict').innerHTML = `<div class="verdict ok"><div class="icon">✓</div><div>
+         <h4>生效了</h4><p>${esc(r.hint)}</p></div></div>
+       <div class="note">加速器在路由器上，PS5 什么都不用改。下一步只是确认一下。</div>
+       <div class="btn-row">
+         <button class="btn primary" onclick="goStep(3)">下一步 →</button>
+       </div>`;
+  } else if (r.ok) {
+    $('s2-verdict').innerHTML = `<div class="verdict ok"><div class="icon">✓</div><div>
          <h4>生效了</h4><p>${esc(r.hint)}</p></div></div>
        <h3>PS5 用哪种加速</h3>
        <p class="small dim" style="margin-top:-6px">
@@ -287,13 +331,25 @@ async function runVerify() {
            装电脑上（要填四个数）
          </button>
        </div>
-       <p class="small dim" id="s2-pick-note"></p>`
-    : `<div class="verdict bad"><div class="icon">✕</div><div>
+       <p class="small dim" id="s2-pick-note"></p>`;
+  } else if (isDocker()) {
+    $('s2-verdict').innerHTML = `<div class="verdict bad"><div class="icon">✕</div><div>
+         <h4>还没通</h4><p>${esc(r.hint)}</p></div></div>
+       <div class="btn-row">
+         <button class="btn primary" onclick="goStep(1)">回上一步改路由器</button>
+       </div>
+       <div class="note warn">
+         路由器上要是开了加速器（UU、迅游的路由器插件之类），它可能把 PS5 的域名解析
+         接到自己服务器上，hosts 就不生效了。这种路由器改用「端口转发」那条做法。
+       </div>`;
+  } else {
+    $('s2-verdict').innerHTML = `<div class="verdict bad"><div class="icon">✕</div><div>
          <h4>还没通</h4><p>${esc(r.hint)}</p></div></div>
        <div class="btn-row">
          <button class="btn" onclick="goStep(1)">回上一步改路由器</button>
          <button class="btn primary" onclick="useBridgeFromVerify(this)">改用直播桥</button>
        </div>`;
+  }
 
   const rows = (r.results || []).map((s) => {
     const pct = s.total ? Math.round(s.hits / s.total * 100) : 0;
@@ -396,6 +452,11 @@ async function choosePcAccel() {
 
 /* ── 第 3 步：PS5 网络 ── */
 async function renderNet() {
+  if (isDocker()) {
+    // 容器版这一步只是确认页，没有要填的东西
+    if ($('s3-docker-ip')) $('s3-docker-ip').textContent = (S.state && S.state.lan_ip) || '—';
+    return;
+  }
   if (!S.env) S.env = await api('/api/env');
   const env = S.env || {};
   const st = S.state || {};
@@ -652,6 +713,10 @@ async function pullLogs() {
 }
 
 async function quitApp() {
+  if (isDocker()) {
+    alert('容器里没有「退出」这个操作。\n要停服务：docker compose down\n只重启：docker compose restart');
+    return;
+  }
   if (!confirm('退出会停掉收流和转发，并让 B 站关播。确定退出？')) return;
   await api('/api/shutdown', {});
   document.body.innerHTML = '<div style="display:grid;place-items:center;height:100vh;color:#8b93a7;'
@@ -664,6 +729,9 @@ async function quitApp() {
   const env = S.env || {};
   const st = await api('/api/state');
   S.state = st;
+
+  // 先把形态相关的差异摆正，再决定进哪一步
+  applyCaps(st);
 
   // ?step=N 可以直接跳；否则按上次进度，第一次进来就是第 1 步
   const q = new URLSearchParams(location.search);

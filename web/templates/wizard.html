@@ -24,7 +24,7 @@
   <div class="topbar-actions">
     <span class="ipchip" id="ipchip">本机 IP 探测中</span>
     <button class="btn sm" onclick="toggleLog()">日志</button>
-    <button class="btn sm ghost" onclick="quitApp()">退出</button>
+    <button class="btn sm ghost" id="btn-quit" onclick="quitApp()">退出</button>
   </div>
 </div>
 
@@ -34,7 +34,7 @@
     <nav class="stepnav" id="stepnav">
       <a data-step="1" href="#"><span class="num">1</span><span>配路由器<small>把推流地址指到本机</small></span></a>
       <a data-step="2" href="#"><span class="num">2</span><span>检测<small>看有没有生效</small></span></a>
-      <a data-step="3" href="#"><span class="num">3</span><span>填 PS5<small>抄加速器的四个数</small></span></a>
+      <a data-step="3" href="#" id="nav-3"><span class="num">3</span><span id="nav-3-label">填 PS5<small>抄加速器的四个数</small></span></a>
       <a data-step="4" href="#"><span class="num">4</span><span>登录 B 站<small>扫码</small></span></a>
       <a data-step="5" href="#"><span class="num">5</span><span>开播<small>PS5 点开始直播</small></span></a>
     </nav>
@@ -53,10 +53,10 @@
     <section class="stepc" id="step-1">
       <div class="card">
         <div class="card-h">
-          <h2>第 1 步 · 把推流地址指到这台电脑</h2>
+          <h2 id="s1-title">第 1 步 · 把推流地址指到这台电脑</h2>
           <span class="badge" id="s1-badge">未配置</span>
         </div>
-        <p class="card-sub">
+        <p class="card-sub" id="s1-sub">
           PS5 开播时把画面推给 Twitch 的服务器。让下面这几个域名答成这台电脑
           （<span class="mono" id="s1-ip">—</span>），画面就先进电脑，再转去 B 站。
         </p>
@@ -65,17 +65,25 @@
           只改这 5 个域名。PS5 上网、PSN、连索尼服务器都照常。
         </div>
 
-        <h3>用加速器：不用改路由器</h3>
-        <p class="small dim" style="margin-top:-4px">
-          UU、迅游这类加速器会接管 PS5 的域名解析，改路由器不生效。这种情况直接开直播桥。
-        </p>
-        <div class="flexline">
-          <button class="btn primary" id="s1-btn-bridge" onclick="toggleBridge()">开启直播桥</button>
-          <span class="small" id="s1-bridge-state">未开启</span>
+        <div class="note err" id="s1-docker-note" style="display:none">
+          这一版跑在容器里，动不了宿主机的网络，所以只能从路由器入手。
+          加速器必须开在<b>路由器</b>上；如果加速器是开在电脑上的，请改用 Windows 桌面版。
         </div>
-        <div id="s1-msg"></div>
 
-        <hr class="sep">
+        <div id="s1-bridge-block">
+          <h3>用加速器：不用改路由器</h3>
+          <p class="small dim" style="margin-top:-4px">
+            UU、迅游这类加速器会接管 PS5 的域名解析，改路由器不生效。这种情况直接开直播桥。
+          </p>
+          <div class="flexline">
+            <button class="btn primary" id="s1-btn-bridge" onclick="toggleBridge()">开启直播桥</button>
+            <span class="small" id="s1-bridge-state">未开启</span>
+          </div>
+          <div id="s1-msg"></div>
+
+          <hr class="sep">
+        </div>
+
         <h3>改路由器：先选型号</h3>
         <div class="tabs" id="router-tabs"></div>
         <div id="router-body"></div>
@@ -110,7 +118,7 @@
 
     <!-- ══════════ 3 · 填 PS5 ══════════ -->
     <section class="stepc" id="step-3">
-      <div class="card">
+      <div class="card" id="s3-desktop">
         <div class="card-h">
           <h2>第 3 步 · 把加速器的四个数填进 PS5</h2>
           <span class="badge" id="s3-badge">—</span>
@@ -175,6 +183,46 @@
         <div class="btn-row">
           <button class="btn" onclick="goStep(2)">← 上一步</button>
           <button class="btn primary" onclick="goStep(4)">填好了 →</button>
+        </div>
+      </div>
+
+      <!-- 容器版：加速器在路由器上，PS5 什么都不用改 -->
+      <div class="card" id="s3-docker" style="display:none">
+        <div class="card-h">
+          <h2>第 3 步 · PS5 不用改设置</h2>
+          <span class="badge ok">保持自动</span>
+        </div>
+        <p class="card-sub">
+          加速器开在路由器上，路由器已经把推流地址指到这台机器
+          （<span class="mono" id="s3-docker-ip">—</span>）。PS5 照平时上网的样子就行。
+        </p>
+
+        <div class="checklist">
+          <div class="checkrow">
+            <span class="q">PS5 网络设置</span>
+            <span class="a"><span class="tick y">✓</span>
+              <span class="small">保持「自动获取」，别手动填 IP 和 DNS</span></span>
+          </div>
+          <div class="checkrow">
+            <span class="q">加速器</span>
+            <span class="a"><span class="tick y">✓</span>
+              <span class="small">照常给 PS5 加速，不用关</span></span>
+          </div>
+          <div class="checkrow">
+            <span class="q">同一局域网</span>
+            <span class="a"><span class="tick y">✓</span>
+              <span class="small">PS5 和这台机器连的是同一个路由器</span></span>
+          </div>
+        </div>
+
+        <div class="note warn">
+          如果你之前按别处的教程把 PS5 改成过「手动 IP + 手动 DNS」，现在要改回自动，
+          否则会连到旧地址上。
+        </div>
+
+        <div class="btn-row">
+          <button class="btn" onclick="goStep(2)">← 上一步</button>
+          <button class="btn primary" onclick="goStep(4)">知道了 →</button>
         </div>
       </div>
     </section>

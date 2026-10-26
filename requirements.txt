@@ -13,7 +13,8 @@ aiohttp>=3.9
 # 端口级劫持（WinDivert 的 Python 绑定，wheel 里自带 WinDivert64.dll/.sys）
 # 这是核心组件：没有它，PS5 走加速器时推流截不下来。
 # 装不上的话程序仍可启动，只是「直播桥」那一步会显示缺少组件。
-pydivert>=3.0
+# 只有 Windows 有驱动，Linux/容器里必须跳过，否则 pip 直接报错、镜像都建不出来。
+pydivert>=3.0; sys_platform == "win32"
 
 # 扫码登录的二维码图
 qrcode>=7.4

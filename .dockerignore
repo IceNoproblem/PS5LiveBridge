@@ -1,0 +1,24 @@
+# 桌面版的东西，容器里用不上，别塞进镜像
+nginx-rtmp/
+启动.bat
+scripts/
+ui/
+docs/
+assets/
+
+# 本机的运行时数据，绝不能进镜像
+logs/
+data/
+config.json
+bili_credential.json
+
+# 常规忽略
+__pycache__/
+*.pyc
+*.pyo
+*.exe
+*.log
+.git/
+.gitignore
+.DS_Store
+._*

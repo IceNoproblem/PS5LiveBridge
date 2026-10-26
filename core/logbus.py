@@ -12,6 +12,7 @@ core/logbus.py —— 日志总线
 from __future__ import annotations
 
 import os
+import sys
 import threading
 import time
 from collections import deque
@@ -25,6 +26,12 @@ _FILE_LOCK = threading.Lock()
 _FILE_HANDLE = None
 
 _MAX_LINE = 2000
+
+# 容器里没有界面窗口，排障只能靠 `docker logs`。
+# 桌面版不往 stdout 写 —— 打包成无控制台程序后 stdout 是 None，
+# 而且用户也不看那个黑框。
+_TO_STDOUT = paths.PLATFORM == "docker" or \
+    (os.environ.get("PS5LB_LOG_STDOUT") or "").strip().lower() in ("1", "true", "yes")
 
 LEVELS = ("debug", "info", "success", "warn", "error", "step")
 
@@ -73,6 +80,15 @@ def log(msg: str, level: str = "info", tag: str = "") -> dict:
     for q in subs:
         try:
             q.put_nowait(item)
+        except Exception:
+            pass
+    # stdout（容器里 docker logs 直接能看到）
+    if _TO_STDOUT:
+        try:
+            sys.stdout.write("%s [%s]%s %s\n" % (
+                item["t"], item["level"].upper(),
+                (" " + tag) if tag else "", item["msg"]))
+            sys.stdout.flush()
         except Exception:
             pass
     return item
