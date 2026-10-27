@@ -51,7 +51,7 @@ if exist tools\ffmpeg.exe (
 ) else (
   echo     WARNING: tools\ffmpeg.exe not found.
   echo     End users must install ffmpeg and add it to PATH,
-  echo     otherwise the relay (PS5 -> Bilibili) will not start.
+  echo     otherwise the relay from PS5 to Bilibili will not start.
 )
 
 REM Output names must stay ASCII - no Chinese filenames anywhere in this file,
@@ -63,6 +63,42 @@ REM PowerShell - this file itself only deals in ASCII names.
 copy /y README.md "dist\PS5LiveBridge\README.md" >nul 2>nul
 copy /y LICENSE "dist\PS5LiveBridge\LICENSE.txt" >nul 2>nul
 if exist config.example.json copy /y config.example.json "dist\PS5LiveBridge\" >nul
+
+echo.
+echo [6/6] Verifying bundle...
+if not exist "dist\PS5LiveBridge\_internal\python312.dll" goto :fail
+if not exist "dist\PS5LiveBridge\_internal\base_library.zip" goto :fail
+if not exist "dist\PS5LiveBridge\PS5LiveBridge.exe" goto :fail
+echo     bundle layout OK
+
+REM Smoke test: run the exe headless once. --noconsole programs are GUI
+REM subsystem, so plain invocation returns immediately - use start /wait.
+REM PS5LB_NO_POPUP keeps the error dialog away during automated builds.
+set PS5LB_NO_POPUP=1
+start /wait "" "dist\PS5LiveBridge\PS5LiveBridge.exe" --version
+if errorlevel 1 goto :fail
+echo     exe starts OK
+
+echo.
+echo [7/7] Writing launcher scripts...
+REM Written with plain echo lines. %%~dp0 becomes %~dp0 in the output file
+REM (a single %~dp0 here would be expanded by cmd to THIS machine's path).
+> "dist\PS5LiveBridge\start-app.bat" (
+  echo @echo off
+  echo cd /d "%%~dp0"
+  echo start "" "PS5LiveBridge.exe"
+)
+> "dist\PS5LiveBridge\diag.bat" (
+  echo @echo off
+  echo cd /d "%%~dp0"
+  echo set PS5LB_NO_POPUP=1
+  echo start /wait "" "PS5LiveBridge.exe" --check
+  echo.
+  echo Report saved in the logs folder.
+  echo pause
+)
+if exist "dist\PS5LiveBridge\start-app.bat" echo     start-app.bat
+if exist "dist\PS5LiveBridge\diag.bat" echo     diag.bat
 
 echo.
 echo ============================================================

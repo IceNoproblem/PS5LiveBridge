@@ -3,6 +3,7 @@
 main.py —— 程序入口
 
 启动顺序（顺序本身有讲究）：
+    0. 崩溃兜底（只用标准库）——双击后毫无反应是最难排查的故障，必须留痕迹
     1. 补标准输出（打包成无控制台程序后 stdout 是 None，任何 print 都会炸）
     2. 提权（53 端口和防火墙都要管理员）
     3. 单实例（两个实例会抢 1935/6667/5000）
@@ -18,10 +19,113 @@ import os
 import sys
 import threading
 import time
+import traceback
 
-from core import logbus, netutil, paths
+APP_VERSION = "4.4"
 
-APP_VERSION = "4.2"
+
+# ──────────────────────────────────────────────────────────────
+# 崩溃兜底（必须最先装，且只依赖标准库 —— core 本身 import 失败也要能报出来）
+#
+# 为什么需要：打包成 --noconsole 后，任何未捕获异常都表现为「双击后闪退/毫无反应」。
+# 出问题的机器往往不在手边，没有痕迹就只能猜。这里保证：
+#     1. 每走一步写一行 启动轨迹.txt（最后停在哪一步，就是死在哪一步）
+#     2. 真炸了写 崩溃日志.txt（含 traceback + 原生崩溃的线程栈）
+#     3. 弹窗告诉用户发生了什么，而不是无声无息消失
+# ──────────────────────────────────────────────────────────────
+def _base_dir() -> str:
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+_BASE = _base_dir()
+_TRACE_FILE = os.path.join(_BASE, "启动轨迹.txt")
+_CRASH_FILE = os.path.join(_BASE, "崩溃日志.txt")
+
+
+def _trace(msg: str) -> None:
+    try:
+        with open(_TRACE_FILE, "a", encoding="utf-8") as f:
+            f.write("%s  %s\n" % (time.strftime("%H:%M:%S"), msg))
+    except Exception:
+        pass
+
+
+def _alert(text: str, title: str = "PS5 直播桥") -> None:
+    if (os.environ.get("PS5LB_NO_POPUP") or "").strip():
+        return
+    try:
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(None, str(text)[:2000], title, 0x10)
+    except Exception:
+        pass
+
+
+def _is_admin_simple() -> str:
+    try:
+        import ctypes
+        return "是" if ctypes.windll.shell32.IsUserAnAdmin() else "否"
+    except Exception:
+        return "未知"
+
+
+def _win_ver() -> str:
+    try:
+        if sys.platform == "win32":
+            v = sys.getwindowsversion()
+            return "Windows %d.%d (build %d)" % (v.major, v.minor, v.build)
+    except Exception:
+        pass
+    return sys.platform
+
+
+def _write_crash(header: str, body: str) -> None:
+    text = (
+        "\n==== %s ====\n"
+        "版本：%s\n系统：%s\n程序目录：%s\n管理员：%s\n\n%s"
+        % (time.strftime("%Y-%m-%d %H:%M:%S"), APP_VERSION,
+           _win_ver(), _BASE, _is_admin_simple(), body)
+    )
+    for path in (_CRASH_FILE, os.path.join(os.environ.get("TEMP") or _BASE, "ps5livebridge-crash.log")):
+        try:
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(text)
+        except Exception:
+            pass
+    _trace("!! %s" % header)
+
+
+def _excepthook(tp, val, tb) -> None:
+    body = "".join(traceback.format_exception(tp, val, tb))
+    _write_crash("%s: %s" % (tp.__name__, val), body)
+    _alert("程序出错了：%s\n\n错误详情已写进：\n%s\n\n把这两个文件发给作者就能定位问题：\n%s"
+           % (val, _CRASH_FILE, _TRACE_FILE))
+
+
+def _thread_excepthook(args) -> None:
+    # 线程崩溃不会带走进程，但同样要留痕迹（比如劫持线程被杀软掐掉）
+    body = "".join(traceback.format_exception(args.exc_type, args.exc_value, args.exc_traceback))
+    _write_crash("后台线程异常: %s" % args.exc_value, body)
+
+
+def _install_crash_guard() -> None:
+    try:
+        import faulthandler
+        _fh = open(_CRASH_FILE, "a", encoding="utf-8")
+        faulthandler.enable(file=_fh, all_threads=True)   # 原生崩溃也留线程栈
+    except Exception:
+        pass
+    sys.excepthook = _excepthook
+    try:
+        threading.excepthook = _thread_excepthook
+    except Exception:
+        pass
+
+
+_install_crash_guard()
+
+from core import logbus, netutil, paths  # noqa: E402  兜底装好后才拉 core
 
 
 # ──────────────────────────────────────────────────────────────
@@ -117,7 +221,7 @@ def do_check() -> int:
         with open(report, "w", encoding="utf-8") as f:
             f.write("\n".join(lines))
         _print("报告已写入：%s" % report)
-        if isinstance(sys.stdout, _Null):
+        if isinstance(sys.stdout, _Null) and not (os.environ.get("PS5LB_NO_POPUP") or "").strip():
             try:
                 os.startfile(report)          # Windows
             except Exception:
@@ -156,19 +260,76 @@ def _do_check_body(print) -> int:
 
 
 # ──────────────────────────────────────────────────────────────
+# 完整性自检
+# ──────────────────────────────────────────────────────────────
+def _bundle_problems() -> list:
+    """
+    打包版最常见的「闪退」不是程序坏了，是文件不齐：
+    在压缩包里直接双击（资源管理器只解出 exe），或者只把 exe 拷给了别人。
+    这里查出来就明说，别让用户对着一个消失的窗口猜。
+    """
+    if not getattr(sys, "frozen", False):
+        return []
+    probs = []
+    internal = os.path.join(_BASE, "_internal")
+    if not os.path.isdir(internal):
+        probs.append(
+            "缺少 _internal 文件夹。\n\n"
+            "多半是没解压就双击了，或者只拷了 exe 一个文件。\n"
+            "请把压缩包完整解压到一个文件夹（比如桌面），再双击里面的 PS5LiveBridge.exe。"
+        )
+        return probs
+    for name in ("python312.dll", "base_library.zip"):
+        if not os.path.exists(os.path.join(internal, name)):
+            probs.append("文件不完整：缺少 _internal\\%s。\n请重新解压整个压缩包。" % name)
+    meipass = getattr(sys, "_MEIPASS", "")
+    rtmp_ok = any(os.path.isdir(os.path.join(p, "nginx-rtmp"))
+                  for p in (_BASE, meipass) if p)
+    if not rtmp_ok:
+        probs.append("缺少 nginx-rtmp 文件夹（收流服务）。\n请重新解压整个压缩包。")
+    return probs
+
+
+# ──────────────────────────────────────────────────────────────
 # 主流程
 # ──────────────────────────────────────────────────────────────
 def main() -> int:
+    # 每次启动覆写轨迹：用户发过来的就是最近一次的现场
+    try:
+        with open(_TRACE_FILE, "w", encoding="utf-8") as f:
+            f.write("PS5 直播桥 v%s 启动轨迹（只保留最近一次）\n" % APP_VERSION)
+    except Exception:
+        pass
+    _trace("进程启动 | %s | 管理员=%s" % (_win_ver(), _is_admin_simple()))
+    try:
+        return _main()
+    except Exception:
+        _excepthook(*sys.exc_info())
+        return 1
+
+
+def _main() -> int:
     _fix_streams()
+    _trace("输出流就绪")
     args = parse_args()
+    _trace("参数解析完成: %s" % " ".join(sys.argv[1:]) or "(无)")
 
     if args.version:
         print("PS5 直播桥 v%s" % APP_VERSION)
+        _trace("--version 查询，退出")
         return 0
 
+    for prob in _bundle_problems():
+        _trace("完整性检查失败: %s" % prob.replace("\n", " "))
+        _alert(prob, "文件不完整")
+        return 3
+
+    _trace("完整性检查通过")
     paths.ensure_dirs()
+    _trace("数据目录就绪: %s" % paths.BASE_DIR)
 
     if args.check:
+        _trace("--check 体检")
         return do_check()
 
     # 容器里没有桌面可交互：不提权、不开窗口、不探浏览器
@@ -176,11 +337,15 @@ def main() -> int:
 
     # 提权：非管理员跑起来，内置 DNS 与防火墙都会失败，用户会一头雾水
     if netutil.IS_WINDOWS and not netutil.is_admin() and not args.no_elevate:
+        _trace("不是管理员，发起提权重启")
         if netutil.elevate(sys.argv[1:]):
+            _trace("提权请求已发出，本进程退出（后续由管理员进程接手）")
             return 0
         logbus.warn("没有取得管理员权限，继续运行（内置 DNS 与防火墙可能不可用）")
+        _trace("提权被拒绝或失败，降级继续运行")
 
     if not acquire_single_instance():
+        _trace("已有实例在运行，退出")
         logbus.warn("已经有一个 PS5 直播桥在运行了，本次启动取消")
         try:
             import ctypes
@@ -191,11 +356,13 @@ def main() -> int:
             print("已经有一个实例在运行。")
         return 2
 
+    _trace("单实例通过")
     logbus.step("PS5 直播桥 v%s 启动（%s）" % (APP_VERSION, paths.PLATFORM))
 
     # 让 nginx / ffmpeg 跟着本进程一起收掉，避免强杀后端口被僵尸进程占住
     if netutil.add_kill_on_close_job():
         logbus.info("已启用子进程随主程序退出（Job 对象）")
+    _trace("Job 对象已设置")
 
     # 防火墙（失败不致命，但要明确告诉用户）
     ok, msgs = netutil.ensure_firewall()
@@ -203,7 +370,9 @@ def main() -> int:
         logbus.info(m, tag="防火墙")
     if not ok:
         logbus.warn("部分防火墙规则没加上，PS5 可能连不上本机", tag="防火墙")
+    _trace("防火墙处理完成（全部成功=%s）" % ok)
 
+    _trace("加载核心模块")
     from core.orchestrator import Orchestrator
 
     orch = Orchestrator()
@@ -219,7 +388,9 @@ def main() -> int:
     r = orch.ensure_nginx()
     if not r["ok"]:
         logbus.error("收流服务启动失败：%s" % r["detail"], tag="收流")
+    _trace("收流服务: %s" % ("OK" if r["ok"] else r.get("detail", "")[:80]))
     orch.start()
+    _trace("编排器已启动（监控/IRC/弹幕）")
 
     # 「退出」按钮和窗口关闭都通过这个事件让主线程收工
     stop_event = threading.Event()
@@ -259,6 +430,7 @@ def main() -> int:
             break
     if not ready:
         logbus.warn("界面服务似乎没起来，仍尝试打开 %s" % url)
+    _trace("Web 服务%s，界面地址 %s" % ("就绪" if ready else "未确认就绪", url))
 
     if headless:
         logbus.ok("界面地址：http://<这台机器的 IP>:%d/" % port)
@@ -287,6 +459,7 @@ def main() -> int:
     if args.no_window:
         import webbrowser
         webbrowser.open(url)
+        _trace("浏览器模式已打开")
         logbus.info("已在浏览器打开 %s（关闭请点界面右上角「退出」或按 Ctrl+C）" % url)
         try:
             while not stop_event.wait(1):
@@ -296,10 +469,12 @@ def main() -> int:
         orch.shutdown()
     else:
         # 阻塞直到窗口关闭（窗口内部会调用 on_close 置位 stop_event）
+        _trace("打开软件窗口（此后若再闪退，多半是杀软拦截，见崩溃日志）")
         window.open_app_window(url, "PS5 直播桥",
                                on_close=request_exit, stop_event=stop_event)
         orch.shutdown()
 
+    _trace("正常退出")
     logbus.info("退出完成")
     logbus.close()
     return 0
