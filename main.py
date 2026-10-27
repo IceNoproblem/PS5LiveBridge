@@ -21,7 +21,7 @@ import threading
 import time
 import traceback
 
-APP_VERSION = "4.4"
+APP_VERSION = "4.5"
 
 
 # ──────────────────────────────────────────────────────────────
