@@ -67,4 +67,8 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      # 新版 Docker daemon 最低要求 API 1.44，watchtower 自带的 client 报 1.25
+      # 会被拒。显式声明版本号即可正常协商。
+      DOCKER_API_VERSION: "1.44"
     command: --schedule "0 0 4 * * *" --cleanup ps5-live-bridge
