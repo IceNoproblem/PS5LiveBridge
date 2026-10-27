@@ -203,6 +203,127 @@ def add_kill_on_close_job() -> bool:
 
 
 # ──────────────────────────────────────────────────────────────
+# 降权启动（浏览器必须用普通权限开）
+# ──────────────────────────────────────────────────────────────
+class _WinProc(object):
+    """CreateProcessWithTokenW 拿到的是句柄不是 Popen，这里补一个 poll()。"""
+
+    def __init__(self, pid, handle):
+        self.pid = pid
+        self._handle = handle
+
+    def poll(self):
+        try:
+            import ctypes
+            from ctypes import wintypes
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            code = wintypes.DWORD()
+            if not kernel32.GetExitCodeProcess(self._handle, ctypes.byref(code)):
+                return 0
+            STILL_ACTIVE = 259
+            return None if code.value == STILL_ACTIVE else int(code.value)
+        except Exception:
+            return 0
+
+
+def run_unelevated(args, cwd=None):
+    """
+    从管理员进程里以「普通用户身份」启动程序，返回带 poll() 的对象。
+
+    为什么必须有：本软件要提权（防火墙、WinDivert 驱动），但 Edge / Chrome
+    以管理员身份启动时有自我保护——进程起来一两秒就自动退出，界面啥都没显示。
+    表现就是「启动后闪退」，而轨迹里一切正常（窗口那一步之后一秒正常退出）。
+
+    做法：拿当前进程的 LinkedToken（同一个用户的未提权令牌），用
+    CreateProcessWithTokenW 以它启动。失败就退回普通 Popen。
+    """
+    args = [str(a) for a in args]
+    if not IS_WINDOWS:
+        try:
+            return subprocess.Popen(args, cwd=cwd)
+        except Exception:
+            return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+
+        TOKEN_QUERY = 0x0008
+        TOKEN_DUPLICATE = 0x0002
+        TokenLinkedToken = 19
+        LOGON_WITH_PROFILE = 1
+
+        class STARTUPINFOW(ctypes.Structure):
+            _fields_ = [
+                ("cb", wintypes.DWORD), ("lpReserved", wintypes.LPWSTR),
+                ("lpDesktop", wintypes.LPWSTR), ("lpTitle", wintypes.LPWSTR),
+                ("dwX", wintypes.DWORD), ("dwY", wintypes.DWORD),
+                ("dwXSize", wintypes.DWORD), ("dwYSize", wintypes.DWORD),
+                ("dwXCountChars", wintypes.DWORD), ("dwYCountChars", wintypes.DWORD),
+                ("dwFillAttribute", wintypes.DWORD), ("dwFlags", wintypes.DWORD),
+                ("wShowWindow", wintypes.WORD), ("cbReserved2", wintypes.WORD),
+                ("lpReserved2", ctypes.POINTER(wintypes.BYTE)),
+                ("hStdInput", wintypes.HANDLE), ("hStdOutput", wintypes.HANDLE),
+                ("hStdError", wintypes.HANDLE),
+            ]
+
+        class PROCESS_INFORMATION(ctypes.Structure):
+            _fields_ = [
+                ("hProcess", wintypes.HANDLE), ("hThread", wintypes.HANDLE),
+                ("dwProcessId", wintypes.DWORD), ("dwThreadId", wintypes.DWORD),
+            ]
+
+        kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+        advapi32.OpenProcessToken.argtypes = [wintypes.HANDLE, wintypes.DWORD,
+                                              ctypes.POINTER(wintypes.HANDLE)]
+        advapi32.OpenProcessToken.restype = wintypes.BOOL
+        advapi32.GetTokenInformation.argtypes = [
+            wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD,
+            ctypes.POINTER(wintypes.DWORD)]
+        advapi32.GetTokenInformation.restype = wintypes.BOOL
+        advapi32.CreateProcessWithTokenW.argtypes = [
+            wintypes.HANDLE, wintypes.DWORD, wintypes.LPCWSTR, wintypes.LPWSTR,
+            wintypes.DWORD, ctypes.c_void_p, wintypes.LPCWSTR,
+            ctypes.POINTER(STARTUPINFOW), ctypes.POINTER(PROCESS_INFORMATION)]
+        advapi32.CreateProcessWithTokenW.restype = wintypes.BOOL
+
+        h_tok = wintypes.HANDLE()
+        if not advapi32.OpenProcessToken(
+                kernel32.GetCurrentProcess(), TOKEN_QUERY | TOKEN_DUPLICATE,
+                ctypes.byref(h_tok)):
+            raise OSError("OpenProcessToken failed")
+        try:
+            linked = wintypes.HANDLE()
+            n = wintypes.DWORD()
+            if not advapi32.GetTokenInformation(
+                    h_tok, TokenLinkedToken, ctypes.byref(linked),
+                    ctypes.sizeof(linked), ctypes.byref(n)):
+                raise OSError("no linked token")
+        finally:
+            kernel32.CloseHandle(h_tok)
+
+        si = STARTUPINFOW()
+        si.cb = ctypes.sizeof(STARTUPINFOW)
+        pi = PROCESS_INFORMATION()
+        ok = advapi32.CreateProcessWithTokenW(
+            linked, LOGON_WITH_PROFILE, args[0],
+            subprocess.list2cmdline(args), 0, None, cwd,
+            ctypes.byref(si), ctypes.byref(pi))
+        kernel32.CloseHandle(linked)
+        if not ok:
+            raise OSError("CreateProcessWithTokenW failed: %d" % ctypes.get_last_error())
+        kernel32.CloseHandle(pi.hThread)
+        return _WinProc(pi.dwProcessId, pi.hProcess)
+    except Exception:
+        try:
+            return subprocess.Popen(args, cwd=cwd)
+        except Exception:
+            return None
+
+
+# ──────────────────────────────────────────────────────────────
 # IP
 # ──────────────────────────────────────────────────────────────
 # ──────────────────────────────────────────────────────────────
