@@ -725,6 +725,69 @@ async function quitApp() {
     + 'font-family:system-ui">已退出，可以关掉这个窗口。</div>';
 }
 
+/* ── 自动更新 ── */
+function showUpdateBar(msg, btnLabel, btnFn) {
+  $('update-msg').innerHTML = msg;
+  const b = $('update-btn');
+  b.textContent = btnLabel;
+  b.onclick = btnFn;
+  $('updatebar').style.display = 'flex';
+}
+function dismissUpdate() {
+  $('updatebar').style.display = 'none';
+}
+
+async function checkUpdate(force) {
+  try {
+    const r = await api('/api/update/check' + (force ? '?force=1' : ''));
+    if (!r || r.state !== 'available') {
+      if (force) alert('当前已是最新版本 v' + (r && r.current || ''));
+      return;
+    }
+    const ver = esc(r.latest);
+    if (r.platform === 'docker') {
+      showUpdateBar(`发现新版本 v${ver}（当前 v${esc(r.current)}）`,
+        '复制更新命令', () => {
+          const cmd = r.install_hint || 'docker compose pull && docker compose up -d';
+          navigator.clipboard && navigator.clipboard.writeText(cmd);
+          alert('命令已复制，在 NAS 终端里执行：\n\n' + cmd + '\n\n'
+            + '想要全自动更新：compose 里启用 auto-update profile。');
+        });
+    } else {
+      showUpdateBar(`发现新版本 v${ver}（当前 v${esc(r.current)}）`,
+        '立即更新', doUpdate);
+    }
+  } catch (e) { /* 检查失败不打扰 */ }
+}
+
+async function doUpdate() {
+  const b = $('update-btn');
+  b.disabled = true;
+  b.textContent = '准备中…';
+  const r = await api('/api/update/run', {});
+  if (!r || !r.ok) {
+    b.disabled = false;
+    b.textContent = '立即更新';
+    alert((r && r.detail) || '更新没能开始');
+    return;
+  }
+  const timer = setInterval(async () => {
+    const s = await api('/api/update/status');
+    if (!s) return;
+    if (s.state === 'downloading') {
+      b.textContent = `下载中 ${s.percent || 0}%`;
+    } else if (s.state === 'installing') {
+      b.textContent = '正在重启…';
+      $('update-msg').textContent = '正在应用更新，软件会自动重启';
+    } else if (s.state === 'error') {
+      clearInterval(timer);
+      b.disabled = false;
+      b.textContent = '重试';
+      alert('更新失败：' + (s.error || '未知原因'));
+    }
+  }, 800);
+}
+
 /* ── 启动 ── */
 (async function boot() {
   S.env = await api('/api/env');
@@ -744,4 +807,8 @@ async function quitApp() {
 
   tick();
   setInterval(tick, 1500);
+
+  // 自动更新：启动 30 秒后查一次，之后每小时再查（后台也查，界面只在有新版时提示）
+  setTimeout(() => checkUpdate(false), 30000);
+  setInterval(() => checkUpdate(false), 3600 * 1000);
 })();

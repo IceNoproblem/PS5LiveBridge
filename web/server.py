@@ -243,6 +243,49 @@ def create_app(orch, on_exit=None) -> Flask:
     def api_hide():
         return jsonify({"ok": False, "msg": "浏览器模式无法隐藏窗口，直接关掉窗口即可"})
 
+    # ──────────────────────────────────────────────
+    # 更新
+    # ──────────────────────────────────────────────
+    from core import updater as updater_mod
+    _up = updater_mod.get_updater(paths.APP_VERSION)
+
+    @app.get("/api/update/check")
+    def api_update_check():
+        body = request.args
+        force = str(body.get("force", "")).lower() in ("1", "true", "yes")
+        snap = _up.check(force=force)
+        snap["platform"] = paths.PLATFORM
+        snap["install_hint"] = ("docker compose pull && docker compose up -d"
+                                if paths.PLATFORM == "docker" else "")
+        return jsonify(snap)
+
+    @app.get("/api/update/status")
+    def api_update_status():
+        snap = _up.snapshot()
+        snap["platform"] = paths.PLATFORM
+        return jsonify(snap)
+
+    @app.post("/api/update/run")
+    def api_update_run():
+        if paths.PLATFORM == "docker":
+            return jsonify({
+                "ok": False,
+                "detail": "容器版不能自己替换自己。在 NAS 上执行：\n\n"
+                          "docker compose pull && docker compose up -d\n\n"
+                          "想要全自动：compose 里启用 auto-update profile（watchtower），"
+                          "每天凌晨 4 点自动拉新版重启。",
+            })
+        if paths.PLATFORM != "windows":
+            return jsonify({"ok": False, "detail": "当前形态不支持自动安装，请手动更新"})
+
+        def _before_exit():
+            try:
+                orch.shutdown()
+            except Exception:
+                pass
+
+        return jsonify(_up.install(on_before_exit=_before_exit))
+
     @app.errorhandler(Exception)
     def on_error(e):
         logbus.error("接口异常：%s" % e)

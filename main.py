@@ -21,7 +21,17 @@ import threading
 import time
 import traceback
 
-APP_VERSION = "4.5"
+# 版本号真相源在 core/paths.py（发版只改那里）。
+# 崩溃兜底比 core 更早出生，这里延迟解析，core 挂了也不影响写崩溃报告。
+def _app_ver() -> str:
+    v = globals().get("APP_VERSION")
+    if v:
+        return str(v)
+    try:
+        from core import paths as _p
+        return _p.APP_VERSION
+    except Exception:
+        return "unknown"
 
 
 # ──────────────────────────────────────────────────────────────
@@ -84,7 +94,7 @@ def _write_crash(header: str, body: str) -> None:
     text = (
         "\n==== %s ====\n"
         "版本：%s\n系统：%s\n程序目录：%s\n管理员：%s\n\n%s"
-        % (time.strftime("%Y-%m-%d %H:%M:%S"), APP_VERSION,
+        % (time.strftime("%Y-%m-%d %H:%M:%S"), _app_ver(),
            _win_ver(), _BASE, _is_admin_simple(), body)
     )
     for path in (_CRASH_FILE, os.path.join(os.environ.get("TEMP") or _BASE, "ps5livebridge-crash.log")):
@@ -126,6 +136,8 @@ def _install_crash_guard() -> None:
 _install_crash_guard()
 
 from core import logbus, netutil, paths  # noqa: E402  兜底装好后才拉 core
+
+APP_VERSION = paths.APP_VERSION
 
 
 # ──────────────────────────────────────────────────────────────
@@ -391,6 +403,15 @@ def _main() -> int:
     _trace("收流服务: %s" % ("OK" if r["ok"] else r.get("detail", "")[:80]))
     orch.start()
     _trace("编排器已启动（监控/IRC/弹幕）")
+
+    # 自动更新检查（后台扫，不挡启动；安装仍要用户在界面点确认）
+    try:
+        from core import updater as updater_mod
+        updater_mod.get_updater(paths.APP_VERSION).start(
+            enabled=bool(cfg.get("AUTO_UPDATE", True)))
+        _trace("自动更新检查已挂起")
+    except Exception as e:
+        _trace("自动更新模块不可用：%s" % e)
 
     # 「退出」按钮和窗口关闭都通过这个事件让主线程收工
     stop_event = threading.Event()

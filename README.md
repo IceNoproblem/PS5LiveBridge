@@ -186,6 +186,35 @@ docker compose up -d --build
 **容器版做不到的事**：加速器装在电脑上时用不了。那是 Windows 桌面版的
 「直播桥」在 IP 层改写端口实现的，容器动不了宿主机的网络栈。
 
+## 更新
+
+### Windows 桌面版
+
+软件自己会查新版本（启动半小时后第一次，之后每 12 小时一次）。有新版时
+界面顶部出一条提示，点「立即更新」就自动完成：下载 → 备份 → 换文件 → 重启。
+
+- 你的 `config.json`、B 站登录、日志都不会被动
+- 旧版本备份在 `data\backup-v*-*\`，出问题可以手动拷回去
+- 不想要自动检查就在 `config.json` 里把 `AUTO_UPDATE` 改成 `false`
+
+### 容器版
+
+容器不能替换自己，更新走镜像。推荐做法是一次性开自动更新：
+
+```bash
+docker compose --profile auto-update up -d
+```
+
+之后每天凌晨 4 点自动拉新版重启，配置和登录状态在 `./data` 里不受影响。
+不开的话，界面发现新版时会给出命令，手动跑一次即可：
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+镜像由 GitHub Actions 自动构建发布到 `ghcr.io/icenoproblem/ps5livebridge`，
+跟着仓库 `main` 分支更新，打 `v*` 标签时也发一份带版本号的。
+
 ## 打包
 
 ```bat
@@ -234,7 +263,8 @@ PS5LiveBridge\
 │  ├─ ircsrv.py           PS5 弹幕通道
 │  ├─ relay.py            ffmpeg 转发
 │  ├─ services.py         事件循环
-│  ├─ netutil.py          网络探测
+│  ├─ netutil.py          网络探测、降权启动浏览器
+│  ├─ updater.py          自动更新（GitHub Releases）
 │  ├─ paths.py            配置与路径，以及当前平台能做什么
 │  └─ orchestrator.py     状态机
 ├─ web\                   界面
