@@ -24,6 +24,7 @@ import time
 
 APP_NAME = "PS5LiveBridge"
 APP_TITLE = "PS5 直播桥"
+APP_VERSION = "4.6"        # 唯一真相源：发版只改这里，main / 界面 / 更新器都从这读
 
 IS_WINDOWS = sys.platform == "win32"
 
@@ -185,6 +186,7 @@ DEFAULT_CONFIG = {
     # 行为
     "AUTO_START_LIVE": True,        # PS5 一推流就自动开播
     "AUTO_RELAY": True,             # 自动把截到的流转发到 B 站
+    "AUTO_UPDATE": True,            # 启动后定期检查新版本（安装仍需在界面点一下）
     "ENABLE_GIFT": True,
     "ENABLE_SC": True,
     "MAX_LOG_ITEMS": 200,

@@ -1,15 +1,20 @@
 # PS5 直播桥 · 容器版
 #
-#   docker compose up -d --build
-#   然后浏览器打开 http://<这台机器的 IP>:5000
+#   docker compose up -d          # 用镜像（推荐，支持自动更新）
+#   docker compose --profile auto-update up -d   # 连自动更新一起开
+#
+#   界面：http://<这台机器的 IP>:5000
 #
 # 前提：加速器开在路由器上，路由器的 hosts（或 DNS 静态解析）把下面这些域名
 #       指到这台机器。域名清单在第 1 步的界面里，可以直接复制。
 
 services:
   ps5-live-bridge:
-    build: .
-    image: ps5livebridge:latest
+    # 推荐：用 GitHub Actions 构建好的镜像，watchtower 靠它自动更新
+    image: ghcr.io/icenoproblem/ps5livebridge:latest
+    # 本地构建（改代码调试时用）：注释掉上面的 image，打开下面两行
+    # build: .
+    # image: ps5livebridge:latest
     container_name: ps5-live-bridge
     restart: unless-stopped
 
@@ -49,3 +54,17 @@ services:
 
     # 停止时要给 B 站发关播请求，别让容器 3 秒就把进程砍了
     stop_grace_period: 30s
+
+  # ── 自动更新（可选）────────────────────────────────
+  # 开启： docker compose --profile auto-update up -d
+  # 每天凌晨 4 点查一次 ghcr.io 镜像，有新版自动拉取并重启 ps5-live-bridge。
+  # 配置和 B 站凭据在 ./data 里，更新不碰。
+  # 不想全自动就别开这个 profile，界面发现新版时会提示手动更新命令。
+  watchtower:
+    image: containrrr/watchtower
+    container_name: ps5-watchtower
+    profiles: ["auto-update"]
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --schedule "0 0 4 * * *" --cleanup ps5-live-bridge

@@ -371,3 +371,27 @@ table.kvtable input:focus { border-color: #2f5ea8; box-shadow: 0 0 0 3px rgba(76
   .grid4 { grid-template-columns: 1fr 1fr; }
   .checkrow { grid-template-columns: 1fr; gap: 3px; }
 }
+
+/* ── 更新提示条 ── */
+.updatebar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  background: #2b2410;
+  border-bottom: 1px solid #5c4a1a;
+  color: #ffd479;
+  font-size: 13px;
+}
+.updatebar .update-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #c9971c;
+  color: #14100a;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.updatebar .spacer { flex: 1; }
