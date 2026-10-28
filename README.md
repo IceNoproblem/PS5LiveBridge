@@ -174,4 +174,4 @@ MIT。
 
 ---
 
-最早是看 **PSLinkB** 才想明白这套链路怎么走的 —— 它用 Rust 写，DNS 重定向 + ffmpeg 转推的思路很清楚，OpenWrt 那条形态也挺巧。有兴趣可以去看看。
+鸣谢**PSLinkB** 
