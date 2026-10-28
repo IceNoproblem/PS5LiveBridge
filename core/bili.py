@@ -412,6 +412,7 @@ class Bilibili(object):
         vdata = ver.get("data") or {}
 
         # 3) 开播——双通道：先 Electron（不触发人脸概率高），不行再直播姬
+        # 关键：60024/60043（人脸）不换通道，直接返回等验证；只有其他错误才降级
         for channel in ("electron", "livehime"):
             if channel == "electron":
                 payload = {
@@ -444,11 +445,13 @@ class Bilibili(object):
             if code == 0:
                 logbus.info("开播成功（通道：%s）" % channel, tag="B站")
                 break
-            # 人脸验证 → 换下一个通道试试
-            if code in (60024, 60043) and channel == "electron":
-                logbus.info("Electron 通道触发人脸，换直播姬通道重试…", tag="B站")
+            # 人脸验证 → 直接返回，不换通道（换通道没用，验证是账号级的）
+            if code in (60024, 60043):
+                break
+            # 其他错误 → 换通道降级
+            if channel == "electron":
+                logbus.info("Electron 通道失败（%s），降级直播姬…" % code, tag="B站")
                 continue
-            # 其他错误或两个通道都要人脸 → 报告
             break
 
         if code != 0:
