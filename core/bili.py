@@ -415,8 +415,16 @@ class Bilibili(object):
         if code != 0:
             msg = START_LIVE_ERRORS.get(code) or d.get("message") or d.get("msg") or "开播失败"
             logbus.error("B 站开播失败（%s）：%s" % (code, msg), tag="B站")
-            return {"ok": False, "code": code, "msg": msg,
-                    "face_url": ((d.get("data") or {}).get("qr") or "") if code in (60024, 60043) else ""}
+            face_url = ""
+            if code == 60024:
+                # 60024：B 站返回二维码地址
+                face_url = ((d.get("data") or {}).get("qr") or "")
+            elif code == 60043:
+                # 60043：自己拼人脸验证页面 URL（uid 用登录态里的）
+                uid = self.uid or ""
+                face_url = ("https://www.bilibili.com/blackboard/live/face-auth-middle.html"
+                            "?source_event=live&source=live&uid=%s" % uid)
+            return {"ok": False, "code": code, "msg": msg, "face_url": face_url}
 
         data = d.get("data") or {}
         rtmp = data.get("rtmp") or {}
@@ -458,6 +466,31 @@ class Bilibili(object):
             logbus.info("B 站已关播", tag="B站")
             return {"ok": True}
         return _err(d.get("code", -1), d.get("message") or d.get("msg") or "关播失败")
+
+    def check_face_status(self) -> str:
+        """
+        查询人脸验证状态。
+        返回 "verified" / "pending" / "error:xxx"
+        用 IsUserIdentityAuth 接口，带 face_auth_code=60024。
+        """
+        if not self.logged_in or not self.room_id:
+            return "error:未登录"
+        d = self._app_request(
+            "POST",
+            "https://api.live.bilibili.com/xlive/app-blink/v1/preLive/IsUserIdentityAuth",
+            data=self._appsign({
+                "room_id": self.room_id,
+                "face_auth_code": "60024",
+                "csrf_token": self.csrf,
+                "csrf": self.csrf,
+                "visit_id": "",
+            }))
+        if d.get("code") != 0:
+            return "error:%s" % (d.get("message") or d.get("msg") or "查询失败")
+        data = d.get("data") or {}
+        if data.get("is_identified") is True:
+            return "verified"
+        return "pending"
 
     def live_status(self) -> int:
         """
