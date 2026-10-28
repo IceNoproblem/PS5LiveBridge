@@ -49,6 +49,11 @@ APP_HEADERS = {
 APP_KEY = "aae92bc66f3edfab"
 APP_SEC = "af125a0d5279fd576c1b4418a3e8276d"
 
+# Electron 桌面端通道（web_electron_link）——不触发人脸验证的概率更高
+ELECTRON_KEY = "aa1e74ee4874176e"
+ELECTRON_SEC = "54e6a9a31b911cd5fc0daa66ebf94bc4"
+ELECTRON_BUILD = "1001017006"
+
 # 凭据落在可写目录：桌面版是 exe 同级，容器里是挂进来的 /data（重启不丢登录）
 CRED_FILE = os.path.join(paths.DATA_DIR, "bili_credential.json")
 
@@ -200,6 +205,15 @@ class Bilibili(object):
         params = dict(sorted(params.items()))
         query = urllib.parse.urlencode(params)
         params["sign"] = hashlib.md5((query + APP_SEC).encode()).hexdigest()
+        return params
+
+    def _electronsign(self, params: dict) -> dict:
+        """Electron 桌面端签名（不同 appkey/secret）。"""
+        params = dict(params)
+        params["appkey"] = ELECTRON_KEY
+        params = dict(sorted(params.items()))
+        query = urllib.parse.urlencode(params)
+        params["sign"] = hashlib.md5((query + ELECTRON_SEC).encode()).hexdigest()
         return params
 
     # ──────────────────────────────────────────────
@@ -397,30 +411,53 @@ class Bilibili(object):
             return _err(ver.get("code", -1), "取直播姬版本失败：%s" % ver.get("msg"))
         vdata = ver.get("data") or {}
 
-        # 3) 开播（走直播姬客户端通道，不走网页通道，绕开人脸验证）
-        payload = {
-            "room_id": self.room_id,
-            "platform": "pc_link",
-            "area_v2": area_id or "236",
-            "backup_stream": "0",
-            "csrf_token": self.csrf,
-            "csrf": self.csrf,
-            "build": vdata.get("build", 0),
-            "version": vdata.get("curr_version", ""),
-            "ts": ts,
-        }
-        d = self._app_request("POST", "https://api.live.bilibili.com/room/v1/Room/startLive",
-                              data=self._appsign(payload))
-        code = d.get("code", -1)
+        # 3) 开播——双通道：先 Electron（不触发人脸概率高），不行再直播姬
+        for channel in ("electron", "livehime"):
+            if channel == "electron":
+                payload = {
+                    "room_id": self.room_id,
+                    "platform": "web_electron_link",
+                    "area_v2": area_id or "236",
+                    "csrf": self.csrf,
+                    "csrf_token": self.csrf,
+                    "build": ELECTRON_BUILD,
+                    "ts": ts,
+                }
+                d = self._app_request("POST", "https://api.live.bilibili.com/room/v1/Room/startLive",
+                                      data=self._electronsign(payload))
+            else:
+                payload = {
+                    "room_id": self.room_id,
+                    "platform": "pc_link",
+                    "area_v2": area_id or "236",
+                    "backup_stream": "0",
+                    "csrf_token": self.csrf,
+                    "csrf": self.csrf,
+                    "build": vdata.get("build", 0),
+                    "version": vdata.get("curr_version", ""),
+                    "ts": ts,
+                }
+                d = self._app_request("POST", "https://api.live.bilibili.com/room/v1/Room/startLive",
+                                      data=self._appsign(payload))
+
+            code = d.get("code", -1)
+            if code == 0:
+                logbus.info("开播成功（通道：%s）" % channel, tag="B站")
+                break
+            # 人脸验证 → 换下一个通道试试
+            if code in (60024, 60043) and channel == "electron":
+                logbus.info("Electron 通道触发人脸，换直播姬通道重试…", tag="B站")
+                continue
+            # 其他错误或两个通道都要人脸 → 报告
+            break
+
         if code != 0:
             msg = START_LIVE_ERRORS.get(code) or d.get("message") or d.get("msg") or "开播失败"
             logbus.error("B 站开播失败（%s）：%s" % (code, msg), tag="B站")
             face_url = ""
             if code == 60024:
-                # 60024：B 站返回二维码地址
                 face_url = ((d.get("data") or {}).get("qr") or "")
             elif code == 60043:
-                # 60043：自己拼人脸验证页面 URL（uid 用登录态里的）
                 uid = self.uid or ""
                 face_url = ("https://www.bilibili.com/blackboard/live/face-auth-middle.html"
                             "?source_event=live&source=live&uid=%s" % uid)
