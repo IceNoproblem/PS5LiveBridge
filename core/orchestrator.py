@@ -693,13 +693,14 @@ class Orchestrator(object):
     def _on_ps5_unpublish(self) -> None:
         state = self.live["state"]
         logbus.warn("PS5 停止推流了", tag="推流")
-        if state in ("relaying", "live", "starting"):
+        if state in ("relaying", "live", "starting", "face_verify"):
             self.stop_live(reason="PS5 停止推流")
         with self.lock:
             self.live["state"] = "idle"
             self.live["ps5"] = {}
             self.live["local"] = {}
             self.live["since"] = 0.0
+            self.live["face_url"] = ""
 
     def _start_bili_and_relay(self, app: str, name: str) -> None:
         area = str(self.cfg.get("BILIBILI_AREA_ID", "236"))
@@ -711,10 +712,8 @@ class Orchestrator(object):
             code = r.get("code")
             if code in (60024, 60043):
                 url = r.get("face_url") or ""
-                self._fail_live("B 站要求人脸验证。请在手机 B 站 App 完成认证后重试。"
-                                + ("\n验证链接：%s" % url if url else ""))
-                if url:
-                    logbus.warn("人脸验证链接：%s" % url, tag="B站")
+                self._enter_face_verify(url)
+                return
             elif code == -101:
                 self._fail_live("B 站登录已失效，请重新扫码登录（第 4 步）。")
             else:
@@ -820,6 +819,94 @@ class Orchestrator(object):
             # 留着的话界面会在没直播的时候一直跳秒。
             self.live["since"] = 0.0
         self.services.notify_ps5("开播失败，详见电脑上的提示")
+
+    def _enter_face_verify(self, face_url: str = "") -> None:
+        """
+        B 站要求人脸验证（60024/60043）。
+
+        不直接 _fail_live，而是进「等待验证」状态 + 后台自动重试：
+        用户在手机上完成人脸后，下次重试就能拿到推流地址。
+        face_url 是一次性 QR，过期了重试会拿到新的。
+        """
+        logbus.warn("B 站要求人脸验证，等待完成后自动重试", tag="B站")
+        with self.lock:
+            self.live["state"] = "face_verify"
+            self.live["error"] = ""
+            self.live["face_url"] = face_url
+            self.live["since"] = 0.0
+        self.services.notify_ps5("B 站要求人脸验证，请在手机上完成")
+        # 后台重试线程
+        if not getattr(self, "_face_retry_thread", None) or not self._face_retry_thread.is_alive():
+            self._face_retry_thread = threading.Thread(
+                target=self._face_verify_retry_loop, daemon=True, name="face-verify-retry")
+            self._face_retry_thread.start()
+
+    def _face_verify_retry_loop(self) -> None:
+        """
+        人脸验证自动重试：每 30 秒调一次 start_live。
+        成功 → 接管推流；仍要验证 → 刷新 face_url；其他错 → 转 error。
+        """
+        max_attempts = 20   # 10 分钟
+        for attempt in range(max_attempts):
+            time.sleep(30)
+            # PS5 停推了就不用再试
+            if self.live.get("state") != "face_verify":
+                return
+            if not self.bili.logged_in:
+                self._fail_live("登录已失效，请重新扫码（第 4 步）。")
+                return
+
+            area = str(self.cfg.get("BILIBILI_AREA_ID", "236"))
+            title = self.cfg.get("BILIBILI_TITLE", "")
+            logbus.info("人脸验证重试（第 %d 次）…" % (attempt + 1), tag="B站")
+            r = self.bili.start_live(area_id=area, title=title)
+            if r.get("ok"):
+                logbus.ok("人脸验证通过，B 站已开播", tag="B站")
+                # 复用 _start_bili_and_relay 的后半段
+                threading.Thread(target=self._relay_after_start, args=(r,),
+                                 daemon=True).start()
+                return
+            code = r.get("code")
+            if code in (60024, 60043):
+                url = r.get("face_url") or ""
+                with self.lock:
+                    self.live["face_url"] = url
+                continue   # 继续等
+            # 其他错误
+            self._fail_live("B 站开播失败：%s（%s）" % (r.get("msg"), code))
+            return
+        # 超时
+        self._fail_live("人脸验证等待超时（10 分钟）。请在手机上完成验证后点「手动开播」。")
+
+    def _relay_after_start(self, r: dict) -> None:
+        """start_live 成功后的转发启动（从 _start_bili_and_relay 后半段拆出来复用）。"""
+        addr = r["rtmp_addr"]
+        code = r["rtmp_code"]
+        with self.lock:
+            self.live["bili"] = {
+                "addr": addr, "code_tail": code[-6:] if code else "",
+                "room_id": r.get("room_id", self.bili.room_id),
+            }
+            self.live["state"] = "relaying"
+            self.live["error"] = ""
+
+        if not self.cfg.get("AUTO_RELAY", True):
+            logbus.info("自动转发已关闭。B 站推流地址已获取。", tag="转发")
+            return
+
+        pub = self.live.get("ps5") or {}
+        app = pub.get("app", "app")
+        name = pub.get("name", "")
+        in_url = "rtmp://127.0.0.1:%d/%s/%s" % (int(self.cfg.get("RTMP_PORT", 1935)), app, name)
+        out_url = addr.rstrip("/") + "/" + code.lstrip("/")
+        self._protect_relay_target(out_url, addr)
+
+        if self.relay.start(in_url, out_url):
+            self.relay.start_watchdog(on_drop=lambda reason: self._fail_live(
+                "转发中断：%s" % reason))
+            self.services.notify_ps5("B 站已开播，画面正在同步")
+        else:
+            self._fail_live(self.relay.last_error or "转发启动失败")
 
     def start_live_manual(self) -> dict:
         """手动开播（自动模式失败或用户关掉自动时用）。"""
@@ -978,6 +1065,7 @@ class Orchestrator(object):
                 "since": live.get("since", 0),
                 "bili": live.get("bili", {}),
                 "ps5": live.get("ps5", {}),
+                "face_url": live.get("face_url", ""),
                 "output_mode": self.output_mode(),
                 "local_url": self.local_play_url(),
                 # 只有真的在播才算时长；idle / error 状态给 0，

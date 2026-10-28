@@ -33,6 +33,18 @@ BASE_HEADERS = {
     "origin": "https://live.bilibili.com",
 }
 
+# 直播姬客户端 headers —— startLive / stopLive 必须用这套，
+# 混进 web headers（referer/origin/Chrome UA）会被当网页请求触发人脸验证。
+APP_HEADERS = {
+    "accept": "application/json, text/plain, */*",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                  "AppleWebKit/537.36 (KHTML, like Gecko) "
+                  "bili-live/4.0.0 Chrome/108.0.0.0 Safari/537.36",
+    "content-type": "application/x-www-form-urlencoded",
+    "x-requested-with": "tv.danmaku.bili",
+    "env": "prod",
+}
+
 # 直播姬 appkey / appsec（公开值，所有第三方开播工具都用这一对）
 APP_KEY = "aae92bc66f3edfab"
 APP_SEC = "af125a0d5279fd576c1b4418a3e8276d"
@@ -155,6 +167,25 @@ class Bilibili(object):
             else:
                 r = self.session.post(url, params=params, data=data,
                                       cookies=self.cookies, timeout=timeout)
+            try:
+                return r.json()
+            except ValueError:
+                return {"code": -1, "msg": "返回非 JSON：%s" % r.text[:120]}
+        except Exception as e:
+            return {"code": -1, "msg": "网络错误：%s" % str(e)[:120]}
+
+    def _app_request(self, method, url, params=None, data=None, timeout=12) -> dict:
+        """直播姬客户端通道请求：用 APP_HEADERS，不带 web referer/origin。"""
+        headers = dict(APP_HEADERS)
+        try:
+            if method.upper() == "GET":
+                r = requests.get(url, params=params, data=data,
+                                 cookies=self.cookies, headers=headers,
+                                 timeout=timeout)
+            else:
+                r = requests.post(url, params=params, data=data,
+                                  cookies=self.cookies, headers=headers,
+                                  timeout=timeout)
             try:
                 return r.json()
             except ValueError:
@@ -358,7 +389,7 @@ class Bilibili(object):
         ts = (now.get("data") or {}).get("now") or int(time.time())
 
         # 2) 取直播姬版本号（不带这个会被判客户端过期）
-        ver = self._request(
+        ver = self._app_request(
             "GET",
             "https://api.live.bilibili.com/xlive/app-blink/v1/liveVersionInfo/getHomePageLiveVersion",
             params=self._appsign({"system_version": 2, "ts": ts}))
@@ -366,7 +397,7 @@ class Bilibili(object):
             return _err(ver.get("code", -1), "取直播姬版本失败：%s" % ver.get("msg"))
         vdata = ver.get("data") or {}
 
-        # 3) 开播
+        # 3) 开播（走直播姬客户端通道，不走网页通道，绕开人脸验证）
         payload = {
             "room_id": self.room_id,
             "platform": "pc_link",
@@ -378,8 +409,8 @@ class Bilibili(object):
             "version": vdata.get("curr_version", ""),
             "ts": ts,
         }
-        d = self._request("POST", "https://api.live.bilibili.com/room/v1/Room/startLive",
-                          data=self._appsign(payload))
+        d = self._app_request("POST", "https://api.live.bilibili.com/room/v1/Room/startLive",
+                              data=self._appsign(payload))
         code = d.get("code", -1)
         if code != 0:
             msg = START_LIVE_ERRORS.get(code) or d.get("message") or d.get("msg") or "开播失败"
@@ -420,9 +451,9 @@ class Bilibili(object):
     def stop_live(self) -> dict:
         if not self.logged_in or not self.room_id:
             return _err(-101)
-        d = self._request("POST", "https://api.live.bilibili.com/room/v1/Room/stopLive",
-                          data={"room_id": self.room_id, "platform": "pc_link",
-                                "csrf_token": self.csrf, "csrf": self.csrf})
+        d = self._app_request("POST", "https://api.live.bilibili.com/room/v1/Room/stopLive",
+                              data=self._appsign({"room_id": self.room_id, "platform": "pc_link",
+                                                  "csrf_token": self.csrf, "csrf": self.csrf}))
         if d.get("code") == 0:
             logbus.info("B 站已关播", tag="B站")
             return {"ok": True}
