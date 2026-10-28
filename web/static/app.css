@@ -73,10 +73,8 @@ a:hover { text-decoration: underline; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; letter-spacing: .2px; }
 
 .brand-mark {
-  width: 32px; height: 32px; border-radius: 10px;
-  background: var(--accent-grad);
-  display: grid; place-items: center;
-  font-size: 13px; font-weight: 700; color: #fff;
+  width: 32px; height: 32px; border-radius: 9px;
+  display: block; object-fit: cover; flex: none;
   box-shadow: 0 4px 16px -4px rgba(74, 125, 255, .5);
 }
 
