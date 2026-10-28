@@ -1,7 +1,4 @@
 #!/bin/bash
-# deploy_nas.sh —— PS5LiveBridge NAS 部署脚本
-# 用法: bash scripts/deploy_nas.sh [NAS_IP] [NAS_USER]
-# 依赖: expect (macOS 自带)
 
 set -e
 
@@ -15,7 +12,6 @@ echo "=== PS5LiveBridge NAS 部署 ==="
 echo "本地: $LOCAL_BASE"
 echo "远程: $NAS_USER@$NAS_IP:$REMOTE_BASE"
 
-# 1. 打包（排除不需要的文件）
 echo ""
 echo "[1/4] 打包..."
 cd "$LOCAL_BASE"
@@ -40,7 +36,6 @@ tar czf /tmp/ps5lb_deploy.tar.gz \
     .
 echo "打包完成: $(ls -lh /tmp/ps5lb_deploy.tar.gz | awk '{print $5}')"
 
-# 2. 传到 NAS
 echo ""
 echo "[2/4] 上传..."
 expect << EXPECT_EOF
@@ -53,7 +48,6 @@ expect {
 expect eof
 EXPECT_EOF
 
-# 3. 解压并重建
 echo ""
 echo "[3/4] 解压 + 重建镜像..."
 expect << EXPECT_EOF
@@ -66,7 +60,6 @@ expect {
 expect eof
 EXPECT_EOF
 
-# 4. 验证
 echo ""
 echo "[4/4] 验证..."
 expect << EXPECT_EOF

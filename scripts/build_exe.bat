@@ -1,9 +1,4 @@
 @echo off
-REM ============================================================
-REM  PS5 LiveBridge - build Windows distribution
-REM  Output: dist\PS5LiveBridge\PS5LiveBridge.exe
-REM  Keep this file ASCII-only: cmd.exe garbles UTF-8 in .bat
-REM ============================================================
 setlocal
 chcp 65001 >nul
 cd /d "%~dp0.."
@@ -56,12 +51,6 @@ if exist tools\ffmpeg.exe (
   echo     otherwise the relay from PS5 to Bilibili will not start.
 )
 
-REM Output names must stay ASCII - no Chinese filenames anywhere in this file,
-REM not even in comments. cmd.exe garbles multi-byte text and then parses the
-REM rest of the line as commands; that silently kills the tail of this script.
-REM (Symptoms seen: "'dge' is not recognized", "|| was unexpected at this time".)
-REM If a Chinese README/launcher name is wanted, rename it afterwards with
-REM PowerShell - this file itself only deals in ASCII names.
 copy /y README.md "dist\PS5LiveBridge\README.md" >nul 2>nul
 copy /y LICENSE "dist\PS5LiveBridge\LICENSE.txt" >nul 2>nul
 if exist config.example.json copy /y config.example.json "dist\PS5LiveBridge\" >nul
@@ -73,9 +62,6 @@ if not exist "dist\PS5LiveBridge\_internal\base_library.zip" goto :fail
 if not exist "dist\PS5LiveBridge\PS5LiveBridge.exe" goto :fail
 echo     bundle layout OK
 
-REM Smoke test: run the exe headless once. --noconsole programs are GUI
-REM subsystem, so plain invocation returns immediately - use start /wait.
-REM PS5LB_NO_POPUP keeps the error dialog away during automated builds.
 set PS5LB_NO_POPUP=1
 start /wait "" "dist\PS5LiveBridge\PS5LiveBridge.exe" --version
 if errorlevel 1 goto :fail

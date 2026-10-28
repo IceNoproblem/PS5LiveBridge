@@ -1,6 +1,3 @@
-# 构建并发布 Docker 镜像到 GitHub Container Registry
-# push main / 打 v* 标签 / 手动触发都会构建。
-# 容器版的自动更新（watchtower）就是拉这个镜像，所以这个 workflow 是自动更新的前提。
 name: Docker 镜像
 
 on:

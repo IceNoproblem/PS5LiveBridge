@@ -1,8 +1,4 @@
 #!/bin/bash
-# ============================================================
-#  PS5 LiveBridge - build macOS distribution
-#  Output: dist/PS5LiveBridge.app
-# ============================================================
 set -e
 cd "$(dirname "$0")/.."
 
@@ -64,7 +60,6 @@ if [ ! -f "dist/PS5LiveBridge.app/Contents/MacOS/PS5LiveBridge" ]; then
 fi
 echo "    bundle layout OK"
 
-# Smoke test
 PS5LB_NO_POPUP=1 "dist/PS5LiveBridge.app/Contents/MacOS/PS5LiveBridge" --version 2>/dev/null && echo "    binary starts OK" || echo "    WARNING: smoke test failed (may need --no-browser)"
 
 echo ""
