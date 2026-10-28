@@ -155,11 +155,13 @@ async function tick() {
   const stateMap = {
     idle: '未开始', waiting: '等 PS5', starting: '正在开播',
     relaying: '转发中', live: '直播中', local: '本地取流', error: '出错',
+    face_verify: '人脸验证',
   };
   if ($('m-ps5')) {
     $('m-ps5').textContent = ps5.publishing ? '已收到' : '等待';
     $('m-bili').textContent = live.state === 'live' ? '直播中'
-      : (live.state === 'relaying' ? '已开播' : (live.state === 'error' ? '失败' : '—'));
+      : (live.state === 'relaying' ? '已开播' : (live.state === 'error' ? '失败'
+      : (live.state === 'face_verify' ? '待验证' : '—')));
     $('m-relay').textContent = relay.running ? '转发中' : '未转发';
     $('m-quality').innerHTML = ps5.publishing
       ? `${ps5.width || 0}×${ps5.height || 0}<br><small>${ps5.bw_in || 0} kbps</small>`
@@ -172,13 +174,20 @@ async function tick() {
     $('m-room').textContent = (st.bili && st.bili.room_id) ? st.bili.room_id : '—';
     $('s6-badge').textContent = stateMap[live.state] || live.state;
     $('s6-badge').className = 'badge ' + (live.state === 'live' ? 'ok'
-      : live.state === 'error' ? 'err' : '');
+      : live.state === 'error' ? 'err' : (live.state === 'face_verify' ? 'warn' : ''));
     $('s5-badge').textContent = stateMap[live.state] || '等 PS5';
     $('s5-badge').className = 'badge ' + (live.state === 'live' ? 'ok'
       : live.state === 'error' ? 'err' : 'warn');
 
     if (live.error) {
       $('s5-msg').innerHTML = `<div class="note err">出错：${esc(live.error)}</div>`;
+    } else if (live.state === 'face_verify') {
+      const fu = live.face_url || '';
+      $('s5-msg').innerHTML = `<div class="note warn">
+        <b>B 站要求人脸验证。</b>请在手机 B 站 App 里完成认证，软件会每 30 秒自动重试。
+        ${fu ? `<br>验证链接：<a href="${esc(fu)}" target="_blank">${esc(fu.slice(0, 50))}…</a>` : ''}
+        <br>完成验证后等一会儿就能自动开播，也可以
+        <a href="#" onclick="manualStart();return false">点这里手动重试</a>。</div>`;
     } else if (live.state === 'live') {
       $('s5-msg').innerHTML = `<div class="note ok">B 站直播间已在播 PS5 画面。手机发条弹幕，会显示在 PS5 画面上。</div>`;
     } else if (live.state === 'relaying') {
