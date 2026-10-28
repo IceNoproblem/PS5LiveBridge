@@ -1,6 +1,11 @@
 # PS5 直播桥
 
-[![bilibili](https://img.shields.io/badge/Bilibili-主页-00A1D6?logo=bilibili&logoColor=white)](https://space.bilibili.com/2250922)
+<p align="center"><img src="assets/icon.png" width="104" alt="PS5 直播桥"></p>
+
+<p align="center">
+  <a href="https://space.bilibili.com/2250922"><img src="https://img.shields.io/badge/Bilibili-主页-00A1D6?logo=bilibili&logoColor=white" alt="Bilibili"></a>
+  <img src="https://img.shields.io/badge/QQ群-1092104797-12B7F5?logo=tencentqq&logoColor=white" alt="QQ 群 1092104797">
+</p>
 
 把 PS5 的原生直播画面转到 B 站，并把 B 站弹幕送回 PS5 画面。
 不破解、不装采集卡，全部在网络层完成。
