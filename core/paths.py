@@ -24,7 +24,7 @@ import time
 
 APP_NAME = "PS5LiveBridge"
 APP_TITLE = "PS5 直播桥"
-APP_VERSION = "4.6"        # 唯一真相源：发版只改这里，main / 界面 / 更新器都从这读
+APP_VERSION = "4.7"        # 唯一真相源：发版只改这里，main / 界面 / 更新器都从这读
 
 IS_WINDOWS = sys.platform == "win32"
 
