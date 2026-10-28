@@ -21,8 +21,8 @@ import time
 from collections import deque
 
 from . import bili as bilimod
-from . import (divert, dnscheck, dnsserver, logbus, netutil, nginxmgr, paths,
-               relay, routercfg, services)
+from . import (divert, dnscheck, dnsserver, logbus, netutil, paths,
+               relay, routercfg, rtmpserver, services)
 
 
 class Orchestrator(object):
@@ -36,9 +36,8 @@ class Orchestrator(object):
             on_ps5_join=self._on_ps5_join,
             on_ps5_drop=self._on_ps5_drop,
         )
-        self.nginx = nginxmgr.NginxManager(
+        self.nginx = rtmpserver.RtmpServer(
             rtmp_port=int(self.cfg.get("RTMP_PORT", 1935)),
-            stat_port=int(self.cfg.get("STAT_PORT", 8080)),
         )
         self.relay = relay.Relay()
         self.dns = None
@@ -318,9 +317,12 @@ class Orchestrator(object):
 
     def enable_divert(self) -> dict:
         if not paths.caps()["divert"]:
-            detail = ("容器里没有端口劫持。这个能力要改本机的网络栈，只能在 Windows 上跑。"
-                      "容器版靠路由器把推流域名或端口转到这台机器，"
-                      "加速器要开在路由器上，PS5 保持自动。")
+            if paths.PLATFORM == "docker":
+                detail = ("容器里没有端口劫持。这个能力要改本机的网络栈，只能在 Windows/macOS 上跑。"
+                          "容器版靠路由器把推流域名或端口转到这台机器，"
+                          "加速器要开在路由器上，PS5 保持自动。")
+            else:
+                detail = "当前平台不支持端口劫持。"
             self.hijack_error = detail
             logbus.error(detail, tag="劫持")
             return {"ok": False, "detail": detail, "unavailable": True}
@@ -329,7 +331,10 @@ class Orchestrator(object):
             return {"ok": True, "detail": "端口劫持已在运行", **self.divert.snapshot()}
 
         if not netutil.is_admin():
-            detail = "没有管理员权限，直播桥开不了。右键程序 → 以管理员身份运行。"
+            if paths.IS_MACOS:
+                detail = "没有管理员权限，直播桥开不了。请在终端用 sudo 启动：sudo /path/to/PS5LiveBridge"
+            else:
+                detail = "没有管理员权限，直播桥开不了。右键程序 → 以管理员身份运行。"
             self.hijack_error = detail
             logbus.error(detail, tag="劫持")
             return {"ok": False, "detail": detail}
@@ -843,26 +848,35 @@ class Orchestrator(object):
 
     def _face_verify_retry_loop(self) -> None:
         """
-        人脸验证自动重试：每 30 秒调一次 start_live。
-        成功 → 接管推流；仍要验证 → 刷新 face_url；其他错 → 转 error。
+        人脸验证自动重试。
+        先用 check_face_status 查验证状态，通过就立即开播；
+        还没通过就继续等。比盲试 start_live 更快更准。
         """
-        max_attempts = 20   # 10 分钟
+        max_attempts = 40   # 10 分钟（每 15 秒查一次）
         for attempt in range(max_attempts):
-            time.sleep(30)
-            # PS5 停推了就不用再试
+            time.sleep(15)
             if self.live.get("state") != "face_verify":
                 return
             if not self.bili.logged_in:
                 self._fail_live("登录已失效，请重新扫码（第 4 步）。")
                 return
 
+            # 先查人脸验证状态
+            status = self.bili.check_face_status()
+            if status.startswith("error"):
+                logbus.warn("查询人脸状态失败：%s" % status, tag="B站")
+            elif status == "verified":
+                logbus.ok("人脸验证已完成，正在开播…", tag="B站")
+            else:
+                logbus.info("人脸验证中…（第 %d 次检查）" % (attempt + 1), tag="B站")
+                continue   # 还没通过，继续等
+
+            # 验证通过（或查询失败但重试）→ 尝试开播
             area = str(self.cfg.get("BILIBILI_AREA_ID", "236"))
             title = self.cfg.get("BILIBILI_TITLE", "")
-            logbus.info("人脸验证重试（第 %d 次）…" % (attempt + 1), tag="B站")
             r = self.bili.start_live(area_id=area, title=title)
             if r.get("ok"):
                 logbus.ok("人脸验证通过，B 站已开播", tag="B站")
-                # 复用 _start_bili_and_relay 的后半段
                 threading.Thread(target=self._relay_after_start, args=(r,),
                                  daemon=True).start()
                 return
@@ -872,10 +886,8 @@ class Orchestrator(object):
                 with self.lock:
                     self.live["face_url"] = url
                 continue   # 继续等
-            # 其他错误
             self._fail_live("B 站开播失败：%s（%s）" % (r.get("msg"), code))
             return
-        # 超时
         self._fail_live("人脸验证等待超时（10 分钟）。请在手机上完成验证后点「手动开播」。")
 
     def _relay_after_start(self, r: dict) -> None:
