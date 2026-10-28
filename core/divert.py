@@ -1,56 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-core/divert.py —— 端口级劫持（WinDivert）
-
-为什么必须有这个模块（这是本项目最关键的一次架构修正）
-====================================================
-最初的设计是 DNS 劫持：让 PS5 把 DNS 指向本机，把推流域名解析到本机 IP。
-
-这条路在「PS5 需要走游戏加速器」的真实场景下是**结构性失败**的，
-不是配置写错了，而是在真机上实测出来的两条互相矛盾的结论：
-
-    1. A 记录答「加速器虚拟网卡 IP」→ 加速器认为这是它自己的流量，直接代推到
-       真 Twitch。实测抓到铁证：
-           192.168.110.117:57206 -> 35.55.5.15:1935  by uu.exe
-       PS5 的流就这样绕过本机，跑到 Twitch 上去了。
-
-    2. A 记录答「本机局域网 IP」→ PS5 在加速器网段里（172.22.x.x/16），
-       192.168.110.x 不在同网段，包交给网关（加速器隧道），同样进不了本机。
-
-两条都不通。而且实测还发现：把 PS5 的 DNS 指向本机后，**PS5 根本不来查**
-（在加速器场景下 DNS 由加速器接管），`ps5_seen` 一直是 False。
-
-所以正确做法是不碰 DNS，直接在 IP 层改写端口：
-    把「发往任意远端 IP:1935 的新连接」改写到本机，让 nginx 收到推流。
-    PS5 的网络参数完全按加速器给的填，DNS 照走加速器，零冲突。
-
-关键技术细节（都是真机踩出来的，改动前请先读）
-============================================
-A. **不能过滤 `ip.DstAddr != 本机IP`**
-   去程看这条很合理，但回程包的目的地址恰恰就是本机 IP（因为代理推流的
-   uu.exe 就在本机），加了这条等于把回程包全部丢掉，表现为「SYN 改写了，
-   但永远收不到 SYN-ACK，客户端一直超时」。
-   实测组合矩阵：LAN+out+out / LAN+in+in / LAN+in+out 通过，
-   只要 filter 排除了本机目的地址就全部失败。
-
-B. **改写目标用本机局域网 IP，不要用 127.0.0.1**
-   改成 127.0.0.1 后包会被当成 martian 丢弃，矩阵里 LO 两种组合全挂。
-
-C. **只认 SYN，不碰既有连接**
-   中途打开劫持时，无差别改写会把正在跑的推流连接撕成两半：
-   去程进本机、回程还是真 Twitch 发的，Twitch 侧留下半开会话，
-   下次开播就报「有其他设备正在向该频道直播」。
-   只劫新开的连接，开关劫持随便按都不影响正在进行的推流。
-
-D. **连接表键要带目的端口**
-   只用源端口做键时，同一源端口先后连 1935 和 6667 会互相覆盖，
-   回程包被还原成错误的源地址，连接当场断掉。
-
-E. **pydivert 4.x 的 API 与 2.x 不同**
-   没有 `settimeout()`，超时通过 `recv(timeout=float)` 传；
-   `send()` 默认就会重算校验和（`recalculate_checksum=True`）。
-   照 2.x 的写法会报 `'WinDivert' object has no attribute 'settimeout'`。
-"""
 from __future__ import annotations
 
 import threading
@@ -58,10 +5,9 @@ import time
 
 try:
     import pydivert
-except Exception:                                    # pragma: no cover
+except Exception:
     pydivert = None
 
-# pydivert 4.x 用枚举，2.x 用整数；这里统一取值，两个版本都能跑
 try:
     _LAYER_NETWORK = pydivert.Layer.NETWORK
 except Exception:
@@ -98,19 +44,12 @@ class PortInterceptor(object):
         self._stop = threading.Event()
         self._thread = None
         self._lock = threading.Lock()
-        self._learned = {}          # (src_ip, src_port, dst_port) -> (原始目的IP, 最近活动)
-        # 白名单：这些目的 IP 的端口不劫持。
-        # 必须放进去的头号对象是「B 站推流服务器」—— 它也用 1935，
-        # 不排除就会把 ffmpeg 推到 B 站的那条连接劫回本机，自己推给自己，
-        # 表现为 ffmpeg 报 "Error opening output ... I/O error"（真机踩过）。
+        self._learned = {}
         self._exclude = set(exclude_ips or ())
 
         self.stats = dict((p, {"redirected": 0, "orig_dests": set(), "last": 0.0})
                           for p in self.ports)
 
-    # ──────────────────────────────────────────────
-    # filter
-    # ──────────────────────────────────────────────
     def build_filter(self) -> str:
         """
         一条 filter 覆盖所有端口、两个方向。
@@ -125,9 +64,6 @@ class PortInterceptor(object):
             parts.append("tcp.SrcPort == %d" % p)
         return "tcp and (" + " or ".join(parts) + ")"
 
-    # ──────────────────────────────────────────────
-    # 主循环
-    # ──────────────────────────────────────────────
     def _loop(self):
         local_ips = _local_ips()
         filt = self.build_filter()
@@ -161,7 +97,6 @@ class PortInterceptor(object):
                         self._handle(p, local_ips, now)
                     except Exception as e:
                         self._log("处理数据包异常：%s" % e)
-                    # 无论改没改，都必须把包放回去，否则连接直接断
                     try:
                         w.send(p)
                     except Exception as e:
@@ -179,16 +114,14 @@ class PortInterceptor(object):
         dst_port, src_port = p.dst_port, p.src_port
         src_ip, dst_ip = str(p.src_addr), str(p.dst_addr)
 
-        # ── 去程：发往远端推流/弹幕端口的新连接 ──
         if dst_port in self.ports and dst_ip not in local_ips:
             if dst_ip in self._exclude:
-                return              # 白名单（B 站推流服务器等）：一个字都不许动
+                return
             key = (src_ip, src_port, dst_port)
             is_syn = bool(tcp.syn and not tcp.ack)
             with self._lock:
                 known = self._learned.get(key)
                 if is_syn:
-                    # 新连接：记下真实目的地，再把目的改成自己
                     self._learned[key] = (dst_ip, now)
                     first = known is None
                 elif known:
@@ -197,7 +130,7 @@ class PortInterceptor(object):
                 else:
                     if tcp.fin or tcp.rst:
                         self._learned.pop(key, None)
-                    return          # 没见过的既有连接：原样放行，绝不撕它
+                    return
             p.dst_addr = self.target_ip
             if first:
                 self._bump(dst_port, dst_ip, src_ip, local_ips)
@@ -208,7 +141,6 @@ class PortInterceptor(object):
                     self._learned.pop(key, None)
             return
 
-        # ── 回程：本机服务的应答，把源地址还原成客户端期待的那个远端 IP ──
         if src_port in self.ports and src_ip == self.target_ip:
             key = (dst_ip, dst_port, src_port)
             with self._lock:
@@ -226,7 +158,6 @@ class PortInterceptor(object):
             st = self.stats.setdefault(port, {"redirected": 0, "orig_dests": set(), "last": 0.0})
             st["redirected"] += 1
             st["last"] = time.time()
-            # 加速器/本机代理发起的连接，源地址就是本机，不算「外部客户端」
             if src_ip not in local_ips:
                 st["orig_dests"].add(src_ip)
             st["orig_dests"].add(orig_dst)
@@ -235,9 +166,6 @@ class PortInterceptor(object):
         if self.verbose:
             print("  [DIVERT] " + msg, flush=True)
 
-    # ──────────────────────────────────────────────
-    # 白名单
-    # ──────────────────────────────────────────────
     def set_exclude(self, ips, replace: bool = False) -> list:
         """
         设置「不劫持」的目的 IP。返回当前完整白名单。
@@ -259,9 +187,6 @@ class PortInterceptor(object):
         with self._lock:
             return sorted(self._exclude)
 
-    # ──────────────────────────────────────────────
-    # 启停
-    # ──────────────────────────────────────────────
     def available(self) -> bool:
         return pydivert is not None
 
@@ -282,7 +207,6 @@ class PortInterceptor(object):
         self._stop.clear()
         self._thread = threading.Thread(target=self._loop, name="divert", daemon=True)
         self._thread.start()
-        # 等它真的抓起来 —— WinDivertOpen 失败只在线程里知道
         for _ in range(30):
             if self.running:
                 return True, ""
@@ -301,9 +225,6 @@ class PortInterceptor(object):
         with self._lock:
             self._learned.clear()
 
-    # ──────────────────────────────────────────────
-    # 给界面看的快照
-    # ──────────────────────────────────────────────
     def snapshot(self) -> dict:
         now = time.time()
         with self._lock:
@@ -380,3 +301,10 @@ def pick_target_ip(lan_ip: str, accel_ip: str = "") -> str:
 def pyk_available() -> bool:
     """pydivert 是否可用（界面据此决定要不要显示端口劫持这一项）。"""
     return pydivert is not None
+
+
+import sys as _sys
+
+if _sys.platform == "darwin":
+    from .divert_macos import (PfPortInterceptor as PortInterceptor,
+                                pick_target_ip, pf_available as pyk_available)

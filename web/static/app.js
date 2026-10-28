@@ -1,10 +1,4 @@
-/* PS5 直播桥 · 前端
-   界面只渲染 /api/state 的结果，不自己推断状态。
-   五个步骤：配路由器 / 检测 / 填 PS5 / 登录 / 开播。
 
-   两种形态共用这套界面，差别由后端给的 caps 决定（前端不许自己猜平台）：
-     桌面版  有端口劫持，电脑加速器要走「填 PS5 四个数」
-     容器版  动不了宿主机网络，只能改路由器；PS5 保持自动，第 3 步只是确认 */
 
 const S = {
   step: 1,
@@ -44,13 +38,21 @@ async function api(path, body) {
   }
 }
 
+function setRail(id, text, cls) {
+  const el = $(id);
+  if (!el) return;
+  el.textContent = text;
+  el.classList.remove('ok', 'warn', 'err');
+  if (cls) el.classList.add(cls);
+}
+
 function fmtDur(sec) {
   sec = Math.max(0, Math.floor(sec || 0));
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
   return (h ? h + ':' : '') + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
 }
 
-/* ── 形态适配：容器版把界面收窄到它真能做的事 ── */
+
 function applyCaps(st) {
   if (!st || !st.caps) return;
   CAPS = st.caps;
@@ -63,9 +65,18 @@ function applyCaps(st) {
   setHtml('s1-sub', 'PS5 开播时把画面推给 Twitch 的服务器。让下面这几个域名答成这台机器'
     + '（<span class="mono" id="s1-ip">—</span>），画面就先进来，再转去 B 站。');
   if ($('s1-ip')) $('s1-ip').textContent = st.lan_ip || '—';
+  if ($('s1-ip2')) $('s1-ip2').textContent = st.lan_ip || '—';
+  if ($('s1-ip3')) $('s1-ip3').textContent = st.lan_ip || '—';
 
   show('s1-docker-note', true);
-  show('s1-bridge-block', false);
+
+  show('s1-pick', false);
+  show('mode-dns', false);
+  show('mode-divert', false);
+  show('mode-hosts', true);
+
+  show('lt-hijack', false);
+  show('rail-mode-row', false);
   show('s3-desktop', false);
   show('s3-docker', true);
   show('btn-quit', false);
@@ -73,7 +84,7 @@ function applyCaps(st) {
   setHtml('nav-3-label', 'PS5<small>保持自动就行</small>');
 }
 
-/* ── 步骤切换 ── */
+
 function goStep(n, silent) {
   S.step = n;
   document.querySelectorAll('.stepc').forEach((el) => el.classList.remove('active'));
@@ -108,7 +119,7 @@ function setLight(id, on, text, warn) {
   if (text) el.lastElementChild.textContent = text;
 }
 
-/* ── 轮询 ── */
+
 async function tick() {
   const st = await api('/api/state');
   if (!st || st.error) return;
@@ -122,36 +133,306 @@ async function tick() {
   const hj = st.hijack || {};
   const dv = hj.divert || {};
 
-  setLight('lt-hijack', hj.running, hj.running ? '直播桥已开' : '直播桥未开', true);
+
+  {
+    const dnsOn = !!(hj.dns_running);
+    const divertOn = !!dv.running;
+    const lightOn = divertOn || dnsOn;
+    const lightText = divertOn ? '流量接管已开'
+      : (dnsOn ? '内置 DNS 已开（未走流量接管）' : '流量接管未开');
+    setLight('lt-hijack', lightOn, lightText, true);
+  }
   setLight('lt-ps5', !!ps5.publishing, 'PS5 推流');
   setLight('lt-bili', live.state === 'live' || live.state === 'relaying',
     live.state === 'live' ? 'B 站直播中' : 'B 站直播');
   setLight('lt-dm', !!(sv.irc && sv.irc.ps5), '弹幕');
 
   if ($('ipchip')) $('ipchip').textContent = '本机 ' + (st.lan_ip || '未探测');
+
+  if ($('ver-chip') && st.version) $('ver-chip').textContent = 'v' + st.version;
   if ($('rail-ip')) $('rail-ip').textContent = st.lan_ip || '—';
-  if ($('rail-mode')) $('rail-mode').textContent = hj.running ? '已开启' : '未开启';
+
+
+  if ($('rail-ps5seen-row')) {
+
+
+    const showPs5 = (S.modePick === 'dns')
+      || (!S.modePick && !!hj.dns_running);
+    $('rail-ps5seen-row').style.display = showPs5 ? '' : 'none';
+    if (showPs5) {
+      const seen = !!hj.ps5_seen;
+      const el = $('rail-ps5seen');
+      if (el) {
+        el.textContent = seen ? '已接入' : '未接入';
+        el.className = 'rail-v ' + (seen ? 'ok' : 'warn');
+
+
+        const onAirNow = live.state === 'live' || live.state === 'relaying';
+        el.title = seen
+          ? 'PS5 正在使用这台电脑的 DNS'
+          : (onAirNow
+            ? 'PS5 没查这台电脑的 DNS，但推流是通的 —— 说明它在走路由器 hosts 那条路'
+            : 'PS5 还没来查这台电脑的 DNS。检查 PS5 的网络设置里 DNS 是不是填了 ' + (st.lan_ip || '本机 IP'));
+      }
+    }
+  }
+
+  if ($('rail-mode')) {
+    let modeText = '未开启';
+    if (dv.running) {
+      modeText = '流量接管';
+    } else if (hj.dns_running) {
+      modeText = '内置 DNS';
+    }
+    $('rail-mode').textContent = modeText;
+  }
   if ($('s3-lanip')) $('s3-lanip').textContent = st.lan_ip || '未探测';
 
-  // 第 1 步：直播桥按钮与状态
-  if ($('s1-btn-bridge')) {
-    const routerMode = !dv.running && !!st.progress_dns_ok;
-    $('s1-btn-bridge').textContent = dv.running ? '重启直播桥' : '开启直播桥';
-    $('s1-bridge-state').textContent = dv.running
-      ? '已开启，接住 ' + (dv.total || 0) + ' 条连接'
-      : (routerMode ? '未开启（路由器已生效，不用它）' : '未开启');
-    $('s1-badge').textContent = dv.running ? '已用直播桥'
-      : (routerMode ? '已用路由器' : '未配置');
-    $('s1-badge').className = 'badge ' + ((dv.running || routerMode) ? 'ok' : '');
-  }
-  const err = hj.error || dv.error || '';
-  if ($('s1-msg') && S.step === 1) {
-    $('s1-msg').innerHTML = err
-      ? `<div class="note err">直播桥开不了：${esc(err)}</div>`
-      : '';
+
+  if ($('in-proxy-1st') && st.config && st.config.twitch_proxy
+      && !$('in-proxy-1st').value && document.activeElement !== $('in-proxy-1st')) {
+    $('in-proxy-1st').value = st.config.twitch_proxy;
   }
 
-  // 第 5 步面板
+
+  ['s1-ip', 's1-ip2', 's1-ip3'].forEach((id) => {
+    const el = $(id);
+    if (el) el.textContent = st.lan_ip || '—';
+  });
+
+
+  if (!window._twitchFilled && $('in-twitch') && st.config) {
+    $('in-twitch').value = st.config.twitch_channel || '';
+    if ($('in-proxy')) $('in-proxy').value = st.config.twitch_proxy || '';
+    window._twitchFilled = true;
+  }
+
+
+  const stageMap = {
+    idle: ['空闲', ''],
+    waiting: ['等 PS5 推流', 'warn'],
+    starting: ['正在开播', 'warn'],
+    face_verify: ['等人脸验证', 'warn'],
+    relaying: ['转发中', 'ok'],
+    live: ['直播中', 'ok'],
+    local: ['本地取流', 'ok'],
+    error: ['出错', 'err'],
+  };
+  const [stageText, stageCls] = stageMap[live.state] || [live.state || '—', ''];
+  setRail('rail-state', stageText, stageCls);
+
+
+  const ch = (live.bili && live.bili.channel) || '';
+  setRail('rail-channel',
+    ch === 'electron' ? '客户端模式' : (ch === 'livehime' ? '直播姬模式' : '—'), '');
+
+  setRail('rail-relay', relay.running ? '转发中' : '停止', relay.running ? 'ok' : '');
+
+
+  let sTxt = '—', sCls = '';
+  if (live.state === 'live' || live.state === 'relaying' || live.state === 'local') {
+    sTxt = '已确认'; sCls = 'ok';
+  } else if (live.state === 'starting' || live.state === 'face_verify') {
+    sTxt = '确认中'; sCls = 'warn';
+  }
+  setRail('rail-stream', sTxt, sCls);
+
+
+  const dnsMode = st.dns_mode || 'router';
+  let dnsText;
+  if (dnsMode === 'builtin') {
+    dnsText = '内置 DNS';
+  } else if (isDocker()) {
+    dnsText = '路由器';
+  } else {
+    dnsText = '端口劫持';
+  }
+  setRail('rail-dns', dnsText, 'ok');
+
+
+  setRail('rail-dm', ((sv.danmaku && sv.danmaku.count) || 0) + ' 条', '');
+
+
+  const onAir = live.state === 'local' || live.state === 'relaying' || live.state === 'live';
+  setRail('rail-uptime', onAir ? fmtDur(live.uptime) : '—', '');
+
+
+  const pub = (sv.nginx && sv.nginx.publisher) || {};
+  if (pub.publishing && pub.width) {
+    const res = pub.height >= 2160 ? '4K' : (pub.height >= 1440 ? '2K' : (pub.height >= 1080 ? '1080p' : (pub.height >= 720 ? '720p' : pub.height + 'p')));
+    const mb = ((pub.bw_in || 0) / 1000).toFixed(1);
+    setRail('rail-quality', res + (pub.fps ? pub.fps : '') + ' · ' + mb + 'M', 'ok');
+  } else {
+    setRail('rail-quality', '—', '');
+  }
+
+
+  if ($('s2-sub')) {
+    const hj2 = (st.hijack) || {};
+    if (dv.running) {
+      $('s2-sub').innerHTML = '流量接管已经在拦推流连接了，<b>这一步其实不用检测</b>。'
+        + '想确认就点一下，会直接告诉你已接管。';
+    } else if (hj2.dns_running) {
+      $('s2-sub').innerHTML = '内置 DNS 已经开着。下面检测的是<b>本机 DNS 能不能把推流域名答成本机 IP</b>'
+        + '（PS5 那边用的就是它，所以只看这一项）。';
+    } else {
+      $('s2-sub').innerHTML = '拿上面那几个域名分别问路由器、本机、系统 DNS。'
+        + '只要返回的 IP 是这台机器，就算通了。';
+    }
+  }
+
+
+  const pick3 = S.modePick;
+  if ($('s3-title')) {
+    if (pick3 === 'hosts') {
+      $('s3-title').textContent = '第 3 步 · PS5 什么都不用改';
+    } else if (pick3 === 'dns') {
+      $('s3-title').textContent = '第 3 步 · 改 PS5 的 DNS';
+    } else if (pick3 === 'divert') {
+      $('s3-title').textContent = '第 3 步 · 把加速器的四个数填进 PS5';
+    } else {
+      $('s3-title').textContent = (dv.running || hj.dns_running)
+        ? '第 3 步 · 把加速器的四个数填进 PS5'
+        : '第 3 步 · 确认 PS5 网络设置';
+    }
+  }
+
+
+  const modeNote = $('s3-mode-note');
+  const pk = S.modePick;
+  if (modeNote) {
+    if (pk === 'hosts') {
+      modeNote.innerHTML = '<b>你走的是「改路由器 hosts」</b>：路由器已经把推流地址指过来了，'
+        + '<b>PS5 保持「自动获取」就行，这一页一个数都不用填</b>。'
+        + '下面这张表留着备查，填不填都不影响。';
+    } else if (pk === 'dns') {
+      const ip = (S.state && S.state.lan_ip) || '这台电脑的 IP';
+      modeNote.innerHTML = '<b>你走的是「内置 DNS」</b>：'
+        + '<b class="hl">DNS 那一栏填这台电脑的 IP（' + esc(ip) + '）</b>，'
+        + 'IP / 掩码 / 网关填 PS5 <b>原来自动获取</b>的那组'
+        + '（PS5 不允许 IP 自动、DNS 手动混着来）。';
+    } else if (pk === 'divert') {
+      modeNote.innerHTML = '<b>你走的是「流量接管」</b>：PS5 要连到这台电脑的加速器，'
+        + '加速器给的四个数<b>照抄进 PS5</b>（下面这张表就是抄写位置）。';
+    } else {
+
+      if (dv.running) {
+        modeNote.innerHTML = '<b>流量接管已开</b>：加速器给的四个数照抄进 PS5。';
+      } else if (hj.dns_running) {
+        const ip = (S.state && S.state.lan_ip) || '这台电脑的 IP';
+        modeNote.innerHTML = '<b>内置 DNS 已开</b>：DNS 填这台电脑（' + esc(ip) + '），其余填原值。';
+      } else {
+        modeNote.innerHTML = '先在第一步选一种方案，这里会按你的情况给出填法。';
+      }
+    }
+
+
+    if ($('s3-sub')) {
+      $('s3-sub').textContent = (pk === 'hosts')
+        ? '你走的是改路由器方案，PS5 这一页不用填，保持自动获取就行。'
+        : (pk === 'dns'
+          ? '只有 DNS 那一栏要改成本机 IP，其余三栏照 PS5 原来的值填。'
+          : '加速器给四个数，四个都照抄进 PS5。');
+    }
+    if ($('s3-notfill')) {
+      const lanip = (S.state && S.state.lan_ip) || '这台电脑的 IP';
+      if (pk === 'hosts') {
+        $('s3-notfill').innerHTML =
+          'PS5 保持「自动获取」就行，一个数都不用填。';
+      } else if (pk === 'dns') {
+        $('s3-notfill').innerHTML =
+          '这台电脑的 IP（<span class="mono">' + esc(lanip) + '</span>）'
+          + '<b>只填在 DNS 那一栏</b>，IP / 掩码 / 网关 三栏填 PS5 原来的值。';
+      } else {
+        $('s3-notfill').innerHTML =
+          '这台电脑的 IP（<span class="mono">' + esc(lanip) + '</span>）'
+          + '不要填进 PS5，四个数照加速器给的抄。';
+      }
+    }
+
+
+    if ($('nav-3-label')) {
+      const label = (pk === 'hosts')
+        ? 'PS5<small>什么都不用改</small>'
+        : (pk === 'dns'
+          ? 'PS5<small>只改 DNS</small>'
+          : 'PS5<small>抄加速器的四个数</small>');
+      $('nav-3-label').innerHTML = label;
+    }
+
+
+    const isHosts = pk === 'hosts';
+    const isDns = pk === 'dns';
+    if ($('th-accel')) {
+      $('th-accel').textContent = isHosts ? '（不用填）' : (isDns ? '填在这里' : '加速器给的值');
+    }
+    const setFill = (id, normal, dnsText) => {
+      const el = $(id);
+      if (!el) return;
+      el.textContent = isHosts ? 'PS5 保持自动' : (isDns ? dnsText : normal);
+    };
+    setFill('fill-ip', '加速器的「IP 地址」', 'PS5 原来的 IP');
+    setFill('fill-mask', '加速器的「子网掩码」', 'PS5 原来的掩码');
+    setFill('fill-gw', '加速器的「网关」', 'PS5 原来的网关');
+    const dnsEl = $('fill-dns');
+    if (dnsEl) {
+      if (isHosts) {
+        dnsEl.textContent = 'PS5 保持自动';
+      } else if (isDns) {
+        const ip = (S.state && S.state.lan_ip) || '本机 IP';
+        dnsEl.innerHTML = '<b class="hl">这台电脑的 IP：' + esc(ip) + '</b>';
+      } else {
+        dnsEl.textContent = '加速器的「DNS」';
+      }
+    }
+  }
+
+
+  const bInfo = st.bili || {};
+  setRail('rail-room', bInfo.room_id || '—', '');
+  setRail('rail-title', bInfo.title || '—', '');
+
+
+  ['s1-btn-dns-off', 's1-btn-dns-off2'].forEach((id) => {
+    const b = $(id);
+    if (b) b.style.display = hj.dns_running ? '' : 'none';
+  });
+
+
+  if ($('s1-btn-bridge')) {
+    const routerMode = !dv.running && !hj.dns_running && !!st.progress_dns_ok;
+    $('s1-btn-bridge').textContent = dv.running ? '重启接管' : '开启流量接管';
+    const dnsOn1 = !!(hj.dns_running);
+
+
+    const hostsOk = !!st.progress_dns_ok && !dnsOn1 && !dv.running;
+    $('s1-bridge-state').textContent = dv.running
+      ? '已开启，接住 ' + (dv.total || 0) + ' 条连接'
+      : (dnsOn1 ? '未开启（当前走内置 DNS）'
+        : (hostsOk ? '未开启（路由器 hosts 已验证通过）' : '未开启'));
+    $('s1-badge').textContent = dv.running ? '已接管'
+      : (dnsOn1 ? '已用内置 DNS' : (hostsOk ? '路由器 hosts 已生效' : '未配置'));
+    $('s1-badge').className = 'badge ' + ((dv.running || routerMode) ? 'ok' : '');
+  }
+
+
+  const dvErr = String((dv && dv.error) || '').trim();
+  const hjErr = String((hj && hj.error) || '').trim();
+  if (S.step === 1) {
+    const b2 = $('s1-msg2');
+    if (b2) {
+      b2.innerHTML = dvErr
+        ? `<div class="note err">流量接管开不了：${esc(dvErr)}</div>` : '';
+    }
+    const b1 = $('s1-msg');
+    if (b1) {
+
+      b1.innerHTML = (hjErr && hjErr !== dvErr)
+        ? `<div class="note err">内置 DNS 出问题：${esc(hjErr)}</div>` : '';
+    }
+  }
+
+
   const stateMap = {
     idle: '未开始', waiting: '等 PS5', starting: '正在开播',
     relaying: '转发中', live: '直播中', local: '本地取流', error: '出错',
@@ -166,7 +447,7 @@ async function tick() {
     $('m-quality').innerHTML = ps5.publishing
       ? `${ps5.width || 0}×${ps5.height || 0}<br><small>${ps5.bw_in || 0} kbps</small>`
       : '—';
-    // 「已播」只在真播着的时候给秒数，其余显示 —（idle / error 时不要跳秒）
+
     const onAir = live.state === 'local' || live.state === 'relaying' || live.state === 'live';
     $('m-uptime').textContent = onAir ? fmtDur(live.uptime) : '—';
     $('m-dmcount').textContent = dm.count || 0;
@@ -200,11 +481,11 @@ async function tick() {
         <a href="#" onclick="goStep(4);return false">第 4 步</a> 扫码。`
         + `用本地取流的话不需要登录，可以直接在 PS5 开播。</div>`;
     } else if (!hj.running && !st.progress_dns_ok) {
-      // 路由器方案成功时不需要直播桥，这种不算错
+
       const back = '回 <a href="#" onclick="goStep(1);return false">第 1 步</a> 处理。';
       $('s5-msg').innerHTML = '<div class="note err">'
         + (isDocker() ? '路由器还没把推流指过来。' + back
-                      : '直播桥没开，DNS 也没指到本机。' + back)
+                      : '接管没开，DNS 也没指到本机。' + back)
         + '</div>';
     } else {
       $('s5-msg').innerHTML = `<div class="note">去 PS5 点「开始直播」，选 Twitch。</div>`;
@@ -226,7 +507,7 @@ async function tick() {
   pullLogs();
 }
 
-/* ── 第 1 步：路由器 + 直播桥 ── */
+
 async function loadGuides() {
   if (!S.guides) {
     const g = await api('/api/guides');
@@ -252,23 +533,36 @@ function renderGuides() {
   const it = g.guides[S.curRouter];
   let html = '<ol class="steps">';
   it.steps.forEach((s) => { html += '<li>' + esc(s) + '</li>'; });
+  html += '</ol>';
+
+
+  const copyText = it.format === 'table' && it.rows
+    ? it.rows.map((r) => r.ip + ' ' + r.domain).join('\n')
+    : (it.snippet || '');
+
+  html += '<div class="confbox">';
+  html += '<div class="confbox-h"><span>'
+    + (it.format === 'table' && it.rows ? '要填的内容（域名 → IP）' : '要粘贴的内容')
+    + '</span><span class="grow"></span>'
+    + '<button class="copy" data-code="' + esc(copyText) + '" onclick="copyCode(this)">复制</button></div>';
+
   if (it.format === 'table' && it.rows) {
-    html += '</ol><table class="mini"><tr><th>域名</th><th>IP</th></tr>';
+    html += '<table class="mini"><tr><th>域名</th><th>IP</th></tr>';
     it.rows.forEach((r) => {
       html += `<tr><td class="mono">${esc(r.domain)}</td><td class="mono">${esc(r.ip)}</td></tr>`;
     });
     html += '</table>';
   } else {
-    html += '</ol><div class="codebox" data-code="' + esc(it.snippet) + '">'
-      + '<button class="copy" onclick="copyCode(this)">复制</button>'
-      + esc(it.snippet) + '</div>';
+    html += '<pre class="codebox">' + esc(it.snippet) + '</pre>';
   }
+  html += '</div>';
+
   if (it.note) html += '<div class="note warn">' + esc(it.note) + '</div>';
   $('router-body').innerHTML = html;
 }
 
 function copyCode(btn) {
-  const code = btn.parentElement.dataset.code;
+  const code = btn.dataset.code || (btn.parentElement && btn.parentElement.dataset.code);
   navigator.clipboard.writeText(code).then(() => {
     btn.textContent = '已复制';
     setTimeout(() => { btn.textContent = '复制'; }, 1400);
@@ -290,23 +584,79 @@ async function toggleBridge() {
   const r = await api('/api/divert/start', {});
   btn.disabled = false;
   if (r && !r.ok && r.detail) {
-    $('s1-msg').innerHTML = `<div class="note err">开启失败：${esc(r.detail)}</div>`;
+    const box = $('s1-msg2') || $('s1-msg');
+    if (box) box.innerHTML = `<div class="note err">开启失败：${esc(r.detail)}</div>`;
   }
   await tick();
   renderGuides();
 }
 
-/* ── 第 2 步：检测 ── */
+
+async function toggleBuiltinDns() {
+  const btn = $('s1-btn-dns-off');
+  const dns = (S.state && S.state.dns_mode) || 'router';
+  if (btn) { btn.disabled = true; btn.textContent = '处理中…'; }
+  try {
+    if (dns === 'builtin') {
+      await api('/api/builtin/stop', {});
+      if ($('s1-msg')) {
+        $('s1-msg').innerHTML = '<div class="note">内置 DNS 已关闭。</div>';
+      }
+    } else {
+      const r = await api('/api/builtin/start', {});
+      if (r && !r.ok && r.detail && $('s1-msg')) {
+        $('s1-msg').innerHTML = `<div class="note err">开启失败：${esc(r.detail)}</div>`;
+      }
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '关闭内置 DNS'; }
+    await tick();
+  }
+}
+
+
 async function runVerify() {
   if (S.verifying) return;
   S.verifying = true;
+
+
+  const pick = S.modePick;
   const btn = $('s2-btn');
   btn.disabled = true;
   btn.textContent = '正在检测…';
   $('s2-verdict').innerHTML = `<div class="note">大约 2 秒。</div>`;
   $('s2-results').innerHTML = '';
 
-  const r = await api('/api/dns/verify', { mode: 'router' });
+
+  const stNow = S.state || {};
+  const dvNow = (stNow.hijack && stNow.hijack.divert) || {};
+
+
+  if (dvNow.running && (pick === 'divert' || !pick)) {
+    S.verifying = false;
+    btn.disabled = false;
+    btn.textContent = '再检测一次';
+    $('s2-badge').textContent = '已接管';
+    $('s2-badge').className = 'badge ok';
+    $('s2-verdict').innerHTML = `<div class="verdict ok"><div class="icon">✓</div><div>
+        <h4>流量接管已开启，这一步已经完成</h4>
+        <p>流量接管是直接拦推流连接的，<b>不需要改任何域名</b>，所以不用看域名检测结果。</p>
+      </div></div>
+      <div class="note">已接住 ${dvNow.total || 0} 条连接。下一步去确认 PS5 那边的网络设置。</div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="goStep(3)">下一步 →</button>
+      </div>`;
+    $('s2-results').innerHTML = '';
+    return;
+  }
+
+
+  const hjNow = (stNow.hijack) || {};
+
+
+  const verifyMode = (pick === 'dns' || (!pick && hjNow.dns_running))
+    ? 'builtin' : 'router';
+  const r = await api('/api/dns/verify', { mode: verifyMode });
   S.verifying = false;
   btn.disabled = false;
   btn.textContent = '再检测一次';
@@ -320,29 +670,59 @@ async function runVerify() {
   $('s2-badge').className = 'badge ' + (r.ok ? 'ok' : 'err');
 
   if (r.ok && isDocker()) {
-    // 容器版只有「加速器在路由器上」这一条路，所以不用问装哪儿
+
     $('s2-verdict').innerHTML = `<div class="verdict ok"><div class="icon">✓</div><div>
          <h4>生效了</h4><p>${esc(r.hint)}</p></div></div>
        <div class="note">加速器在路由器上，PS5 什么都不用改。下一步只是确认一下。</div>
        <div class="btn-row">
          <button class="btn primary" onclick="goStep(3)">下一步 →</button>
        </div>`;
-  } else if (r.ok) {
+  } else if (r.ok && verifyMode === 'builtin') {
+
     $('s2-verdict').innerHTML = `<div class="verdict ok"><div class="icon">✓</div><div>
-         <h4>生效了</h4><p>${esc(r.hint)}</p></div></div>
-       <h3>PS5 用哪种加速</h3>
-       <p class="small dim" style="margin-top:-6px">
-         看加速器装在哪。两种都能用，只有第二种要去 PS5 改设置。
-       </p>
-       <div class="flexline">
-         <button class="btn primary" onclick="chooseRouterAccel(this)">
-           装路由器上（PS5 不用改）
-         </button>
-         <button class="btn" onclick="choosePcAccel()">
-           装电脑上（要填四个数）
-         </button>
-       </div>
-       <p class="small dim" id="s2-pick-note"></p>`;
+         <h4>本机 DNS 工作正常</h4>
+         <p>推流域名已经答成本机 IP（${esc((S.state && S.state.lan_ip) || '')}）。
+         PS5 的 DNS 指向这台电脑，链路就通了。</p></div></div>
+       <div class="note">下一步确认 PS5 那边的四个数怎么填，别照加速器填。</div>
+       <div class="btn-row">
+         <button class="btn primary" onclick="goStep(3)">下一步 →</button>
+       </div>`;
+  } else if (r.ok) {
+
+    if (pick === 'hosts') {
+      $('s2-verdict').innerHTML = `<div class="verdict ok"><div class="icon">✓</div><div>
+           <h4>路由器 hosts 已生效</h4><p>${esc(r.hint)}</p></div></div>
+         <div class="note">推流域名已经指向这台电脑，<b>PS5 什么都不用改</b>，保持自动获取即可。</div>
+         <div class="btn-row">
+           <button class="btn primary lg" onclick="goStep(3)">下一步 →</button>
+         </div>`;
+    } else if (pick === 'dns') {
+      const ip = (S.state && S.state.lan_ip) || '这台电脑的 IP';
+      $('s2-verdict').innerHTML = `<div class="verdict ok"><div class="icon">✓</div><div>
+           <h4>本机 DNS 工作正常</h4><p>${esc(r.hint)}</p></div></div>
+         <div class="note">接下来去 PS5 上把 <b>DNS 改成 ${esc(ip)}</b>，
+         其余三栏保持原来的值（下一步会给具体填法）。</div>
+         <div class="btn-row">
+           <button class="btn primary lg" onclick="goStep(3)">下一步 →</button>
+         </div>`;
+    } else {
+
+      $('s2-verdict').innerHTML = `<div class="verdict ok"><div class="icon">✓</div><div>
+           <h4>生效了</h4><p>${esc(r.hint)}</p></div></div>
+         <h3>你的加速器装在哪</h3>
+         <p class="small dim" style="margin-top:-6px">
+           这一步只是补全你的情况，选完会按对应方案给下一步。
+         </p>
+         <div class="flexline">
+           <button class="btn primary" onclick="chooseRouterAccel(this)">
+             装在路由器上
+           </button>
+           <button class="btn" onclick="choosePcAccel()">
+             装在电脑上（要填四个数）
+           </button>
+         </div>
+         <p class="small dim" id="s2-pick-note"></p>`;
+    }
   } else if (isDocker()) {
     $('s2-verdict').innerHTML = `<div class="verdict bad"><div class="icon">✕</div><div>
          <h4>还没通</h4><p>${esc(r.hint)}</p></div></div>
@@ -358,7 +738,7 @@ async function runVerify() {
          <h4>还没通</h4><p>${esc(r.hint)}</p></div></div>
        <div class="btn-row">
          <button class="btn" onclick="goStep(1)">回上一步改路由器</button>
-         <button class="btn primary" onclick="useBridgeFromVerify(this)">改用直播桥</button>
+         <button class="btn primary" onclick="useBridgeFromVerify(this)">改用流量接管</button>
        </div>`;
   }
 
@@ -373,7 +753,7 @@ async function runVerify() {
   }).join('');
   $('s2-results').innerHTML = rows ? '<h3>各来源</h3><div class="checklist">' + rows + '</div>' : '';
 
-  // 逐条明细 + 直接说哪儿不对
+
   const src = (r.results || []).find((s) => s.kind === 'router') || (r.results || [])[0];
   if (src && (src.rows || []).length) {
     const lan = (S.state && S.state.lan_ip) || '';
@@ -391,7 +771,7 @@ async function runVerify() {
   }
 }
 
-/* 根据「路由器实际答了什么」直接给出改法，别让人自己猜 */
+
 function diagnose(src, lan) {
   const priv = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/;
   const counts = {};
@@ -422,12 +802,12 @@ async function useBridgeFromVerify(btn) {
   btn.textContent = '正在开启…';
   const r = await api('/api/divert/start', {});
   btn.disabled = false;
-  btn.textContent = '改用直播桥';
+  btn.textContent = '改用流量接管';
   if (r && r.ok) {
-    $('s2-badge').textContent = '已用直播桥';
+    $('s2-badge').textContent = '已接管';
     $('s2-badge').className = 'badge ok';
     $('s2-verdict').innerHTML = `<div class="verdict ok"><div class="icon">✓</div><div>
-      <h4>直播桥已开</h4><p>PS5 的推流直接接到本机，不用改路由器。</p>
+      <h4>流量接管已开</h4><p>PS5 的推流直接接到本机，不用改路由器。</p>
       </div></div><div class="btn-row">
       <button class="btn primary" onclick="goStep(3)">下一步 →</button></div>`;
     tick();
@@ -437,38 +817,43 @@ async function useBridgeFromVerify(btn) {
   }
 }
 
-/* 路由器上装了加速器：PS5 什么都不用改。
-   原理：hosts 已把推流域名指到本机，PS5 同网段直连，路由器加速器
-   只加速去外网的流量，不碰内网地址。
-   直播桥这时留着也不碍事：PS5 连的是本机地址，劫持只处理发往远端的连接。 */
+
 async function chooseRouterAccel(btn) {
+  await pickMode('hosts', true);
   btn.disabled = true;
   $('s2-pick-note').innerHTML = 'PS5 保持「自动获取」，什么都不用改。<br>'
-    + '直播桥不用关，它不碰 PS5 直连本机的流量。<br>'
+    + '接管不用关，它不碰 PS5 直连本机的流量。<br>'
     + '去登录 B 站，然后直接在 PS5 上开播。';
   await tick();
   setTimeout(() => goStep(4), 900);
 }
 
-/* 电脑上装了加速器：必须有直播桥，PS5 要填四个数 */
+
 async function choosePcAccel() {
+  await pickMode('divert', true);
   const dv = ((S.state && S.state.hijack) || {}).divert || {};
   if (!dv.running) {
     const r = await api('/api/divert/start', {});
-    if (r && !r.ok) alert('直播桥没开起来：' + (r.detail || '未知原因'));
+    if (r && !r.ok) alert('流量接管没开起来：' + (r.detail || '未知原因'));
     await tick();
   }
   goStep(3);
 }
 
-/* ── 第 3 步：PS5 网络 ── */
+
 async function renderNet() {
   if (isDocker()) {
-    // 容器版这一步只是确认页，没有要填的东西
+
     if ($('s3-docker-ip')) $('s3-docker-ip').textContent = (S.state && S.state.lan_ip) || '—';
     return;
   }
-  if (!S.env) S.env = await api('/api/env');
+
+
+  try {
+    S.env = await api('/api/env');
+  } catch (e) {
+    if (!S.env) S.env = {};
+  }
   const env = S.env || {};
   const st = S.state || {};
   const net = (st.config && st.config.ps5_net) || {};
@@ -483,17 +868,36 @@ async function renderNet() {
   if ($('s3-lanip')) $('s3-lanip').textContent = st.lan_ip || '未探测';
 
   const accel = env.accel_procs || [];
-  $('s3-badge').textContent = accel.length ? '加速器在跑' : '没检测到加速器';
-  $('s3-badge').className = 'badge ' + (accel.length ? 'ok' : 'warn');
-  $('s3-accel').innerHTML = accel.length
-    ? `<div class="verdict ok"><div class="icon">✓</div><div>
-        <h4>加速器：${esc(accel.join('、'))}</h4>
+
+
+  const routerDone = (S.modePick === 'hosts')
+    || (!S.modePick && !(dv.running) && !(S.state && S.state.hijack && S.state.hijack.dns_running)
+        && !!(S.state && S.state.progress_dns_ok));
+  if (accel.length) {
+    $('s3-badge').textContent = '加速器在跑';
+    $('s3-badge').className = 'badge ok';
+    $('s3-accel').innerHTML = `<div class="verdict ok"><div class="icon">✓</div><div>
+        <h4>本机加速器：${esc(accel.join('、'))}</h4>
         <p>确认它在给 PS5 加速。它给的四个数，下面照抄。</p>
-        </div></div>`
-    : `<div class="verdict bad"><div class="icon">!</div><div>
-        <h4>没检测到加速器</h4>
-        <p>先打开加速器并给 PS5 加速。没有它，PS5 连不上 Twitch。</p>
         </div></div>`;
+  } else if (routerDone) {
+    $('s3-badge').textContent = '加速器在路由器上';
+    $('s3-badge').className = 'badge ok';
+    $('s3-accel').innerHTML = `<div class="verdict ok"><div class="icon">✓</div><div>
+        <h4>本机没有加速器，这页不用填</h4>
+        <p>你的加速器装在<b>路由器</b>上（推流域名已经指到这台电脑了），
+        PS5 保持自动获取就行，下面这几个数一个都不用填。</p>
+        </div></div>`;
+  } else {
+    $('s3-badge').textContent = '没找到加速器';
+    $('s3-badge').className = 'badge warn';
+    $('s3-accel').innerHTML = `<div class="verdict warn"><div class="icon">!</div><div>
+        <h4>本机没找到加速器进程</h4>
+        <p>两种可能：<br>
+        · 加速器装在<b>路由器</b>上 → 正常，这页不用填，直接去第 4 步<br>
+        · 加速器装在<b>这台电脑</b>上 → 请先打开它，再回来点「检测加速器」</p>
+        </div></div>`;
+  }
 }
 
 async function autofillNet() {
@@ -501,7 +905,14 @@ async function autofillNet() {
   if (!r) return;
   if (r.gateway) $('in-gw').value = r.gateway;
   if (r.dns) $('in-dns').value = r.dns;
-  $('s3-fillnote').textContent = '网关和 DNS 已填，IP 和掩码照加速器抄。';
+  if (r.gateway || r.dns) {
+    $('s3-fillnote').textContent = '网关和 DNS 已填，IP 和掩码照加速器抄。';
+  } else {
+    $('s3-fillnote').textContent = '本机没找到加速器，四个数请照加速器界面手动抄。';
+  }
+
+
+  await renderNet();
 }
 
 async function saveNet() {
@@ -521,7 +932,7 @@ async function saveNet() {
   }
 }
 
-/* ── 第 4 步：登录 ── */
+
 async function renderLogin() {
   const st = S.state || {};
   const b = st.bili || {};
@@ -610,14 +1021,25 @@ async function loadAreas() {
 }
 
 async function saveArea() {
-  const r = await api('/api/area', { area_id: $('sel-area').value, title: $('in-title').value.trim() });
+  const body = {
+    area_id: $('sel-area').value,
+    title: $('in-title').value.trim(),
+  };
+  if ($('in-twitch')) body.twitch_channel = $('in-twitch').value.trim();
+  if ($('in-proxy')) body.twitch_proxy = $('in-proxy').value.trim();
+  const r = await api('/api/area', body);
   if (r && r.ok) {
+
+
+    if ($('in-proxy-1st') && $('in-proxy')) {
+      $('in-proxy-1st').value = $('in-proxy').value;
+    }
     const opt = $('sel-area').selectedOptions[0];
     alert('已保存：' + (opt ? opt.textContent : ''));
   } else alert('保存失败');
 }
 
-/* ── 第 5 步：开播 ── */
+
 function renderLive() {
   const st = S.state || {};
   const b = st.bili || {};
@@ -686,7 +1108,7 @@ async function testInject() {
   alert(r.ok ? '发了，看 PS5 画面。' : (r.msg || '发送失败'));
 }
 
-/* ── 弹幕 / 日志 / 退出 ── */
+
 function renderDanmaku(list) {
   const box = $('dmlist');
   if (!box) return;
@@ -702,11 +1124,11 @@ function renderDanmaku(list) {
     </div>`).join('');
 }
 
-function toggleLog() {
-  S.logOpen = !S.logOpen;
-  $('logbar').classList.toggle('open', S.logOpen);
-  $('loghint').textContent = S.logOpen ? '点击收起' : '点击展开';
-}
+
+const LV_TEXT = {
+  info: '信息', success: '成功', warn: '警告',
+  error: '错误', step: '步骤', debug: '调试',
+};
 
 async function pullLogs() {
   const r = await api('/api/logs?since=' + S.logSince);
@@ -716,11 +1138,56 @@ async function pullLogs() {
   r.items.forEach((it) => {
     const div = document.createElement('div');
     div.className = 'logline ' + it.level;
-    div.innerHTML = `<span class="t">${esc(it.t)}</span><span class="lv">${esc(it.level)}</span><span class="m">${esc(it.msg)}</span>`;
+    div.dataset.level = it.level || 'info';
+
+    div.innerHTML =
+      `<span class="t">${esc(it.t)}</span>`
+      + `<span class="lv">${esc(LV_TEXT[it.level] || it.level)}</span>`
+      + (it.tag ? `<span class="tg">${esc(it.tag)}</span>` : '')
+      + `<span class="m">${esc(it.msg)}</span>`;
     body.appendChild(div);
   });
-  while (body.childNodes.length > 400) body.removeChild(body.firstChild);
+  while (body.childNodes.length > 600) body.removeChild(body.firstChild);
   body.scrollTop = body.scrollHeight;
+  applyLogFilter();
+}
+
+function applyLogFilter() {
+  const sel = $('log-filter');
+  const mode = sel ? sel.value : '';
+  document.querySelectorAll('#logbody .logline').forEach((el) => {
+    const lv = el.dataset.level || 'info';
+    let show = true;
+    if (mode === 'warn') show = (lv === 'warn' || lv === 'error');
+    else if (mode === 'step') show = (lv === 'step' || lv === 'error');
+    el.style.display = show ? '' : 'none';
+  });
+}
+
+function clearLogs() {
+  const body = $('logbody');
+  if (body) body.innerHTML = '';
+
+  S.logSince = Date.now() / 1000;
+}
+
+async function copyLogs() {
+  const lines = [];
+  document.querySelectorAll('#logbody .logline').forEach((el) => {
+    if (el.style.display === 'none') return;
+    lines.push(el.innerText.replace(/\s+/g, ' ').trim());
+  });
+  const text = lines.join('\n');
+  try {
+    await navigator.clipboard.writeText(text);
+    if ($('loghint')) {
+      const old = $('loghint').textContent;
+      $('loghint').textContent = '已复制 ' + lines.length + ' 行';
+      setTimeout(() => { $('loghint').textContent = old; }, 1500);
+    }
+  } catch (e) {
+    alert('复制失败，请手动选中复制');
+  }
 }
 
 async function quitApp() {
@@ -734,7 +1201,7 @@ async function quitApp() {
     + 'font-family:system-ui">已退出，可以关掉这个窗口。</div>';
 }
 
-/* ── 自动更新 ── */
+
 function showUpdateBar(msg, btnLabel, btnFn) {
   $('update-msg').innerHTML = msg;
   const b = $('update-btn');
@@ -766,7 +1233,7 @@ async function checkUpdate(force) {
       showUpdateBar(`发现新版本 v${ver}（当前 v${esc(r.current)}）`,
         '立即更新', doUpdate);
     }
-  } catch (e) { /* 检查失败不打扰 */ }
+  } catch (e) {  }
 }
 
 async function doUpdate() {
@@ -797,17 +1264,17 @@ async function doUpdate() {
   }, 800);
 }
 
-/* ── 启动 ── */
+
 (async function boot() {
   S.env = await api('/api/env');
   const env = S.env || {};
   const st = await api('/api/state');
   S.state = st;
 
-  // 先把形态相关的差异摆正，再决定进哪一步
+
   applyCaps(st);
 
-  // ?step=N 可以直接跳；否则按上次进度，第一次进来就是第 1 步
+
   const q = new URLSearchParams(location.search);
   const forced = Number(q.get('step') || 0);
   let step = forced || Number((st && st.step) || 1);
@@ -817,7 +1284,243 @@ async function doUpdate() {
   tick();
   setInterval(tick, 1500);
 
-  // 自动更新：启动 30 秒后查一次，之后每小时再查（后台也查，界面只在有新版时提示）
+
   setTimeout(() => checkUpdate(false), 30000);
   setInterval(() => checkUpdate(false), 3600 * 1000);
 })();
+
+
+function _rtBody() {
+  return {
+    ip: ($('rt-ip') || {}).value ? $('rt-ip').value.trim() : '',
+    username: ($('rt-user') || {}).value ? $('rt-user').value.trim() : 'root',
+    password: ($('rt-pass') || {}).value || '',
+  };
+}
+
+async function routerDetect() {
+  const msg = $('rt-msg'), badge = $('rt-badge');
+  if (msg) msg.textContent = '探测中…';
+  const r = await api('/api/router/detect', { ip: _rtBody().ip });
+  if (msg) msg.textContent = r.msg || '';
+  if (badge) {
+    badge.textContent = r.ok ? 'OpenWrt' : '未知';
+    badge.className = 'badge ' + (r.ok ? 'ok' : '');
+  }
+  if (r.host && $('rt-ip') && !$('rt-ip').value) $('rt-ip').value = r.host;
+}
+
+async function routerApply() {
+  const b = _rtBody();
+  if (!b.password) {
+    if ($('rt-msg')) $('rt-msg').textContent = '请先填路由器密码';
+    return;
+  }
+  const msg = $('rt-msg');
+  if (msg) msg.textContent = '正在写入路由器…';
+  const r = await api('/api/router/apply', b);
+  if (msg) msg.textContent = r.msg || (r.ok ? '已写入' : '失败');
+  if (r.ok) {
+    if ($('rt-badge')) {
+      $('rt-badge').textContent = '已配置';
+      $('rt-badge').className = 'badge ok';
+    }
+    if ($('s1-badge')) {
+      $('s1-badge').textContent = '已用路由器';
+      $('s1-badge').className = 'badge ok';
+    }
+  }
+}
+
+async function routerRestore() {
+  const b = _rtBody();
+  if (!b.password) {
+    if ($('rt-msg')) $('rt-msg').textContent = '请先填路由器密码';
+    return;
+  }
+  const msg = $('rt-msg');
+  if (msg) msg.textContent = '正在还原…';
+  const r = await api('/api/router/restore', b);
+  if (msg) msg.textContent = r.msg || (r.ok ? '已还原' : '失败');
+  if (r.ok && $('rt-badge')) {
+    $('rt-badge').textContent = '未配置';
+    $('rt-badge').className = 'badge';
+  }
+}
+
+
+function toggleLogPanel() {
+  const shell = document.querySelector('.shell');
+  if (!shell) return;
+  shell.dataset.logTouched = '1';
+  const hidden = shell.classList.toggle('log-hidden');
+  const btn = $('logpanel-toggle');
+  if (btn) btn.textContent = hidden ? '⟨' : '⟩';
+  if (!hidden) {
+
+    const body = $('logbody');
+    if (body) body.scrollTop = body.scrollHeight;
+  }
+}
+
+
+function toggleLog() { toggleLogPanel(); }
+
+
+function syncTopbarHeight() {
+  const tb = document.querySelector('.topbar');
+  if (!tb) return;
+  const h = Math.round(tb.getBoundingClientRect().height);
+  if (h > 0) document.documentElement.style.setProperty('--topbar-h', h + 'px');
+}
+window.addEventListener('resize', syncTopbarHeight);
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', syncTopbarHeight);
+} else {
+  syncTopbarHeight();
+}
+setTimeout(syncTopbarHeight, 300);
+
+
+function autoCollapseLog() {
+  const shell = document.querySelector('.shell');
+  if (!shell) return;
+  if (shell.dataset.logTouched) return;
+  if (window.innerWidth < 1400) {
+    shell.classList.add('log-hidden');
+    const btn = $('logpanel-toggle');
+    if (btn) btn.textContent = '\u27e8';
+  }
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', autoCollapseLog);
+} else {
+  autoCollapseLog();
+}
+
+
+async function pickMode(which, silent) {
+
+
+  if (isDocker() && !silent) return;
+
+  const modes = ['hosts', 'dns', 'divert'];
+  S.modePick = which;
+  try { localStorage.setItem('ps5lb_mode', which); } catch (e) {}
+
+
+  if (which !== 'dns' && !silent) {
+    const dnsOn = !!(S.state && S.state.hijack && S.state.hijack.dns_running);
+    if (dnsOn) {
+      try {
+        await api('/api/builtin/stop', {});
+        await tick();
+      } catch (e) {}
+    }
+  }
+
+  modes.forEach((m) => {
+    const box = $('mode-' + m);
+    if (box) box.style.display = (m === which) ? '' : 'none';
+    const card = $('pick-' + m);
+    if (card) card.classList.toggle('active', m === which);
+  });
+
+
+  if (silent) return;
+  const target = $('mode-' + which);
+  if (target && target.scrollIntoView) {
+    target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+
+async function saveProxyAndStartDns() {
+  const el = $('in-proxy-1st');
+  const proxy = (el ? el.value : '').trim();
+  if (!proxy) {
+    alert('请先填代理服务器。\n\n这条路必须有一个能上外网的代理，'
+      + '否则 Twitch 应用会打不开，也就点不到「开始直播」。');
+    if (el) el.focus();
+    return;
+  }
+  if (!/^(https?:\/\/)?[\w.-]+:\d+/.test(proxy)) {
+    alert('代理格式看起来不对。\n正确写法类似：http://192.168.110.99:7890');
+    return;
+  }
+  const st = S.state || {};
+
+
+  const r = await api('/api/area', {
+    area_id: (st.bili && st.bili.area_id) || '236',
+    twitch_proxy: proxy,
+  });
+  if (!r || !r.ok) {
+    alert('代理保存失败：' + ((r && r.msg) || '未知错误'));
+    return;
+  }
+  if ($('in-proxy')) $('in-proxy').value = proxy;
+  await useBuiltinDns();
+}
+
+
+(function restoreModePick() {
+  try {
+    let saved = localStorage.getItem('ps5lb_mode');
+    if (saved === 'pc') saved = 'divert';
+    if (saved === 'router') saved = 'hosts';
+    if (saved === 'hosts' || saved === 'dns' || saved === 'divert') {
+      S.modePick = saved;
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => pickMode(saved, true));
+      } else {
+        pickMode(saved, true);
+      }
+    }
+  } catch (e) {}
+})();
+
+
+async function useBuiltinDns() {
+  const box = $('router-nohosts');
+
+  if (box) {
+    box.style.display = '';
+    box.innerHTML = '<div class="note">正在启动内置 DNS…（要管理员权限）</div>';
+  }
+  const r = await api('/api/builtin/start', {});
+  const ip = (S.state && S.state.lan_ip) || '这台电脑的 IP';
+  if (r && r.ok) {
+    if (box) {
+      box.innerHTML = '<div class="verdict ok"><div class="icon">✓</div><div>'
+        + '<h4>内置 DNS 已开启</h4>'
+        + '<p>去 PS5 上这样设（顺序别乱）：</p>'
+        + '<ol style="margin:8px 0 0 18px;line-height:1.9">'
+        + '<li>先看一眼<b>当前自动获取到的 IP / 掩码 / 网关</b>，记下来（拍照最快）</li>'
+        + '<li>把 IP 地址设置改成「手动」，填<b>刚才记下的那三个值</b></li>'
+        + '<li>DNS 也改成「手动」，填 <b class="hl">' + esc(ip) + '</b></li>'
+        + '</ol>'
+        + '</div></div>'
+        + '<p class="small dim" style="margin-top:10px">'
+        + '为什么三个值也要手填：PS5 不允许「IP 自动 + DNS 手动」混着来，'
+        + '一改 DNS 就会强制把 IP 也切手动。填的都是它本来就在用的值，'
+        + '不影响上网，只是把 DNS 换成这台电脑。</p>'
+        + '<p class="small dim">加速器装在路由器上时不提供 IP / 掩码 / 网关，'
+        + '那三个值来自路由器的 DHCP，照 PS5 现在显示的值抄就行。</p>'
+        + '<div class="btn-row"><button class="btn sm ghost" onclick="stopBuiltinDns()">'
+        + '关闭内置 DNS</button></div>';
+    }
+    await tick();
+  } else {
+    const why = (r && (r.detail || r.msg)) || '未知原因';
+    if (box) {
+      box.innerHTML = '<div class="note err">内置 DNS 启动失败：' + esc(why) + '<br>'
+        + '常见原因：53 端口被占用（加速器或系统的 DNS 服务）、没有管理员权限。</div>';
+    }
+  }
+}
+
+async function stopBuiltinDns() {
+  await api('/api/builtin/stop', {});
+  location.reload();
+}

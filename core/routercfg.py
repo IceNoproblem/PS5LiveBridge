@@ -1,26 +1,68 @@
-# -*- coding: utf-8 -*-
-"""
-core/routercfg.py —— 路由器 DNS 重定向的「照着做就行」文案与配置片段
-
-产品定位决定这里的写法：用户手上大概率是小米路由器（或者刷了 OpenWrt 的软路由），
-所以只给两种主推方案 + 一组备选，每个方案都给「点哪里 → 填什么 → 怎么保存」。
-
-绝不写「请配置 DNS 重定向」这种废话——用户要的是第几层菜单点哪个按钮。
-"""
 from __future__ import annotations
 
 from . import paths
 
-# ──────────────────────────────────────────────────────────────
-# 片段生成
-# ──────────────────────────────────────────────────────────────
+TWITCH_INGEST_NODES = [
+    "contribute.live-video.net",
+    "global-contribute.live-video.net",
+    "ingest.global-contribute.live-video.net",
+    "apn20.contribute.live-video.net",
+    "hkg06.contribute.live-video.net",
+    "hkg07.contribute.live-video.net",
+    "dus01.contribute.live-video.net",
+    "cph.contribute.live-video.net",
+    "fra06.contribute.live-video.net",
+    "sjc01.contribute.live-video.net",
+    "dfw01.contribute.live-video.net",
+    "iad05.contribute.live-video.net",
+    "lax03.contribute.live-video.net",
+    "lhr03.contribute.live-video.net",
+    "nrt02.contribute.live-video.net",
+    "sin03.contribute.live-video.net",
+    "syd01.contribute.live-video.net",
+    "tpe01.contribute.live-video.net",
+    "icn01.contribute.live-video.net",
+    "sea01.contribute.live-video.net",
+]
+
+_HOSTS_EXPAND = {
+    "live-video.net": TWITCH_INGEST_NODES,
+    "twitch.tv": ["irc.twitch.tv", "tmi.twitch.tv"],
+    "ttvnw.net": [],
+    "twitchcdn.net": [],
+}
+
+
+def _expand_for_hosts(domains) -> list:
+    """把通配后缀展开成 hosts 能用的具体域名（去重、保序）。"""
+    out = []
+    for d in (domains or []):
+        key = str(d).strip().lower()
+        if key in _HOSTS_EXPAND:
+            for sub in _HOSTS_EXPAND[key]:
+                if sub not in out:
+                    out.append(sub)
+        else:
+            if key and key not in out:
+                out.append(key)
+    return out
+
+
 def hosts_snippet(ip: str, domains) -> str:
-    """标准 hosts 格式：小米自定义 HOST / 斐讯 / 老毛子 / 梅林 通用。"""
+    """
+    标准 hosts 格式：小米自定义 HOST / 斐讯 / 老毛子 / 梅林 通用。
+
+    ⚠️ hosts 不支持通配符：写「live-video.net」不会匹配
+    「hkg06.contribute.live-video.net」。所以这里必须把节点展开成具体条目。
+    """
+    real = _expand_for_hosts(domains)
     lines = ["# PS5 直播桥 · 路由器 hosts（本机 IP：%s）" % ip, ""]
-    for d in domains:
+    for d in real:
         lines.append("%s %s" % (ip, d))
     lines.append("")
-    lines.append("# 说明：只重定向推流与弹幕通道，其余域名不受影响")
+    lines.append("# 说明：只重定向 PS5 的推流与弹幕通道，其余域名不受影响")
+    lines.append("# 注意：hosts 不支持通配符，所以下面每个地区节点都单独列了一行。")
+    lines.append("#       如果 PS5 连到了没列出的节点，会出现「开播了但没画面」。")
     return "\n".join(lines)
 
 
@@ -37,14 +79,15 @@ def ikuai_rows(ip: str, domains) -> list:
     return [{"domain": d, "ip": ip} for d in domains]
 
 
-# ──────────────────────────────────────────────────────────────
-# 方案文案
-# ──────────────────────────────────────────────────────────────
 def guides(ip: str, domains) -> list:
     """
     返回方案列表。第一个是主推（小米），第二个是软路由（OpenWrt），
     其余是备选，UI 收在「其他路由器」里。
     """
+    domains = [d for d in (domains or [])
+               if not any(x in str(d).lower()
+                          for x in ("bilivideo.com", "bilibili.com", "biliapi"))]
+
     items = [
         {
             "key": "xiaomi",
@@ -130,8 +173,6 @@ def guides(ip: str, domains) -> list:
     ]
 
     if paths.PLATFORM == "docker":
-        # 容器版没有「改本机 hosts」这条路（讲的是 Windows 路径，只会让人更乱），
-        # 而且容器本来也影响不到 PS5 的解析。直接去掉这一项。
         items = [x for x in items if x["key"] != "hostsfile"]
         for x in items:
             if x["key"] == "openwrt":

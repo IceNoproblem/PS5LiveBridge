@@ -1,15 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-core/bili.py —— B 站直播能力（扫码登录 / 开播 / 关播 / 分区 / 发弹幕）
-
-来源与取舍：
-    开播签名走「哔哩哔哩直播姬」的 appkey（公开且长期稳定），
-    这是业内绕开网页端人脸验证的标准做法，bililivetool 与 PSLinkB 都在用。
-    没有它，startLive 会直接返回 60024 要求人脸认证。
-
-对外只暴露同步方法（内部用 requests），因为调用方是 Flask 线程和编排器线程，
-不是事件循环 —— 免得再把 asyncio 搅进来。
-"""
 from __future__ import annotations
 
 import hashlib
@@ -33,8 +21,6 @@ BASE_HEADERS = {
     "origin": "https://live.bilibili.com",
 }
 
-# 直播姬客户端 headers —— startLive / stopLive 必须用这套，
-# 混进 web headers（referer/origin/Chrome UA）会被当网页请求触发人脸验证。
 APP_HEADERS = {
     "accept": "application/json, text/plain, */*",
     "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -45,19 +31,15 @@ APP_HEADERS = {
     "env": "prod",
 }
 
-# 直播姬 appkey / appsec（公开值，所有第三方开播工具都用这一对）
 APP_KEY = "aae92bc66f3edfab"
 APP_SEC = "af125a0d5279fd576c1b4418a3e8276d"
 
-# Electron 桌面端通道（web_electron_link）——不触发人脸验证的概率更高
 ELECTRON_KEY = "aa1e74ee4874176e"
 ELECTRON_SEC = "54e6a9a31b911cd5fc0daa66ebf94bc4"
 ELECTRON_BUILD = "1001017006"
 
-# 凭据落在可写目录：桌面版是 exe 同级，容器里是挂进来的 /data（重启不丢登录）
 CRED_FILE = os.path.join(paths.DATA_DIR, "bili_credential.json")
 
-# 开播失败码 → 人话
 START_LIVE_ERRORS = {
     -101: "登录已过期，请重新扫码",
     -400: "请求参数错误",
@@ -72,7 +54,6 @@ START_LIVE_ERRORS = {
     10030: "分区未选择",
 }
 
-# wbi 打乱表
 _MIXIN_TAB = [
     46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35, 27, 43, 5, 49,
     33, 9, 42, 19, 29, 28, 14, 39, 12, 38, 41, 13, 37, 48, 7, 16, 24, 55, 40,
@@ -93,14 +74,12 @@ class Bilibili(object):
         self.uid = 0
         self.uname = ""
         self.room_id = 0
+        self.last_channel = ""
         self._wbi_keys = ("", "")
         self._wbi_at = 0.0
         self._partitions = {}
         self.load_credential()
 
-    # ──────────────────────────────────────────────
-    # 凭据持久化
-    # ──────────────────────────────────────────────
     def load_credential(self) -> bool:
         try:
             if not os.path.exists(CRED_FILE):
@@ -161,9 +140,6 @@ class Bilibili(object):
     def csrf(self) -> str:
         return self.cookies.get("bili_jct", "")
 
-    # ──────────────────────────────────────────────
-    # 底层请求
-    # ──────────────────────────────────────────────
     def _request(self, method, url, params=None, data=None, timeout=12) -> dict:
         try:
             if method.upper() == "GET":
@@ -216,9 +192,6 @@ class Bilibili(object):
         params["sign"] = hashlib.md5((query + ELECTRON_SEC).encode()).hexdigest()
         return params
 
-    # ──────────────────────────────────────────────
-    # wbi 签名（弹幕信息、发弹幕需要）
-    # ──────────────────────────────────────────────
     def _refresh_wbi(self, force=False) -> bool:
         if not force and self._wbi_keys[0] and time.time() - self._wbi_at < 1800:
             return True
@@ -248,9 +221,6 @@ class Bilibili(object):
         params["w_rid"] = hashlib.md5((query + mixin).encode()).hexdigest()
         return params
 
-    # ──────────────────────────────────────────────
-    # 扫码登录
-    # ──────────────────────────────────────────────
     def qr_generate(self) -> dict:
         d = self._request("GET", "https://passport.bilibili.com/x/passport-login/web/qrcode/generate")
         if d.get("code") == 0 and d.get("data"):
@@ -278,7 +248,6 @@ class Bilibili(object):
         if code != 0:
             return {"status": "waiting"}
 
-        # 登录成功：把 cookie 收集起来（poll 的 Set-Cookie 是唯一来源）
         ck = r.cookies.get_dict()
         if not ck.get("SESSDATA"):
             for c in self.session.cookies:
@@ -287,7 +256,6 @@ class Bilibili(object):
         self.cookies = ck
         self.uid = int(ck.get("DedeUserID") or 0)
 
-        # 补 buvid3（缺了会被风控拦）
         if not ck.get("buvid3"):
             spi = self._request("GET", "https://api.bilibili.com/x/frontend/finger/spi")
             if spi.get("code") == 0:
@@ -342,9 +310,6 @@ class Bilibili(object):
             return d.get("data") or {}
         return {}
 
-    # ──────────────────────────────────────────────
-    # 分区
-    # ──────────────────────────────────────────────
     def partitions(self) -> dict:
         if self._partitions:
             return self._partitions
@@ -375,9 +340,6 @@ class Bilibili(object):
             return {"ok": True}
         return _err(d.get("code", -1), d.get("message") or d.get("msg"))
 
-    # ──────────────────────────────────────────────
-    # 开播 / 关播
-    # ──────────────────────────────────────────────
     def start_live(self, area_id: str = "236", title: str = "") -> dict:
         """
         开播成功返回：
@@ -396,13 +358,11 @@ class Bilibili(object):
             if not r["ok"]:
                 logbus.warn("改直播间标题失败（不影响开播）：%s" % r.get("msg"), tag="B站")
 
-        # 1) 取服务器时间戳
         now = self._request("GET", "https://api.bilibili.com/x/report/click/now")
         if now.get("code") != 0:
             return _err(-1, "取服务器时间失败：%s" % now.get("msg"))
         ts = (now.get("data") or {}).get("now") or int(time.time())
 
-        # 2) 取直播姬版本号（不带这个会被判客户端过期）
         ver = self._app_request(
             "GET",
             "https://api.live.bilibili.com/xlive/app-blink/v1/liveVersionInfo/getHomePageLiveVersion",
@@ -411,8 +371,7 @@ class Bilibili(object):
             return _err(ver.get("code", -1), "取直播姬版本失败：%s" % ver.get("msg"))
         vdata = ver.get("data") or {}
 
-        # 3) 开播——双通道：先 Electron（不触发人脸概率高），不行再直播姬
-        # 关键：60024/60043（人脸）不换通道，直接返回等验证；只有其他错误才降级
+        chosen_channel = "electron"
         for channel in ("electron", "livehime"):
             if channel == "electron":
                 payload = {
@@ -443,12 +402,12 @@ class Bilibili(object):
 
             code = d.get("code", -1)
             if code == 0:
+                chosen_channel = channel
+                self.last_channel = channel
                 logbus.info("开播成功（通道：%s）" % channel, tag="B站")
                 break
-            # 人脸验证 → 直接返回，不换通道（换通道没用，验证是账号级的）
             if code in (60024, 60043):
                 break
-            # 其他错误 → 换通道降级
             if channel == "electron":
                 logbus.info("Electron 通道失败（%s），降级直播姬…" % code, tag="B站")
                 continue
@@ -456,7 +415,13 @@ class Bilibili(object):
 
         if code != 0:
             msg = START_LIVE_ERRORS.get(code) or d.get("message") or d.get("msg") or "开播失败"
-            logbus.error("B 站开播失败（%s）：%s" % (code, msg), tag="B站")
+            from .errors import BiliAPIError
+            err = BiliAPIError("StartLive", code, msg)
+            logbus.error(str(err), tag="B站")
+            if err.is_face_auth:
+                logbus.warn("这一类错误是人脸验证，去手机上过一下就好", tag="B站")
+            elif err.is_not_logged_in:
+                logbus.warn("登录态失效，重新扫码（第 4 步）", tag="B站")
             face_url = ""
             if code == 60024:
                 face_url = ((d.get("data") or {}).get("qr") or "")
@@ -471,7 +436,6 @@ class Bilibili(object):
         addr = rtmp.get("addr", "")
         key = rtmp.get("code", "")
 
-        # RTMP 备用线路 + SRT
         alt = {"addr": "", "code": ""}
         srt = {"addr": "", "code": ""}
         for p in data.get("protocols") or []:
@@ -487,6 +451,7 @@ class Bilibili(object):
         logbus.ok("B 站已开播，推流地址已获取", tag="B站")
         return {
             "ok": True,
+            "channel": chosen_channel,
             "room_id": self.room_id,
             "rtmp_addr": addr,
             "rtmp_code": key,
@@ -496,14 +461,21 @@ class Bilibili(object):
             "srt_code": srt["code"],
         }
 
-    def stop_live(self) -> dict:
+    def stop_live(self, channel: str = "") -> dict:
+        """
+        关播。channel 参数必须和 start_live 返回的 channel 配对。
+        channel="electron" → 用 Electron 签名关播
+        channel="livehime" 或空 → 用直播姬签名关播（默认）
+        """
         if not self.logged_in or not self.room_id:
             return _err(-101)
+        sign_fn = self._electronsign if channel == "electron" else self._appsign
         d = self._app_request("POST", "https://api.live.bilibili.com/room/v1/Room/stopLive",
-                              data=self._appsign({"room_id": self.room_id, "platform": "pc_link",
-                                                  "csrf_token": self.csrf, "csrf": self.csrf}))
+                              data=sign_fn({"room_id": self.room_id, "platform":
+                                            "web_electron_link" if channel == "electron" else "pc_link",
+                                            "csrf_token": self.csrf, "csrf": self.csrf}))
         if d.get("code") == 0:
-            logbus.info("B 站已关播", tag="B站")
+            logbus.info("B 站已关播（通道：%s）" % (channel or "livehime"), tag="B站")
             return {"ok": True}
         return _err(d.get("code", -1), d.get("message") or d.get("msg") or "关播失败")
 
@@ -543,9 +515,6 @@ class Bilibili(object):
         except Exception:
             return 0
 
-    # ──────────────────────────────────────────────
-    # 弹幕
-    # ──────────────────────────────────────────────
     def danmu_info(self) -> dict:
         params = self._wbi_sign({"id": self.room_id, "type": 0})
         d = self._request(
@@ -577,9 +546,6 @@ class Bilibili(object):
         return _err(code, mapping.get(code) or d.get("message") or "发送失败")
 
 
-# ──────────────────────────────────────────────────────────────
-# 二维码图片
-# ──────────────────────────────────────────────────────────────
 def qr_png_data_url(text: str, box: int = 8) -> str:
     """把登录链接画成 PNG 的 data URL，前端直接 <img src>。"""
     try:

@@ -1,21 +1,9 @@
-# -*- coding: utf-8 -*-
-"""
-core/nginxmgr.py —— nginx-rtmp 收流端管理
-
-为什么还用 nginx-rtmp：Windows 上这是唯一稳定可靠的 RTMP 收流方案，
-自己写 RTMP 服务端（PSLinkB 试过 rtmp-rs/odv-rml 等多个库）最终也回到这套。
-它同时提供 /stat，我们据此知道「PS5 有没有在推、推的流名是什么」。
-
-两个老坑：
-    1. nginx 打不开含中文的路径 —— 会以 1113 失败退出，日志里是一句
-       "No mapping for the Unicode character"。所以必需时把 prefix 搬到纯英文目录。
-    2. 1935 被上次残留的 nginx 占着 —— 表现为 bind() failed，需要先清干净。
-"""
 from __future__ import annotations
 
 import os
 import shutil
 import subprocess
+import sys
 import threading
 import time
 import urllib.request
@@ -76,11 +64,6 @@ http {{
 }}
 """
 
-# Linux / 容器用的版本。三处必须和 Windows 版不同：
-#   load_module   系统装的 nginx 不带 rtmp，要显式加载 .so（Debian/Ubuntu 包）
-#   daemon off    nginx 默认后台跑、父进程立刻退出，我们就管不到它的死活，
-#                 running() 永远 False、崩溃也看不见。必须前台跑。
-#   绝对路径      prefix 不在编译时的默认位置，logs/pid 用绝对路径最稳
 CONF_TEMPLATE_POSIX = r"""# 由 PS5 直播桥生成，请勿手改（每次启动会覆盖）
 {user}{load_module}worker_processes 1;
 error_log {prefix}/logs/error.log warn;
@@ -136,10 +119,9 @@ http {{
 }}
 """
 
-# nginx-rtmp 模块在各发行版里的落点
 RTMP_MODULE_CANDIDATES = (
-    "/usr/lib/nginx/modules/ngx_rtmp_module.so",       # Debian / Ubuntu
-    "/usr/lib64/nginx/modules/ngx_rtmp_module.so",     # Fedora / RHEL
+    "/usr/lib/nginx/modules/ngx_rtmp_module.so",
+    "/usr/lib64/nginx/modules/ngx_rtmp_module.so",
     "/usr/lib/nginx/modules/ngx_rtmp.so",
     "/etc/nginx/modules/ngx_rtmp_module.so",
 )
@@ -161,12 +143,8 @@ class NginxManager(object):
         self.exe = ""
         self.module = ""
         self.last_error = ""
-        # 串行化 start()：见 start() 里的注释
         self._start_lock = threading.Lock()
 
-    # ──────────────────────────────────────────────
-    # 路径准备
-    # ──────────────────────────────────────────────
     def _is_ascii(self, p: str) -> bool:
         try:
             p.encode("ascii")
@@ -211,7 +189,6 @@ class NginxManager(object):
 
         self.exe = os.path.join(self.prefix, "nginx.exe" if netutil.IS_WINDOWS else "nginx")
         if not os.path.exists(self.exe):
-            # 开发机（macOS/Linux）上通常没有 nginx.exe，允许用系统 nginx 调试
             alt = shutil.which("nginx")
             if alt:
                 self.exe = alt
@@ -224,12 +201,17 @@ class NginxManager(object):
 
     def _prepare_posix(self) -> bool:
         exe = shutil.which("nginx") or ""
-        for cand in ("/usr/sbin/nginx", "/usr/local/sbin/nginx", "/usr/bin/nginx"):
+        for cand in ("/usr/sbin/nginx", "/usr/local/sbin/nginx", "/usr/bin/nginx",
+                     "/usr/local/bin/nginx", "/opt/homebrew/bin/nginx"):
             if not exe and os.path.exists(cand):
                 exe = cand
         if not exe:
-            self.last_error = ("找不到 nginx。容器镜像里要有 nginx 和 nginx-rtmp 模块；"
-                               "自己装的话：apt install nginx libnginx-mod-rtmp")
+            if sys.platform == "darwin":
+                self.last_error = ("找不到 nginx。macOS 上请用 Homebrew 安装：\n"
+                                   "brew install nginx-full（含 RTMP 模块）")
+            else:
+                self.last_error = ("找不到 nginx。容器镜像里要有 nginx 和 nginx-rtmp 模块；"
+                                   "自己装的话：apt install nginx libnginx-mod-rtmp")
             return False
 
         self.module = find_rtmp_module()
@@ -268,9 +250,6 @@ class NginxManager(object):
         if netutil.IS_WINDOWS:
             text = CONF_TEMPLATE.format(rtmp_port=self.rtmp_port, stat_port=self.stat_port)
         else:
-            # 容器里 master 是 root，而 error_log 目录 root:root 755，worker 若按
-            # 编译默认落到 nobody 会写不进日志、启动直接失败。所以显式让 worker
-            # 也用 root。非 root 跑时 nginx 会忽略这条并发一句警告，无害。
             try:
                 is_root = os.geteuid() == 0
             except AttributeError:
@@ -282,20 +261,13 @@ class NginxManager(object):
                 rtmp_port=self.rtmp_port,
                 stat_port=self.stat_port,
             )
-        # nginx 配置文件用 \n 即可，但 Windows 下按 UTF-8 写不会出问题
         with open(os.path.join(conf_dir, "nginx.conf"), "w", encoding="utf-8") as f:
             f.write(text)
 
-    # ──────────────────────────────────────────────
-    # 启停
-    # ──────────────────────────────────────────────
     def running(self) -> bool:
         return bool(self.proc and self.proc.poll() is None)
 
     def start(self) -> bool:
-        # 串行化：main.py 和「自动开劫持」线程可能同时调到这里，
-        # 两个调用都看到「没在跑、端口没占」就会各起一组 nginx，
-        # 结果 1935 只被一组占住，另一组空转（实测一次启动留下 4 个进程）。
         with self._start_lock:
             return self._start_locked()
 
@@ -303,8 +275,6 @@ class NginxManager(object):
         if self.running():
             return True
         if netutil.port_listening(self.rtmp_port):
-            # 端口已经在听，说明已经有一组在跑了（可能不是本对象起的残留），
-            # 直接认它，别再起第二组
             pid, name = netutil.port_owner(self.rtmp_port)
             if pid and "nginx" in (name or "").lower():
                 logbus.info("端口 %d 已有 nginx 在监听（PID %d），复用它" % (self.rtmp_port, pid),
@@ -331,9 +301,6 @@ class NginxManager(object):
             si.wShowWindow = subprocess.SW_HIDE
             startup["startupinfo"] = si
         else:
-            # nginx 的默认 prefix 是编译时写死的（Debian 是 /etc/nginx），
-            # 光改 cwd 不够，必须显式给 -p 和 -c，否则它跑去读系统那份配置：
-            # 里面既没有 rtmp 段也没有我们的端口，表现为「起来了但 1935 没人听」。
             cmd += ["-p", self.prefix + "/",
                     "-c", os.path.join(self.prefix, "conf", "nginx.conf")]
 
@@ -373,11 +340,9 @@ class NginxManager(object):
         return True
 
     def stop(self) -> None:
-        # 优先用 nginx -s quit 优雅退出（让 RTMP 会话正常结束）
         if self.exe and os.path.exists(self.exe):
             sig_cmd = [self.exe, "-s", "quit"]
             if not netutil.IS_WINDOWS:
-                # -s 要靠 conf 里的 pid 指令找到进程，所以同样得给 -c
                 sig_cmd += ["-p", self.prefix + "/",
                             "-c", os.path.join(self.prefix, "conf", "nginx.conf")]
             try:
@@ -398,13 +363,9 @@ class NginxManager(object):
                 except Exception:
                     pass
         if netutil.IS_WINDOWS:
-            # nginx 会 fork worker，父进程退了 worker 可能还在
             netutil.run(["taskkill", "/F", "/IM", "nginx.exe"], timeout=5)
         self.proc = None
 
-    # ──────────────────────────────────────────────
-    # 状态（/stat）
-    # ──────────────────────────────────────────────
     def stat_xml(self, timeout=1.5) -> str:
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         try:
@@ -444,11 +405,6 @@ class NginxManager(object):
                 width = height = fps = 0
                 meta = stream.find("meta")
                 if meta is not None:
-                    # 真机实测：nginx-rtmp 把媒体信息放在嵌套子节点里
-                    #   <meta><video><width>1280</width><height>720</height>
-                    #   <frame_rate>30</frame_rate></video><audio>…</audio></meta>
-                    # 早先按属性写法（meta width=）解析，结果界面上永远显示 0×0。
-                    # 两种写法都兼容，谁的机器版本不同都不至于又不显示。
                     video = meta.find("video")
                     if video is not None:
                         try:
@@ -470,7 +426,7 @@ class NginxManager(object):
                     "app": app_name or "app",
                     "name": name,
                     "uptime": num("time"),
-                    "bw_in": num("bw_in", 1024),   # kbps
+                    "bw_in": num("bw_in", 1024),
                     "width": width, "height": height, "fps": fps,
                 }
         return empty

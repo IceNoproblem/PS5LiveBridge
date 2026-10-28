@@ -1,16 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-core/netutil.py —— 本机网络环境（纯标准库）
-
-回答四个问题：
-    1. 本机该用哪个 IP 答复 PS5？（避开 VPN / 虚拟网卡 / 加速器 fake-ip 段）
-    2. 加速器在不在跑？它的虚拟网卡 IP / DNS 是多少？
-    3. 端口占没占？谁占的？
-    4. Windows 防火墙放行了没有？（不放行 = PS5 永远连不上，最高频失败原因）
-
-所有 Windows 调用都做了平台判断，非 Windows 会安全降级 ——
-这样开发机（macOS）能跑全流程自测。
-"""
 from __future__ import annotations
 
 import ipaddress
@@ -24,7 +11,6 @@ import time
 
 IS_WINDOWS = sys.platform == "win32"
 
-# 虚拟网卡关键字：选答复 IP 时要减分
 VIRTUAL_HINTS = (
     "vethernet", "vmware", "virtualbox", "hyper-v", "tap", "tun", "tailscale",
     "zerotier", "wireguard", "clash", "mihomo", "meta", "docker", "wsl",
@@ -32,7 +18,6 @@ VIRTUAL_HINTS = (
     "npcap loopback", "utun", "awdl", "llw", "bridge",
 )
 
-# 加速器虚拟网卡关键字：这些网卡上的 IP 才是 PS5 真正的网关
 ACCEL_ADAPTER_HINTS = (
     "uu", "netease", "网易", "xunyou", "迅游", "leigod", "雷神", "biubiu",
     "qiyou", "奇游", "accel", "booster", "wtfast", "exitlag",
@@ -44,15 +29,11 @@ ACCEL_PROCESS_HINTS = (
     "wtfast", "exitlag", "gameraccelerator",
 )
 
-# 加速器做 DNS 分流时的 fake-ip 段
 FAKE_IP_PREFIXES = ("198.18.", "198.19.")
 
 _NON_ROUTABLE_PREFIXES = ("127.", "169.254.", "0.", "255.", "224.", "239.")
 
 
-# ──────────────────────────────────────────────────────────────
-# 命令执行
-# ──────────────────────────────────────────────────────────────
 def run(cmd, timeout=8, env=None):
     """
     执行命令返回 (returncode, 文本)。
@@ -89,9 +70,6 @@ def powershell(script, timeout=12):
                timeout=timeout)
 
 
-# ──────────────────────────────────────────────────────────────
-# 权限
-# ──────────────────────────────────────────────────────────────
 def is_admin() -> bool:
     if not IS_WINDOWS:
         try:
@@ -119,9 +97,6 @@ def elevate(args=None, exe=None) -> bool:
         return False
 
 
-# ──────────────────────────────────────────────────────────────
-# 子进程生命周期（Windows Job 对象）
-# ──────────────────────────────────────────────────────────────
 def add_kill_on_close_job() -> bool:
     """
     把自己放进一个「关闭即杀」的 Job 对象：本进程无论怎么死（含任务管理器强杀、
@@ -171,9 +146,6 @@ def add_kill_on_close_job() -> bool:
         JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
         extended_limit_information = 9
 
-        # ⚠️ 必须显式声明原型：ctypes 默认按 32 位 int 处理返回值，
-        # 在 x64 上 HANDLE 是被截断的，AssignProcessToJobObject 会返回
-        # 0 且 GetLastError=6（句柄无效）。这个坑只在真机上才看得见。
         kernel32.CreateJobObjectW.restype = wintypes.HANDLE
         kernel32.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
         kernel32.SetInformationJobObject.restype = wintypes.BOOL
@@ -193,18 +165,14 @@ def add_kill_on_close_job() -> bool:
             job, extended_limit_information, ctypes.byref(info), ctypes.sizeof(info))
         if not ok:
             return False
-        # 自己已在别人的 Job 里时（SSH 会话就是），Win8+ 允许嵌套，失败也不致命
         if not kernel32.AssignProcessToJobObject(job, kernel32.GetCurrentProcess()):
             return False
-        globals()["_JOB_HANDLE"] = job      # 持有句柄，进程退出时关闭即触发清理
+        globals()["_JOB_HANDLE"] = job
         return True
     except Exception:
         return False
 
 
-# ──────────────────────────────────────────────────────────────
-# 降权启动（浏览器必须用普通权限开）
-# ──────────────────────────────────────────────────────────────
 class _WinProc(object):
     """CreateProcessWithTokenW 拿到的是句柄不是 Popen，这里补一个 poll()。"""
 
@@ -323,16 +291,6 @@ def run_unelevated(args, cwd=None):
             return None
 
 
-# ──────────────────────────────────────────────────────────────
-# IP
-# ──────────────────────────────────────────────────────────────
-# ──────────────────────────────────────────────────────────────
-# 结果缓存
-#
-# 为什么必须有：这些探测每项都要起一次 PowerShell（冷启动 1~3 秒），
-# 而界面每 1.5 秒就要一次快照。实测不缓存时 /api/state 要 35 秒才返回，
-# 界面看起来就是「卡死」。网关、网卡、DNS 这类信息几十秒内不会变，缓存完全够用。
-# ──────────────────────────────────────────────────────────────
 _MEM = {}
 _MEM_LOCK = threading.Lock()
 
@@ -416,8 +374,6 @@ def _list_adapters() -> list:
     else:
         rc, out = run(["ifconfig"], timeout=5)
         if "inet " not in out and "inet addr" not in out:
-            # 精简镜像里没有 net-tools，退到 iproute2；两者格式不同，下面的
-            # 正则同时兼容（ifconfig: "eth0: ..." / ip: "2: eth0: <...>"）
             rc, out = run(["ip", "-4", "addr"], timeout=5)
         cur = ""
         for line in out.splitlines():
@@ -440,7 +396,7 @@ def _list_adapters() -> list:
         score = 0
         is_accel = any(h in low for h in ACCEL_ADAPTER_HINTS)
         if is_accel:
-            score -= 40          # 加速器网卡可以当网关，但不该拿来答复 DNS
+            score -= 40
         if any(h in low for h in VIRTUAL_HINTS) and not is_accel:
             score -= 100
         if any(h in low for h in ("以太网", "ethernet", "wlan", "wi-fi", "无线", "eth")):
@@ -507,11 +463,28 @@ def _get_gateways() -> dict:
                 if ip and re.match(r"^\d+\.\d+\.\d+\.\d+$", gw):
                     mapping[ip] = gw
     else:
-        rc, out = run(["netstat", "-rn"], timeout=5)
-        gws = re.findall(r"default\s+(\d+\.\d+\.\d+\.\d+)", out)
+        gw = ""
+        try:
+            with open("/proc/net/route", "r") as f:
+                next(f, None)
+                for line in f:
+                    parts = line.split()
+                    if len(parts) < 3:
+                        continue
+                    dest, gateway = parts[1], parts[2]
+                    if dest == "00000000" and gateway != "00000000":
+                        raw = int(gateway, 16)
+                        gw = ".".join(str(b) for b in raw.to_bytes(4, "little"))
+                        break
+        except Exception:
+            pass
+        if not gw:
+            rc, out = run(["netstat", "-rn"], timeout=5)
+            gws = re.findall(r"default\s+(\d+\.\d+\.\d+\.\d+)", out)
+            gw = gws[0] if gws else ""
         ip = socket_lan_ip()
-        if gws and ip:
-            mapping[ip] = gws[0]
+        if gw and ip:
+            mapping[ip] = gw
     return mapping
 
 
@@ -561,7 +534,6 @@ def _accelerator_dns() -> list:
                     s = s.strip()
                     if re.match(r"^\d+\.\d+\.\d+\.\d+$", s) and s not in found:
                         found.append(s)
-    # 从本机网卡 DNS 里捞 fake-ip 段（有些加速器改的是主网卡 DNS）
     for s in system_dns():
         if any(s.startswith(p) for p in FAKE_IP_PREFIXES) and s not in found:
             found.append(s)
@@ -646,9 +618,6 @@ def classify_dns(ip: str) -> str:
     return "public"
 
 
-# ──────────────────────────────────────────────────────────────
-# 端口
-# ──────────────────────────────────────────────────────────────
 def port_free(port: int, proto: str = "tcp", host: str = "0.0.0.0") -> bool:
     stype = socket.SOCK_DGRAM if proto == "udp" else socket.SOCK_STREAM
     s = None
@@ -656,7 +625,6 @@ def port_free(port: int, proto: str = "tcp", host: str = "0.0.0.0") -> bool:
         s = socket.socket(socket.AF_INET, stype)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         if proto == "tcp":
-            # Windows 上 SO_REUSEADDR 语义不同，别用它抢端口
             try:
                 s.bind((host, port))
             except OSError:
@@ -685,9 +653,6 @@ def port_listening(port: int, proto: str = "tcp") -> bool:
             if needle in line and "LISTENING" in line.upper():
                 return True
         return False
-    # Linux 先读 /proc/net/tcp：不依赖任何外部命令，容器里最可靠。
-    # （镜像里没有 lsof 是常态，早先的版本在这里会误判成「端口没在听」，
-    #   于是又起一组 nginx，两组抢 1935。）
     if sys.platform.startswith("linux") and proto == "tcp":
         found = _proc_net_listening(port)
         if found is not None:
@@ -707,7 +672,7 @@ def _proc_net_listening(port: int):
                     parts = line.split()
                     if len(parts) < 4:
                         continue
-                    if parts[3] != "0A":        # 0A = TCP_LISTEN
+                    if parts[3] != "0A":
                         continue
                     seen = True
                     try:
@@ -770,9 +735,6 @@ def kill_pid(pid: int) -> bool:
     return rc == 0
 
 
-# ──────────────────────────────────────────────────────────────
-# Windows 防火墙
-# ──────────────────────────────────────────────────────────────
 FIREWALL_RULES = [
     ("PS5LiveBridge-DNS-UDP", "UDP", 53),
     ("PS5LiveBridge-DNS-TCP", "TCP", 53),
@@ -822,9 +784,6 @@ def ensure_firewall(ports=None) -> tuple:
     return all_ok, msgs
 
 
-# ──────────────────────────────────────────────────────────────
-# 探测
-# ──────────────────────────────────────────────────────────────
 def probe_tcp(host: str, port: int, timeout: float = 1.5) -> bool:
     s = None
     try:

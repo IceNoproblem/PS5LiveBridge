@@ -1,12 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-core/services.py —— 异步服务宿主
-
-整个程序只有这一处拥有事件循环：
-    弹幕 WebSocket 与 PS5 的 IRC 连接都是 asyncio 的活，
-    而编排器、Flask 都是同步线程 —— 用 call_soon_threadsafe 搭一座桥，
-    避免「到处 asyncio.run()」那种各自开循环、互相抢端口的写法。
-"""
 from __future__ import annotations
 
 import asyncio
@@ -32,9 +23,6 @@ class Services(object):
         self.irc.on_join = self._ps5_join
         self.irc.on_drop = self._ps5_drop_notify
 
-    # ──────────────────────────────────────────────
-    # 生命周期
-    # ──────────────────────────────────────────────
     def start(self, irc_port: int = 6667) -> bool:
         if self._started:
             return True
@@ -87,9 +75,6 @@ class Services(object):
         except Exception:
             pass
 
-    # ──────────────────────────────────────────────
-    # 桥：同步 -> 异步
-    # ──────────────────────────────────────────────
     def call(self, coro, timeout: float = 0):
         """从同步线程提交协程。返回结果（timeout>0 时等结果）。"""
         if not self.loop:
@@ -106,9 +91,6 @@ class Services(object):
                 return None
         return fut
 
-    # ──────────────────────────────────────────────
-    # 弹幕
-    # ──────────────────────────────────────────────
     def _on_dm_state(self, state: str):
         self.dm_state = state
 
@@ -124,9 +106,6 @@ class Services(object):
     def danmaku_connected(self) -> bool:
         return bool(self.dm.connected)
 
-    # ──────────────────────────────────────────────
-    # PS5 画面注入
-    # ──────────────────────────────────────────────
     def _ps5_join(self, channel: str):
         logbus.ok("PS5 弹幕通道就绪（%s）" % channel, tag="IRC")
         if self.on_ps5_join:

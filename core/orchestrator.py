@@ -1,28 +1,16 @@
-# -*- coding: utf-8 -*-
-"""
-core/orchestrator.py —— 大脑：把六个模块串成一条可用的流水线
-
-它管两件事，不要混：
-    1. 向导进度（用户走到第几步、DNS 走哪条分支）—— 给人看的
-    2. 直播状态机（PS5 有没有推、B 站有没有开、流转发没有）—— 给机器跑的
-
-直播状态机（对应 PSLinkB 的 Idle -> Live，但加了 B 站开播确认）：
-    idle          什么都没发生
-    waiting       在等 PS5 推流（nginx 上没有 publisher）
-    starting      拿到 PS5 流了，正在调 B 站开播接口
-    relaying      B 站给了推流地址，ffmpeg 正在转发
-    live          B 站 live_status == 1，真正在直播（PS5 画面显示「正在直播」）
-    error         出错了，需要人看
-"""
 from __future__ import annotations
 
+import os
+import sys
 import threading
 import time
 from collections import deque
 
 from . import bili as bilimod
-from . import (divert, dnscheck, dnsserver, logbus, netutil, paths,
-               relay, routercfg, rtmpserver, services)
+from . import (config_store, danmaku_history, danmaku_throttle, divert,
+               dnscheck, dnsserver, eventbus, ffmpeg_mgr, logbus, netutil,
+               netwatch, nginxmgr, paths, relay, routercfg, services,
+               statemachine)
 
 
 class Orchestrator(object):
@@ -36,12 +24,13 @@ class Orchestrator(object):
             on_ps5_join=self._on_ps5_join,
             on_ps5_drop=self._on_ps5_drop,
         )
-        self.nginx = rtmpserver.RtmpServer(
+        self.nginx = nginxmgr.NginxManager(
             rtmp_port=int(self.cfg.get("RTMP_PORT", 1935)),
+            stat_port=int(os.environ.get("PS5LB_STAT_PORT", "8099")),
         )
         self.relay = relay.Relay()
         self.dns = None
-        self.divert = None             # 端口劫持（配合加速器时的主方案）
+        self.divert = None
         self.hijack_error = ""
 
         self.lock = threading.RLock()
@@ -65,30 +54,58 @@ class Orchestrator(object):
         self._login_task = None
         self._qr = {"key": "", "url": "", "png": "", "status": "idle", "expire": 0}
 
-    # ══════════════════════════════════════════════
-    # 启动 / 停止
-    # ══════════════════════════════════════════════
+        self._sm = statemachine.LiveStateMachine()
+        self._bus = eventbus.EventBus()
+        self._bus.on_event(eventbus.EventType.STATE_CHANGED, self._log_state_change)
+        self._store = config_store.ConfigStore(
+            os.path.join(paths.DATA_DIR, "state"))
+        self._dm_throttle = danmaku_throttle.DanmakuThrottle(interval=1.5)
+        self._dm_throttle.set_sender(self._inject_raw)
+        self._dm_history = danmaku_history.DanmakuHistory(
+            os.path.join(paths.DATA_DIR, "danmaku"))
+        self._netwatch = netwatch.NetworkWatcher(interval=30)
+        self._netwatch.on_change(self._on_lan_ip_change)
+
     def start(self) -> None:
         logbus.step("PS5 直播桥启动（%s），本机 IP：%s"
                     % (paths.PLATFORM, self.lan_ip or "未探测到"))
+        logbus.info("版本 %s | 平台 %s | 数据目录 %s"
+                    % (paths.APP_VERSION, paths.PLATFORM, paths.DATA_DIR),
+                    tag="环境")
+        logbus.info("Python %s | 收流端口 %s | 弹幕端口 %s | 界面端口 %s"
+                    % (sys.version.split()[0],
+                       self.cfg.get("RTMP_PORT", 1935),
+                       self.cfg.get("IRC_PORT", 6667),
+                       os.environ.get("PS5LB_WEB_PORT", "5000")),
+                    tag="环境")
         if not self.lan_ip:
             logbus.error("没有探测到局域网 IP，PS5 无法连到本机。请检查网络。")
 
-        # 弹幕通道（IRC）先起来，PS5 随时可能来连
+        _ff = ffmpeg_mgr.find_ffmpeg()
+        if _ff:
+            logbus.info("ffmpeg 就绪：%s" % _ff, tag="转发")
+        else:
+            logbus.error("找不到 ffmpeg，PS5 画面将无法转到 B 站", tag="转发")
+
         self.services.set_channel(self.cfg.get("TWITCH_CHANNEL") or "ps5")
         self.services.start(int(self.cfg.get("IRC_PORT", 6667)))
 
         if self.bili.logged_in:
             threading.Thread(target=self._verify_login_bg, daemon=True).start()
 
-        # 端口劫持：只有桌面版能用。容器里容器动不了宿主机的网络栈，
-        # 那种场景靠路由器把域名/端口转过来，不需要（也没法）劫持。
         if paths.caps()["divert"] and self.cfg.get("HIJACK_MODE", "divert") == "divert":
-            # 放到后台起：WinDivertOpen 要等驱动，别把主窗口卡在启动画面
             threading.Thread(target=self._auto_enable_divert, daemon=True).start()
 
         self._monitor = threading.Thread(target=self._monitor_loop, name="orchestrator", daemon=True)
         self._monitor.start()
+
+        self._dm_throttle.start()
+        try:
+            p = self._dm_history.start_session(self.bili.room_id)
+            logbus.info("弹幕记录：%s" % os.path.basename(p), tag="弹幕")
+        except Exception as e:
+            logbus.warn("弹幕记录文件创建失败：%s" % e, tag="弹幕")
+        self._netwatch.start()
 
     def _auto_enable_divert(self):
         r = self.enable_divert()
@@ -113,6 +130,19 @@ class Orchestrator(object):
         if self.dns:
             self.dns.stop()
             self.dns = None
+        self._stop_https_relay()
+        try:
+            self._dm_throttle.stop()
+        except Exception:
+            pass
+        try:
+            self._dm_history.close_session()
+        except Exception:
+            pass
+        try:
+            self._netwatch.stop()
+        except Exception:
+            pass
         self.services.stop()
         logbus.info("已退出")
 
@@ -139,14 +169,13 @@ class Orchestrator(object):
             if self.live["state"] == "error":
                 err = self.live.get("error") or ""
                 if "登录" in err or "扫码" in err:
-                    self.live["state"] = "idle"
+                    self._set_state("idle")
                     self.live["error"] = ""
                     self.live["since"] = 0.0
                     cleared = True
         if not cleared:
             return
 
-        # PS5 还在推流的话接着开播，省得再回 PS5 点一次
         try:
             pub = self.nginx.publisher()
         except Exception:
@@ -157,9 +186,6 @@ class Orchestrator(object):
                              args=(pub.get("app", "app"), pub.get("name", "")),
                              name="start-live", daemon=True).start()
 
-    # ══════════════════════════════════════════════
-    # 环境 / 向导数据
-    # ══════════════════════════════════════════════
     def env(self) -> dict:
         adapters = netutil.list_adapters()
         accel_procs = netutil.detect_accelerator()
@@ -194,9 +220,55 @@ class Orchestrator(object):
         return routercfg.write_files(paths.DATA_DIR, self.lan_ip,
                                      self.cfg.get("HIJACK_DOMAINS", []))
 
-    # ══════════════════════════════════════════════
-    # 步骤 2：检测重定向
-    # ══════════════════════════════════════════════
+    def router_detect(self, ip: str = "") -> dict:
+        """探测路由器类型（OpenWrt / 未知）。"""
+        from . import router_api
+        host = ip or netutil.default_gateway() or ""
+        if not host:
+            return {"ok": False, "msg": "探测不到默认网关，请手动填路由器 IP"}
+        kind = router_api.detect_router(host)
+        logbus.info("路由器探测：%s → %s" % (host, kind), tag="路由器")
+        return {
+            "ok": kind == "openwrt",
+            "host": host,
+            "type": kind,
+            "msg": ("识别到 OpenWrt" if kind == "openwrt"
+                    else "未识别为 OpenWrt，可能不支持自动配置，请手动改 hosts"),
+        }
+
+    def router_apply(self, ip: str = "", username: str = "root",
+                     password: str = "") -> dict:
+        """一键把推流域名写进 OpenWrt 的 hosts。"""
+        from . import router_api
+        host = ip or netutil.default_gateway() or ""
+        if not host:
+            return {"ok": False, "msg": "探测不到默认网关，请手动填路由器 IP"}
+        if not self.lan_ip:
+            return {"ok": False, "msg": "本机 IP 还没探测到，稍后再试"}
+        logbus.step("正在配置路由器 hosts（%s → %s）…" % (host, self.lan_ip))
+        luci = router_api.OpenWrtLUCI(host, username, password)
+        if not luci.login():
+            return {"ok": False, "msg": "路由器登录失败，检查用户名/密码"}
+        ok = luci.set_hosts(self.lan_ip)
+        if ok:
+            logbus.ok("路由器 hosts 已指向 %s" % self.lan_ip, tag="路由器")
+        return {"ok": ok, "host": host,
+                "msg": "已写入路由器 hosts" if ok else "写入失败，请检查路由器权限"}
+
+    def router_restore(self, ip: str = "", username: str = "root",
+                       password: str = "") -> dict:
+        """清掉路由器上我们写的 hosts。"""
+        from . import router_api
+        host = ip or netutil.default_gateway() or ""
+        if not host:
+            return {"ok": False, "msg": "探测不到默认网关"}
+        luci = router_api.OpenWrtLUCI(host, username, password)
+        if not luci.login():
+            return {"ok": False, "msg": "路由器登录失败"}
+        ok = luci.clear_hosts()
+        return {"ok": ok, "host": host,
+                "msg": "路由器 hosts 已清空" if ok else "清空失败"}
+
     def verify_dns(self, target: str = "", mode: str = "router") -> dict:
         where = "路由器" if mode == "router" else "本机内置 DNS"
         logbus.step("检测推流域名是否已指向本机（%s，验%s）…" % (self.lan_ip or "?", where))
@@ -214,9 +286,6 @@ class Orchestrator(object):
             logbus.warn(r["hint"])
         return r
 
-    # ══════════════════════════════════════════════
-    # 步骤 2B：内置 DNS
-    # ══════════════════════════════════════════════
     def _pick_upstream(self) -> list:
         """上游优先级：用户填的加速器 DNS > 自动探测加速器 DNS > 本机系统 DNS > 兜底。"""
         ups = []
@@ -243,8 +312,6 @@ class Orchestrator(object):
             ok, detail = self.dns.selftest()
             return {"ok": ok, "detail": detail, "upstreams": self.dns.upstreams}
 
-        # 两套方案不能同时开：一边改 IP 目的地址、一边改域名解析，
-        # PS5 的行为会变得没法预测。DNS 要走就先把端口劫持关掉。
         if self.divert:
             self.divert.stop()
             self.divert = None
@@ -269,9 +336,11 @@ class Orchestrator(object):
         ups = self._pick_upstream()
         answer_ip = self._dns_answer_ip()
         logbus.info("内置 DNS 将把推流域名答成 %s" % answer_ip, tag="DNS")
+        dns_domains = sorted(set(dnsserver.REDIRECT_DOMAINS)
+                             | set(self.cfg.get("HIJACK_DOMAINS", [])))
         self.dns = dnsserver.DnsServer(
             answer_ip=answer_ip,
-            domains=self.cfg.get("HIJACK_DOMAINS", []),
+            domains=dns_domains,
             upstreams=ups,
             port=port,
             verbose=False,
@@ -285,9 +354,10 @@ class Orchestrator(object):
         ok, detail = self.dns.selftest()
         self.cfg = paths.save_config({"DNS_MODE": "builtin"})
         self.progress = paths.save_progress({"dns_mode": "builtin", "dns_verified": True, "step": 3})
+        threading.Thread(target=self._auto_start_https_relay,
+                         args=(ups,), daemon=True).start()
         if ok:
             logbus.ok("内置 DNS 已启动：%s，上游 %s" % (detail, ",".join(ups)), tag="DNS")
-            # 上游如果是公网 DNS，PS5 开播握手会绕过加速 —— 必须提醒
             health = dnscheck.upstream_health(ups[0]) if ups else {"ok": False}
             if health.get("ok") and not health.get("accelerated"):
                 logbus.warn("上游 DNS 不是加速器 DNS，PS5 很可能开不了播。"
@@ -296,21 +366,52 @@ class Orchestrator(object):
             logbus.error("内置 DNS 自检失败：%s" % detail, tag="DNS")
         return {"ok": ok, "detail": detail, "upstreams": ups}
 
+    def _auto_start_https_relay(self, upstreams=None) -> None:
+        """内置 DNS 模式配套：443 上起中继，把劫持域名的 HTTPS 转回真服务器。"""
+        try:
+            from . import https_relay
+            if getattr(self, "_https_relay", None):
+                return
+            up_dns = ""
+            for u in (upstreams or []):
+                if u and netutil.classify_dns(u) != "none":
+                    up_dns = u
+                    break
+            proxy = (self.cfg.get("TWITCH_PROXY") or "").strip()
+            r = https_relay.HttpsRelay(port=443, upstream_dns=up_dns or "223.5.5.5",
+                                       proxy=proxy)
+            if r.start():
+                self._https_relay = r
+                if proxy:
+                    logbus.ok("443 中继已启动，走代理 %s" % proxy, tag="中继")
+                else:
+                    logbus.warn("443 中继已启动，但没配代理 —— "
+                                "被劫持域名的 HTTPS 在国内大概率转发不出去，"
+                                "Twitch 可能打不开。去第 4 步填 Twitch 代理。", tag="中继")
+            else:
+                logbus.warn("443 中继没起来（端口多半被占），"
+                            "被劫持域名的 HTTPS 会打不开", tag="中继")
+        except Exception as e:
+            logbus.warn("443 中继启动异常：%s" % e, tag="中继")
+
+    def _stop_https_relay(self) -> None:
+        r = getattr(self, "_https_relay", None)
+        if r:
+            try:
+                r.stop()
+            except Exception:
+                pass
+            self._https_relay = None
+
     def disable_builtin_dns(self) -> dict:
         if self.dns:
             self.dns.stop()
             self.dns = None
+            self._stop_https_relay()
             logbus.info("内置 DNS 已停止", tag="DNS")
         self.cfg = paths.save_config({"DNS_MODE": "router"})
         return {"ok": True}
 
-    # ══════════════════════════════════════════════
-    # 端口劫持（搭配加速器时的主方案）
-    #
-    # 为什么不走 DNS：真机实测，PS5 一旦经加速器，DNS 方案必然失败 ——
-    # 答加速器网卡 IP 会被加速器当成自己的流量代推到真 Twitch，
-    # 答局域网 IP 则在加速器网段里不可达。详见 core/divert.py 顶部。
-    # ══════════════════════════════════════════════
     def _divert_target(self) -> str:
         """改写目标：本机局域网 IP（绝不能用 127.0.0.1，会被当 martian 丢掉）。"""
         return divert.pick_target_ip(self.lan_ip, "")
@@ -332,9 +433,9 @@ class Orchestrator(object):
 
         if not netutil.is_admin():
             if paths.IS_MACOS:
-                detail = "没有管理员权限，直播桥开不了。请在终端用 sudo 启动：sudo /path/to/PS5LiveBridge"
+                detail = "没有管理员权限，流量接管开不了。请在终端用 sudo 启动：sudo /path/to/PS5LiveBridge"
             else:
-                detail = "没有管理员权限，直播桥开不了。右键程序 → 以管理员身份运行。"
+                detail = "没有管理员权限，流量接管开不了。右键程序 → 以管理员身份运行。"
             self.hijack_error = detail
             logbus.error(detail, tag="劫持")
             return {"ok": False, "detail": detail}
@@ -346,7 +447,6 @@ class Orchestrator(object):
             logbus.error(detail, tag="劫持")
             return {"ok": False, "detail": detail}
 
-        # nginx 必须在听 1935，否则劫持过来的推流没人接，PS5 会一直重试
         ng = self.ensure_nginx()
         if not ng.get("ok"):
             detail = "收流服务没起来（%s），先排查这个。" % ng.get("detail", "")
@@ -365,14 +465,10 @@ class Orchestrator(object):
         self.divert = ic
         self.hijack_error = ""
         self.cfg = paths.save_config({"HIJACK_MODE": "divert"})
-        # 只标记「重定向通了」，不替用户跳步骤：
-        # 进度是给人看的，往前跳会把第一次用的人直接甩到第 3 页，
-        # 而他还没看到第 1 页的说明。跳步由界面上的按钮决定。
         self.progress = paths.save_progress({"dns_verified": True, "lan_ip": self.lan_ip})
-        logbus.ok("直播桥已开，%s 的连接都转到 %s"
+        logbus.ok("流量接管已开，%s 的连接都转到 %s"
                   % ("/".join(str(p) for p in ports), target), tag="劫持")
         if self.dns:
-            # 两者同时开只会让 PS5 的 DNS 行为变得不可预测，DNS 主动让位
             self.dns.stop()
             self.dns = None
             logbus.info("内置 DNS 已停，直播桥模式下用不到", tag="DNS")
@@ -383,8 +479,6 @@ class Orchestrator(object):
             self.divert.stop()
             self.divert = None
             logbus.info("端口劫持已停止（正在进行的推流不受影响）", tag="劫持")
-        # 不在这里改 HIJACK_MODE：界面上的「重启直播桥」是先停再开，
-        # 如果这里把模式写成 dns，重启后就不会自动开启了。
         return {"ok": True}
 
     def divert_status(self) -> dict:
@@ -403,11 +497,18 @@ class Orchestrator(object):
         """
         d = self.divert_status()
         running = bool(d.get("running")) or bool(self.dns and self.dns.running)
-        # 没有劫持能力（容器）时一律报 router：界面据此只走「改路由器」那条分支，
-        # 不会去渲染一个永远点不动的按钮。
         mode = self.cfg.get("HIJACK_MODE", "divert") if paths.caps()["divert"] else "router"
+        ps5_seen = False
+        try:
+            if self.dns and self.dns.running:
+                local = {self.lan_ip, netutil.socket_lan_ip(), "127.0.0.1", "::1"}
+                ps5_seen = self.dns.stats.client_hit_from_other(local)
+        except Exception:
+            ps5_seen = False
+
         return {
             "mode": mode,
+            "ps5_seen": ps5_seen,
             "running": running,
             "divert": d,
             "dns_running": bool(self.dns and self.dns.running),
@@ -446,7 +547,7 @@ class Orchestrator(object):
         if not want or want == self.dns.answer_ip:
             return
         old = self.dns.answer_ip
-        self.dns.answer_ip = want      # 下一次 resolve 就用新地址，不需要重新绑端口
+        self.dns.answer_ip = want
         logbus.ok("加速器网段已就绪，内置 DNS 答复地址 %s → %s（PS5 的 DNS 填 %s）"
                   % (old, want, want), tag="DNS")
         self.services.notify_ps5("DNS 已适配加速器网段")
@@ -459,8 +560,6 @@ class Orchestrator(object):
         加速器自己的虚拟网关（不在本机）。哪种能通取决于加速器实现，
         软件无法从 PS5 侧验证，所以主推一个、备一个，让用户照现象换。
         """
-        # 这里给的是「PS5 的 DNS 该填谁」，判断依据是「哪个地址能把查询送到本机 53」。
-        # 实测：加速器网卡 IP（172.19.84.237）能收到 PS5 的查询，局域网 IP 作为备选。
         accel_ip = netutil.accelerator_gateway_ip()
         if accel_ip and accel_ip != self.lan_ip:
             return {"ip": accel_ip, "alt": self.lan_ip,
@@ -484,9 +583,6 @@ class Orchestrator(object):
                                     "clients", "recent", "uptime")},
         }
 
-    # ══════════════════════════════════════════════
-    # 步骤 3：加速器与 PS5 网络
-    # ══════════════════════════════════════════════
     def save_ps5_net(self, ip="", mask="", gateway="", dns="", accelerator="") -> dict:
         patch = {"PS5_NET": {"ip": ip, "mask": mask, "gateway": gateway, "dns": dns}}
         if accelerator:
@@ -495,7 +591,6 @@ class Orchestrator(object):
             patch["DNS_UPSTREAM"] = dns
         self.cfg = paths.save_config(patch)
         answer_changed = False
-        # 用户填了网关之后，加速器网卡往往才出现 —— 答复地址可能要跟着换
         if self.dns and self.dns.running:
             want = self._dns_answer_ip()
             if want and want != self.dns.answer_ip:
@@ -503,7 +598,6 @@ class Orchestrator(object):
                             % (self.dns.answer_ip, want), tag="DNS")
                 self.dns.answer_ip = want
                 answer_changed = True
-        # 内置 DNS 在跑：立刻把上游换成加速器 DNS
         if self.dns and dns:
             changed = self.dns.set_upstreams(
                 [s.strip() for s in str(dns).replace("，", ",").split(",") if s.strip()])
@@ -535,9 +629,6 @@ class Orchestrator(object):
                     else "没探测到加速器虚拟网卡，请照抄加速器界面上显示的值",
         }
 
-    # ══════════════════════════════════════════════
-    # 步骤 4：扫码登录
-    # ══════════════════════════════════════════════
     def qr_new(self) -> dict:
         r = self.bili.qr_generate()
         if not r.get("ok"):
@@ -597,16 +688,23 @@ class Orchestrator(object):
         current = str(self.cfg.get("BILIBILI_AREA_ID", "236"))
         return {"partitions": parts, "current": current}
 
-    def save_area(self, area_id: str, title: str = "") -> dict:
-        self.cfg = paths.save_config({"BILIBILI_AREA_ID": str(area_id),
-                                      "BILIBILI_TITLE": title})
-        if self.bili.logged_in:
+    def save_area(self, area_id: str, title: str = None,
+                  twitch_channel: str = None,
+                  twitch_proxy: str = None) -> dict:
+        patch = {"BILIBILI_AREA_ID": str(area_id)}
+        if title is not None:
+            patch["BILIBILI_TITLE"] = title
+        if twitch_channel is not None:
+            patch["TWITCH_CHANNEL"] = (twitch_channel or "").strip()
+        if twitch_proxy is not None:
+            patch["TWITCH_PROXY"] = (twitch_proxy or "").strip()
+        self.cfg = paths.save_config(patch)
+        if self.bili.logged_in and title is not None:
             self.bili.update_room(area_id=str(area_id), title=title or None)
-        return {"ok": True}
+        return {"ok": True,
+                "twitch_channel": self.cfg.get("TWITCH_CHANNEL", ""),
+                "twitch_proxy": self.cfg.get("TWITCH_PROXY", "")}
 
-    # ══════════════════════════════════════════════
-    # 步骤 5/6：直播流水线
-    # ══════════════════════════════════════════════
     def _monitor_loop(self) -> None:
         """1 秒一拍：看 PS5 推没推、要不要自动开播。"""
         was_publishing = False
@@ -616,9 +714,6 @@ class Orchestrator(object):
             try:
                 now = time.time()
 
-                # 收流服务是整条链路的地基，它没了后面全是空转。
-                # 容器里尤其重要：容器重启策略只保主进程，nginx 是子进程，
-                # 崩了就再也不会自己回来。限频 30 秒，避免端口真被占时刷屏。
                 if not self.nginx.running() and now >= nginx_retry_at:
                     nginx_retry_at = now + 30
                     logbus.warn("收流服务不在了，重新拉起", tag="收流")
@@ -634,10 +729,6 @@ class Orchestrator(object):
                     if not was_publishing:
                         self._on_ps5_publish(pub)
                 elif last_pub and (now - last_pub) >= 3.0:
-                    # 按「最后一次看到推流的时间」判断，而不是连续计数：
-                    # 断流瞬间 /stat 会抖几下，连续计数被反复清零，状态会卡住不回落。
-                    # error 也要收：开播失败（比如没登录）后 PS5 停流，
-                    # 状态不回落的话界面会一直挂着一条已经不成立的错误。
                     if self.live["state"] in ("local", "waiting", "starting",
                                               "relaying", "live", "error"):
                         self._on_ps5_unpublish()
@@ -645,11 +736,8 @@ class Orchestrator(object):
 
                 was_publishing = publishing
 
-                # 加速器网卡可能晚于 DNS 才出现（用户按顺序：先启 DNS、再开加速器），
-                # 答复地址必须跟着换，否则界面显示的和 DNS 实际答的不是同一个 IP
                 self._follow_dns_answer()
 
-                # 转发中：确认真到 B 站了
                 if self.live["state"] == "relaying":
                     self._confirm_bili_live()
 
@@ -661,17 +749,17 @@ class Orchestrator(object):
         app = pub.get("app", "app")
         name = pub.get("name", "")
         res = "%dx%d" % (pub.get("width", 0), pub.get("height", 0)) \
-            if pub.get("width") else "未知"
-        logbus.ok("PS5 开始推流了：%s/%s（%s，%s kbps）"
-                  % (app, name[:10] + "***" if len(name) > 10 else name, res, pub.get("bw_in", 0)),
+            if pub.get("width") else "未知分辨率"
+        logbus.ok("PS5 开始推流：%s/%s | %s @ %sfps | %s kbps"
+                  % (app,
+                     (name[:10] + "***") if len(name) > 10 else name,
+                     res, pub.get("fps", 0) or "?", pub.get("bw_in", 0)),
                   tag="推流")
 
-        # 本地取流模式：只把流留在这里，等 OBS 之类的软件来拉。
-        # 不开 B 站、不转发，也不需要登录 B 站。
         if self.output_mode() == "local":
             with self.lock:
                 self.live["ps5"] = pub
-                self.live["state"] = "local"
+                self._set_state("local")
                 self.live["since"] = time.time()
                 self.live["error"] = ""
                 self.live["local"] = {"app": app, "name": name}
@@ -681,7 +769,7 @@ class Orchestrator(object):
 
         with self.lock:
             self.live["ps5"] = pub
-            self.live["state"] = "starting" if self.cfg.get("AUTO_START_LIVE", True) else "waiting"
+            self._set_state("starting" if self.cfg.get("AUTO_START_LIVE", True) else "waiting")
             self.live["since"] = time.time()
             self.live["error"] = ""
 
@@ -701,16 +789,98 @@ class Orchestrator(object):
         if state in ("relaying", "live", "starting", "face_verify"):
             self.stop_live(reason="PS5 停止推流")
         with self.lock:
-            self.live["state"] = "idle"
+            self._set_state("idle")
             self.live["ps5"] = {}
             self.live["local"] = {}
             self.live["since"] = 0.0
             self.live["face_url"] = ""
 
+    def _fetch_twitch_title(self, stream_key: str = "") -> str:
+        """
+        从 Twitch 查 PS5 的直播标题。
+
+        照搬 PSLinkB 的思路：Twitch 推流密钥长这样
+            live_1348515979_DGbH2bro...
+        `live_` 后面那段数字就是 broadcaster_id，拿它去问 GQL
+        user(id){ lastBroadcast { title } } 就能拿到 PS5 上填的标题
+        —— 不需要用户填频道名。
+
+        PS5 的标题本来就是写给 Twitch 账号的（走 api.twitch.tv，我们不劫持
+        那个域名），所以只能反过来问 Twitch。
+        """
+        try:
+            from . import twitch_title
+        except Exception:
+            return ""
+
+        px = (self.cfg.get("TWITCH_PROXY") or "").strip() or None
+
+        bid = twitch_title.parse_broadcaster_id(stream_key)
+        if bid:
+            logbus.info("从 Twitch 查标题（broadcaster_id=%s）…" % bid, tag="标题")
+            t = twitch_title.fetch_stream_title(stream_key, proxy=px)
+            if t:
+                logbus.ok("拿到 Twitch 标题：%s" % t, tag="标题")
+                return t
+
+        ch = (self.cfg.get("TWITCH_CHANNEL") or "").strip()
+        if ch:
+            t = twitch_title.fetch_twitch_title(ch, proxy=px)
+            if t:
+                logbus.ok("拿到 Twitch 标题（按频道名 %s）：%s" % (ch, t), tag="标题")
+                return t
+
+        if bid or ch:
+            logbus.warn("没查到 Twitch 标题（PS5 还没设标题？或本地代理不通）", tag="标题")
+        return ""
+
+    def _sync_twitch_title(self) -> None:
+        """
+        开播成功后异步把 PS5 的标题补到 B 站。
+        放在后台跑：抓取要走代理，可能慢，不能拖住开播主流程。
+        """
+        if (self.cfg.get("BILIBILI_TITLE") or "").strip():
+            return
+        name = (self.live.get("ps5") or {}).get("name", "")
+        title = self._fetch_twitch_title(name)
+        if not title:
+            return
+        try:
+            r = self.bili.update_room(title=title)
+            if r.get("ok"):
+                logbus.ok("B 站直播间标题已同步：%s" % title, tag="标题")
+                try:
+                    self._store.update("runtime", last_title=title,
+                                       title_at=time.time())
+                except Exception:
+                    pass
+                try:
+                    self._bus.emit_event(eventbus.Event(
+                        eventbus.EventType.TITLE_SYNCED, {"title": title}))
+                except Exception:
+                    pass
+            else:
+                logbus.warn("标题同步失败：%s" % r.get("msg"), tag="标题")
+        except Exception as e:
+            logbus.warn("标题同步异常：%s" % e, tag="标题")
+
     def _start_bili_and_relay(self, app: str, name: str) -> None:
+        """
+        开播入口。这层是异常兜底：它在独立线程里跑，
+        一旦抛未捕获异常线程就静默死掉，状态会永远卡在「正在开播」，
+        界面上看起来就是点了开播后一直转圈、什么都不发生。
+        """
+        try:
+            self._do_start_live(app, name)
+        except Exception as e:
+            logbus.error("开播流程异常：%s" % e, tag="直播")
+            self._fail_live("开播流程异常：%s" % e)
+
+    def _do_start_live(self, app: str, name: str) -> None:
         area = str(self.cfg.get("BILIBILI_AREA_ID", "236"))
-        title = self.cfg.get("BILIBILI_TITLE", "")
-        logbus.step("正在让 B 站开播（分区 %s）…" % area)
+        title = (self.cfg.get("BILIBILI_TITLE") or "").strip()
+        logbus.step("正在让 B 站开播（分区 %s%s）…"
+                    % (area, ("，标题 " + title) if title else "，标题稍后同步"))
 
         r = self.bili.start_live(area_id=area, title=title)
         if not r.get("ok"):
@@ -731,28 +901,73 @@ class Orchestrator(object):
             self.live["bili"] = {
                 "addr": addr, "code_tail": code[-6:] if code else "",
                 "room_id": r.get("room_id", self.bili.room_id),
+                "channel": r.get("channel", ""),
             }
-            self.live["state"] = "relaying"
+            self._set_state("relaying")
 
         if not self.cfg.get("AUTO_RELAY", True):
             logbus.info("自动转发已关闭。B 站推流地址：%s / 密钥末六位 %s"
                         % (addr, code[-6:]), tag="转发")
             return
 
-        in_url = "rtmp://127.0.0.1:%d/%s/%s" % (int(self.cfg.get("RTMP_PORT", 1935)), app, name)
         out_url = addr.rstrip("/") + "/" + code.lstrip("/")
 
-        # 关键：B 站推流服务器也用 1935。不把它的 IP 加进白名单，
-        # 端口劫持会把 ffmpeg 推到 B 站的连接劫回本机，自己推给自己，
-        # ffmpeg 报 "Error opening output ... I/O error"，直播永远起不来。
         self._protect_relay_target(out_url, addr)
 
-        if self.relay.start(in_url, out_url):
-            self.relay.start_watchdog(on_drop=lambda reason: self._fail_live(
-                "转发中断：%s" % reason))
-            self.services.notify_ps5("B 站已开播，画面正在同步")
+        if hasattr(self.nginx, "set_destination"):
+            try:
+                self.nginx.set_destination(addr, code)
+                self.services.notify_ps5("B 站已开播，画面正在同步")
+            except Exception as e:
+                self._fail_live("转发启动失败：%s" % e)
         else:
-            self._fail_live(self.relay.last_error or "转发启动失败")
+            pub = self.live.get("ps5") or {}
+            in_url = "rtmp://127.0.0.1:%d/%s/%s" % (
+                int(self.cfg.get("RTMP_PORT", 1935)),
+                pub.get("app", "app"), pub.get("name", ""))
+            if not self.relay.start(in_url, out_url):
+                self._fail_live(self.relay.last_error or "转发启动失败")
+                return
+            self.relay.start_watchdog(
+                on_drop=lambda reason: self._fail_live("转发中断：%s" % reason))
+            self.services.notify_ps5("B 站已开播，画面正在同步")
+
+    def _fix_relay_url(self, url: str) -> str:
+        """
+        推流地址的域名如果被本机解析指到了自己，换成真实公网 IP。
+
+        为什么要这一步：路由器 hosts 里一旦带上 B 站推流域名（很多人会把
+        Twitch 和 B 站域名一起抄进去），本机 ffmpeg 解析它就会得到自己的 IP，
+        于是"推流给自己"，报 I/O error，直播永远起不来。用户不该为了这个
+        去路由器上做精细的增删。
+        """
+        try:
+            import socket
+            rest = url.split("://", 1)[-1] if "://" in url else url
+            host = rest.split("/", 1)[0].split(":", 1)[0].strip()
+            if not host:
+                return url
+
+            my_ips = {self.lan_ip, netutil.socket_lan_ip(), "127.0.0.1"}
+            try:
+                local_ip = socket.getaddrinfo(host, None, socket.AF_INET)[0][4][0]
+            except Exception:
+                return url
+
+            if local_ip not in my_ips:
+                return url
+
+            from . import https_relay
+            real = https_relay.resolve_real_ip(host, "223.5.5.5")
+            if real and real not in my_ips:
+                logbus.warn("推流地址 %s 被本机解析指到了自己（%s），"
+                            "已自动换成真实 IP %s" % (host, local_ip, real), tag="转发")
+                return url.replace(host, real, 1)
+            logbus.error("推流地址 %s 被解析成本机 IP，且查不到真实 IP —— "
+                         "请把路由器 hosts 里的 B 站域名删掉" % host, tag="转发")
+            return url
+        except Exception:
+            return url
 
     def _protect_relay_target(self, out_url: str, addr: str = "") -> list:
         """
@@ -804,11 +1019,29 @@ class Orchestrator(object):
         status = self.bili.live_status()
         if status == 1:
             with self.lock:
-                self.live["state"] = "live"
+                self._set_state("live")
                 self.live["since"] = time.time()
             logbus.ok("B 站直播间已开播 —— 现在可以看了", tag="直播")
             self.progress = paths.save_progress({"step": 6})
-            self.services.notify_ps5("B 站直播间已开播")
+            threading.Thread(target=self._sync_twitch_title, daemon=True).start()
+            def _notify_after_join():
+                for _ in range(40):
+                    if self.services.ps5_connected:
+                        break
+                    time.sleep(0.5)
+                if not self.services.ps5_connected:
+                    logbus.warn("PS5 弹幕通道没连上，开播提示发不出去", tag="IRC")
+                    return
+                time.sleep(1.0)
+                self.services.notify_ps5("B 站直播间已开播")
+                time.sleep(1.5)
+                ok = self.services.call(
+                    self.services.irc.notify("正在直播自动发送"), timeout=3)
+                if ok:
+                    logbus.ok("已向 PS5 画面发送测试弹幕", tag="IRC")
+                else:
+                    logbus.warn("测试弹幕发送失败（PS5 聊天层未就绪）", tag="IRC")
+            threading.Thread(target=_notify_after_join, daemon=True).start()
         elif status == 2:
             logbus.info("B 站显示轮播中，等待切换为直播…", tag="直播")
         elif tries >= 30:
@@ -818,10 +1051,8 @@ class Orchestrator(object):
     def _fail_live(self, msg: str) -> None:
         logbus.error(msg, tag="直播")
         with self.lock:
-            self.live["state"] = "error"
+            self._set_state("error")
             self.live["error"] = msg
-            # since 一并清掉：开播没成，「已播」时长没有意义，
-            # 留着的话界面会在没直播的时候一直跳秒。
             self.live["since"] = 0.0
         self.services.notify_ps5("开播失败，详见电脑上的提示")
 
@@ -835,12 +1066,11 @@ class Orchestrator(object):
         """
         logbus.warn("B 站要求人脸验证，等待完成后自动重试", tag="B站")
         with self.lock:
-            self.live["state"] = "face_verify"
+            self._set_state("face_verify")
             self.live["error"] = ""
             self.live["face_url"] = face_url
             self.live["since"] = 0.0
         self.services.notify_ps5("B 站要求人脸验证，请在手机上完成")
-        # 后台重试线程
         if not getattr(self, "_face_retry_thread", None) or not self._face_retry_thread.is_alive():
             self._face_retry_thread = threading.Thread(
                 target=self._face_verify_retry_loop, daemon=True, name="face-verify-retry")
@@ -857,36 +1087,36 @@ class Orchestrator(object):
         fallback = False
 
         while True:
-            # 超时 3 分钟
             if time.time() - start > 180:
                 self._fail_live("人脸验证等待超时（3 分钟）。请在手机上完成验证后点「手动开播」。")
                 return
-            # PS5 停推了就不用再试
             if self.live.get("state") != "face_verify":
                 return
             if not self.bili.logged_in:
                 self._fail_live("登录已失效，请重新扫码（第 4 步）。")
                 return
 
-            if not fallback:
-                # 探测模式：每 1 秒查验证状态
-                time.sleep(1)
-                status = self.bili.check_face_status()
-                if status == "verified":
-                    logbus.ok("人脸验证已完成，正在开播…", tag="B站")
-                    fallback = True   # 切到 fallback，立即开播
-                elif status.startswith("error"):
-                    logbus.warn("查询人脸状态异常（%s），切 fallback 模式" % status, tag="B站")
-                    fallback = True
-                # NotYet → 继续等
-            else:
-                # fallback 模式：每 10 秒盲试开播
-                time.sleep(10)
+            try:
+                if not fallback:
+                    time.sleep(1)
+                    status = self.bili.check_face_status()
+                    if status == "verified":
+                        logbus.ok("人脸验证已完成，正在开播…", tag="B站")
+                        fallback = True
+                    elif str(status).startswith("error"):
+                        logbus.warn("查询人脸状态异常（%s），切 fallback 模式" % status, tag="B站")
+                        fallback = True
+                else:
+                    time.sleep(10)
 
-            # 尝试开播
-            area = str(self.cfg.get("BILIBILI_AREA_ID", "236"))
-            title = self.cfg.get("BILIBILI_TITLE", "")
-            r = self.bili.start_live(area_id=area, title=title)
+                area = str(self.cfg.get("BILIBILI_AREA_ID", "236"))
+                title = self.cfg.get("BILIBILI_TITLE", "")
+                r = self.bili.start_live(area_id=area, title=title)
+            except Exception as e:
+                logbus.warn("人脸重试遇到异常（%s），2 秒后继续" % e, tag="B站")
+                time.sleep(2)
+                continue
+
             if r.get("ok"):
                 logbus.ok("人脸验证通过，B 站已开播", tag="B站")
                 threading.Thread(target=self._relay_after_start, args=(r,),
@@ -894,44 +1124,86 @@ class Orchestrator(object):
                 return
             code = r.get("code")
             if code in (60024, 60043):
-                # 还要人脸，刷新 URL 继续等
                 url = r.get("face_url") or ""
                 with self.lock:
                     self.live["face_url"] = url
                 continue
-            # 其他错误
             self._fail_live("B 站开播失败：%s（%s）" % (r.get("msg"), code))
             return
 
     def _relay_after_start(self, r: dict) -> None:
+        """转发启动入口（在线程里跑，异常必须兜住）。"""
+        try:
+            self._do_relay_after_start(r)
+        except Exception as e:
+            logbus.error("转发启动异常：%s" % e, tag="转发")
+            self._fail_live("转发启动异常：%s" % e)
+
+    def _do_relay_after_start(self, r: dict) -> None:
         """start_live 成功后的转发启动（从 _start_bili_and_relay 后半段拆出来复用）。"""
         addr = r["rtmp_addr"]
         code = r["rtmp_code"]
+        channel = r.get("channel", "")
         with self.lock:
             self.live["bili"] = {
                 "addr": addr, "code_tail": code[-6:] if code else "",
                 "room_id": r.get("room_id", self.bili.room_id),
+                "channel": channel,
             }
-            self.live["state"] = "relaying"
+            self._set_state("relaying")
             self.live["error"] = ""
 
         if not self.cfg.get("AUTO_RELAY", True):
             logbus.info("自动转发已关闭。B 站推流地址已获取。", tag="转发")
             return
 
-        pub = self.live.get("ps5") or {}
-        app = pub.get("app", "app")
-        name = pub.get("name", "")
-        in_url = "rtmp://127.0.0.1:%d/%s/%s" % (int(self.cfg.get("RTMP_PORT", 1935)), app, name)
         out_url = addr.rstrip("/") + "/" + code.lstrip("/")
+        out_url = self._fix_relay_url(out_url)
         self._protect_relay_target(out_url, addr)
 
-        if self.relay.start(in_url, out_url):
-            self.relay.start_watchdog(on_drop=lambda reason: self._fail_live(
-                "转发中断：%s" % reason))
-            self.services.notify_ps5("B 站已开播，画面正在同步")
+        if hasattr(self.nginx, "set_destination"):
+            try:
+                self.nginx.set_destination(addr, code)
+                logbus.ok("已让收流进程带上 B 站目标（一体化转发）", tag="转发")
+            except Exception as e:
+                self._fail_live("转发启动失败：%s" % e)
+                return
         else:
-            self._fail_live(self.relay.last_error or "转发启动失败")
+            pub = self.live.get("ps5") or {}
+            app = pub.get("app", "app")
+            name = pub.get("name", "")
+            in_url = "rtmp://127.0.0.1:%d/%s/%s" % (
+                int(self.cfg.get("RTMP_PORT", 1935)), app, name)
+            if not self.relay.start(in_url, out_url):
+                self._fail_live(self.relay.last_error or "转发启动失败")
+                return
+            self.relay.start_watchdog(
+                on_drop=lambda reason: self._fail_live("转发中断：%s" % reason))
+
+        self.services.notify_ps5("B 站已开播，画面正在同步")
+        threading.Thread(target=self._confirm_stream, daemon=True).start()
+
+    def _confirm_stream(self, timeout: float = 5.0, retry: bool = True) -> None:
+        """
+        流确认（v5.0.0）：开播后确认流到达 B 站。
+        超时未确认 → 重试一次 → 再不行 cleanup。
+        """
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            time.sleep(1)
+            try:
+                status = self.bili.live_status()
+                if status == 1:
+                    logbus.ok("流已确认到达 B 站", tag="转发")
+                    return
+            except Exception:
+                pass
+        if retry:
+            logbus.warn("流确认超时，重试一次…", tag="转发")
+            self._confirm_stream(timeout=timeout, retry=False)
+        else:
+            logbus.error("流确认失败（重试后仍超时），自动清理", tag="转发")
+            self.cleanup(was_live=True, reason="流确认失败")
 
     def start_live_manual(self) -> dict:
         """手动开播（自动模式失败或用户关掉自动时用）。"""
@@ -941,16 +1213,13 @@ class Orchestrator(object):
         if not self.bili.logged_in:
             return {"ok": False, "msg": "请先扫码登录 B 站"}
         with self.lock:
-            self.live["state"] = "starting"
+            self._set_state("starting")
             self.live["error"] = ""
         threading.Thread(target=self._start_bili_and_relay,
                          args=(pub.get("app", "app"), pub.get("name", "")),
                          name="start-live-manual", daemon=True).start()
         return {"ok": True}
 
-    # ══════════════════════════════════════════════
-    # 输出方式：直推 B 站 / 本地取流
-    # ══════════════════════════════════════════════
     def output_mode(self) -> str:
         return "local" if self.cfg.get("OUTPUT_MODE") == "local" else "direct"
 
@@ -987,8 +1256,6 @@ class Orchestrator(object):
         else:
             logbus.info("已切换为直接推流：PS5 推流后自动开播并转发到 B 站", tag="推流")
 
-        # 切换时如果 PS5 正在推流，按新方式立刻接管一次，
-        # 否则监控循环以为「推流没断过」，不会重新触发。
         try:
             pub = self.nginx.publisher() if self.nginx.running() else {"publishing": False}
             if pub.get("publishing"):
@@ -997,41 +1264,123 @@ class Orchestrator(object):
             logbus.warn("切换输出方式后接管当前推流失败：%s" % e, tag="推流")
         return {"ok": True, "mode": mode}
 
-    def stop_live(self, reason: str = "") -> dict:
-        logbus.step("停止直播%s" % (("（%s）" % reason) if reason else ""))
-        self.relay.stop()
-        try:
-            r = self.bili.stop_live()
-        except Exception as e:
-            r = {"ok": False, "msg": str(e)}
+    def cleanup(self, was_live: bool = True, reason: str = "") -> None:
+        """
+        统一清理（v5.0.0）。参照 PSLinkB 的 cleanup 模式。
+        先清状态（防止竞态），再调外部 API。
+        """
+        if reason:
+            logbus.step("清理：%s" % reason)
         with self.lock:
-            self.live["state"] = "idle"
+            old_state = self.live.get("state", "")
+            old_bili = dict(self.live.get("bili") or {})
+            self._set_state("idle")
             self.live["bili"] = {}
             self.live["confirm_tries"] = 0
-        self.services.notify_ps5("B 站已关播")
-        return {"ok": True, "bili": r}
+            self.live["face_url"] = ""
+        _clear = getattr(self.nginx, "clear_destination", None)
+        if _clear:
+            try:
+                _clear()
+            except Exception:
+                pass
+        try:
+            self.relay.stop()
+        except Exception:
+            pass
+        if was_live and old_state in ("relaying", "live", "starting", "face_verify"):
+            channel = old_bili.get("channel") or getattr(self.bili, "last_channel", "")
+            for attempt in range(3):
+                try:
+                    r = self.bili.stop_live(channel=channel)
+                    if r.get("ok"):
+                        break
+                    logbus.warn("关播失败（第 %d 次）：%s" % (attempt + 1, r.get("msg")), tag="B站")
+                    time.sleep(1)
+                except Exception as e:
+                    logbus.warn("关播异常（第 %d 次）：%s" % (attempt + 1, e), tag="B站")
+                    time.sleep(1)
+        try:
+            self.services.notify_ps5("B 站已关播")
+        except Exception:
+            pass
 
-    # ══════════════════════════════════════════════
-    # 弹幕
-    # ══════════════════════════════════════════════
+    def stop_live(self, reason: str = "") -> dict:
+        self.cleanup(was_live=True, reason=reason or "停止直播")
+        return {"ok": True}
+
+    def _inject_raw(self, user: str, text: str) -> None:
+        """限速队列真正发消息时回调这里。"""
+        if self.services.ps5_connected:
+            self.services.inject(user, text)
+
+    def _log_state_change(self, ev) -> None:
+        """事件总线订阅：状态变化记一行日志（旁路，不参与决策）。"""
+        d = ev.data or {}
+        logbus.info("状态 %s → %s" % (d.get("from", "?"), d.get("to", "?")), tag="状态")
+
+    def _set_state(self, new: str, force: bool = False) -> None:
+        """
+        统一状态入口。
+
+        用状态机校验转换是否在白名单里：不在就记一条警告再放行 ——
+        历史流程里有几处跨状态直跳，硬拒会把链路卡死；校验的价值是
+        把异常路径暴露到日志，而不是阻断业务。
+        """
+        with self.lock:
+            old = self.live.get("state", "idle")
+            if old == new:
+                return
+            target = statemachine.to_state(new)
+            ok = self._sm.transition(target, force=force)
+            if not ok:
+                self._sm.transition(target, force=True)
+            self.live["state"] = new
+        if not ok:
+            logbus.warn("状态跳变不在白名单：%s → %s（已放行并同步）" % (old, new), tag="状态")
+        try:
+            self._bus.emit_event(eventbus.Event(
+                eventbus.EventType.STATE_CHANGED, {"from": old, "to": new}))
+        except Exception:
+            pass
+
+    def _on_lan_ip_change(self, old_ip: str, new_ip: str) -> None:
+        """本机 IP 变了：界面提示、DNS 答复地址都要跟着换。"""
+        logbus.warn("本机 IP 变化：%s → %s" % (old_ip or "?", new_ip), tag="网络")
+        self.lan_ip = new_ip
+        try:
+            if self.dns and getattr(self.dns, "answer_ip", None) is not None:
+                self.dns.answer_ip = new_ip
+        except Exception:
+            pass
+
     def _on_danmaku(self, item: dict) -> None:
         self.danmaku_total += 1
         if item["kind"] in ("gift", "guard", "sc"):
             self.gift_total += 1
         self.danmaku_recent.appendleft(item)
+        try:
+            self._dm_history.append(
+                item.get("kind", "danmaku"), item.get("user", ""),
+                item.get("text", ""),
+                {"price": item.get("price", 0)} if item.get("price") else None)
+        except Exception:
+            pass
 
         if not self.services.ps5_connected:
             return
         kind = item["kind"]
         if kind == "danmaku":
-            self.services.inject(item["user"], item["text"])
+            self._dm_throttle.push(item["user"], item["text"], priority=0)
         elif kind == "gift":
-            self.services.inject(item["user"], "送出 %s" % item["text"])
+            self._dm_throttle.push(item["user"], "送出 %s" % item["text"], priority=1)
         elif kind == "guard":
-            self.services.inject(item["user"], item["text"])
+            self._dm_throttle.push(item["user"], item["text"], priority=1)
         elif kind == "sc":
-            self.services.inject(item["user"], "醒目留言 ¥%s：%s"
-                                 % (item["price"] // 1000, item["text"]))
+            self._dm_throttle.push(item["user"],
+                                   "醒目留言 ¥%s：%s" % (item["price"] // 1000,
+                                                        item["text"]),
+                                   priority=1)
 
     def _on_ps5_join(self, channel: str) -> None:
         self.progress = paths.save_progress({"ps5_joined": time.time()})
@@ -1046,16 +1395,38 @@ class Orchestrator(object):
         self.services.inject("测试", text)
         return {"ok": True}
 
-    # ══════════════════════════════════════════════
-    # 快照（前端每秒拉一次）
-    # ══════════════════════════════════════════════
+    def _publisher_view(self, live: dict) -> dict:
+        """
+        PS5 推流信息。uptime 自己算，不用 nginx stat 给的那个累计值。
+        """
+        pub = dict(live.get("ps5") or {})
+        if pub.get("publishing"):
+            since = live.get("since") or 0
+            if since:
+                pub["uptime"] = max(0, int(time.time() - since))
+            else:
+                pub["uptime"] = 0
+        return pub
+
     def snapshot(self) -> dict:
         with self.lock:
             live = dict(self.live)
+            live["bili"] = dict(live.get("bili") or {})
+            if not live["bili"].get("channel"):
+                live["bili"]["channel"] = getattr(self.bili, "last_channel", "")
         dns_state = self.dns_status()
+        if hasattr(self.nginx, "forwarding"):
+            relay_running = self.nginx.forwarding
+            relay_uptime = self.nginx.uptime
+            relay_error = self.nginx.last_error
+        else:
+            relay_running = self.relay.running
+            relay_uptime = self.relay.uptime
+            relay_error = self.relay.last_error or self.nginx.last_error
         return {
             "caps": paths.caps(),
             "platform": paths.PLATFORM,
+            "version": paths.APP_VERSION,
             "step": self.progress.get("step", 1),
             "progress_dns_ok": bool(self.progress.get("dns_verified"))
                                or bool(self.dns and self.dns.running)
@@ -1070,10 +1441,10 @@ class Orchestrator(object):
                 "irc": {"running": self.services.irc.running,
                         "ps5": self.services.ps5_connected},
                 "nginx": {"running": self.nginx.running(),
-                          "publisher": live.get("ps5") or {}},
-                "relay": {"running": self.relay.running, "uptime": self.relay.uptime,
-                          "restarts": self.relay.restarts,
-                          "error": self.relay.last_error},
+                          "publisher": self._publisher_view(live)},
+                "relay": {"running": relay_running, "uptime": relay_uptime,
+                          "restarts": 0,
+                          "error": relay_error},
                 "danmaku": {"connected": self.services.danmaku_connected,
                             "count": self.danmaku_total, "gift": self.gift_total},
             },
@@ -1083,6 +1454,8 @@ class Orchestrator(object):
                 "uid": self.bili.uid,
                 "room_id": self.bili.room_id,
                 "area_id": self.cfg.get("BILIBILI_AREA_ID", "236"),
+                "title": ((self.cfg.get("BILIBILI_TITLE") or "").strip()
+                          or self._store.get("runtime", "last_title") or ""),
             },
             "live": {
                 "state": live.get("state", "idle"),
@@ -1093,8 +1466,6 @@ class Orchestrator(object):
                 "face_url": live.get("face_url", ""),
                 "output_mode": self.output_mode(),
                 "local_url": self.local_play_url(),
-                # 只有真的在播才算时长；idle / error 状态给 0，
-                # 否则「已播」会在没开播的时候自己往上跳。
                 "uptime": (int(time.time() - live["since"])
                            if live.get("since") and live.get("state")
                            in ("local", "relaying", "live") else 0),
@@ -1105,6 +1476,7 @@ class Orchestrator(object):
                 "auto_relay": bool(self.cfg.get("AUTO_RELAY", True)),
                 "ps5_net": self.cfg.get("PS5_NET", {}),
                 "twitch_channel": self.cfg.get("TWITCH_CHANNEL", ""),
+                "twitch_proxy": self.cfg.get("TWITCH_PROXY", ""),
             },
         }
 
@@ -1126,9 +1498,6 @@ class Orchestrator(object):
         self.progress = paths.save_progress({"step": step})
         return {"ok": True, "step": step}
 
-    # ══════════════════════════════════════════════
-    # 服务开关（nginx / relay 起停）
-    # ══════════════════════════════════════════════
     def ensure_nginx(self) -> dict:
         if self.nginx.running():
             return {"ok": True, "detail": "收流服务已在运行"}

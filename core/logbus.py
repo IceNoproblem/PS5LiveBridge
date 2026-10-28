@@ -1,14 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-core/logbus.py —— 日志总线
-
-一个进程里跑着 Web、DNS、nginx 监控、B站连接、转发器，日志必须能汇到一处：
-    1. 写文件（出问题后能翻）
-    2. 进内存环形缓冲（前端「运行日志」直接读，不用 SSE 也能工作）
-    3. 推给订阅者（SSE 实时刷）
-
-不做日志聚合的话，用户报「灯不绿」时我们只能猜。
-"""
 from __future__ import annotations
 
 import os
@@ -21,15 +10,12 @@ from . import paths
 
 _LOCK = threading.RLock()
 _BUFFER: deque = deque(maxlen=400)
-_SUBSCRIBERS: list = []          # list[queue.Queue]
+_SUBSCRIBERS: list = []
 _FILE_LOCK = threading.Lock()
 _FILE_HANDLE = None
 
 _MAX_LINE = 2000
 
-# 容器里没有界面窗口，排障只能靠 `docker logs`。
-# 桌面版不往 stdout 写 —— 打包成无控制台程序后 stdout 是 None，
-# 而且用户也不看那个黑框。
 _TO_STDOUT = paths.PLATFORM == "docker" or \
     (os.environ.get("PS5LB_LOG_STDOUT") or "").strip().lower() in ("1", "true", "yes")
 
@@ -52,9 +38,11 @@ def _open_file():
 
 def log(msg: str, level: str = "info", tag: str = "") -> dict:
     """记一条日志，返回这条记录（前端有时要立即展示）。"""
+    now = time.time()
     item = {
-        "t": time.strftime("%H:%M:%S"),
-        "ts": time.time(),
+        "t": "%s.%03d" % (time.strftime("%H:%M:%S", time.localtime(now)),
+                          int(now * 1000) % 1000),
+        "ts": now,
         "level": level if level in LEVELS else "info",
         "tag": tag,
         "msg": str(msg)[:_MAX_LINE],
@@ -62,32 +50,26 @@ def log(msg: str, level: str = "info", tag: str = "") -> dict:
     with _LOCK:
         _BUFFER.append(item)
         subs = list(_SUBSCRIBERS)
-    # 文件
+    stamp = "%s %s" % (time.strftime("%Y-%m-%d", time.localtime(now)), item["t"])
+    line = "%s [%s]%s %s\n" % (
+        stamp, item["level"].upper().ljust(7),
+        (" " + tag) if tag else "", item["msg"])
     with _FILE_LOCK:
         fh = _open_file()
         if fh:
             try:
-                fh.write("%s [%s]%s %s\n" % (
-                    time.strftime("%Y-%m-%d %H:%M:%S"),
-                    item["level"].upper(),
-                    (" " + tag) if tag else "",
-                    item["msg"],
-                ))
+                fh.write(line)
                 fh.flush()
             except Exception:
                 pass
-    # 订阅者
     for q in subs:
         try:
             q.put_nowait(item)
         except Exception:
             pass
-    # stdout（容器里 docker logs 直接能看到）
     if _TO_STDOUT:
         try:
-            sys.stdout.write("%s [%s]%s %s\n" % (
-                item["t"], item["level"].upper(),
-                (" " + tag) if tag else "", item["msg"]))
+            sys.stdout.write(line)
             sys.stdout.flush()
         except Exception:
             pass

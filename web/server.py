@@ -1,11 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-web/server.py —— 本地 Web 服务（界面 + API）
-
-只监听 127.0.0.1：这是本机控制台，没必要暴露到局域网，
-少一个被扫端口的面。界面走轮询（1.5 秒），比 SSE 简单且不会因为
-浏览器缓存/代理把流掐断而出现「界面卡住不动」的假象。
-"""
 from __future__ import annotations
 
 import threading
@@ -23,10 +15,9 @@ def create_app(orch, on_exit=None) -> Flask:
         static_url_path="/static",
     )
     app.config["JSON_AS_ASCII"] = False
+    app.config["TEMPLATES_AUTO_RELOAD"] = True
+    app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 
-    # ──────────────────────────────────────────────
-    # 页面
-    # ──────────────────────────────────────────────
     @app.get("/")
     def index():
         return render_template("wizard.html")
@@ -38,9 +29,6 @@ def create_app(orch, on_exit=None) -> Flask:
         except Exception:
             return ("", 204)
 
-    # ──────────────────────────────────────────────
-    # 状态
-    # ──────────────────────────────────────────────
     @app.get("/api/state")
     def api_state():
         try:
@@ -51,7 +39,6 @@ def create_app(orch, on_exit=None) -> Flask:
 
     @app.get("/api/env")
     def api_env():
-        # ?refresh=1 强制重新探测（用户刚开了加速器/换了网络时用）
         if request.args.get("refresh") == "1":
             netutil.clear_cache()
             logbus.info("网络环境已重新探测")
@@ -69,9 +56,6 @@ def create_app(orch, on_exit=None) -> Flask:
             "last_ts": (items[-1]["ts"] if items else since),
         })
 
-    # ──────────────────────────────────────────────
-    # 步骤 1：路由器配置
-    # ──────────────────────────────────────────────
     @app.get("/api/guides")
     def api_guides():
         return jsonify(orch.guides())
@@ -84,9 +68,27 @@ def create_app(orch, on_exit=None) -> Flask:
             return jsonify({"ok": True, "files": files})
         return jsonify({"ok": False, "msg": "写文件失败，请检查目录权限"})
 
-    # ──────────────────────────────────────────────
-    # 步骤 2：检测
-    # ──────────────────────────────────────────────
+    @app.post("/api/router/detect")
+    def api_router_detect():
+        body = request.get_json(silent=True) or {}
+        return jsonify(orch.router_detect(ip=body.get("ip", "")))
+
+    @app.post("/api/router/apply")
+    def api_router_apply():
+        body = request.get_json(silent=True) or {}
+        return jsonify(orch.router_apply(
+            ip=body.get("ip", ""),
+            username=body.get("username", "root") or "root",
+            password=body.get("password", "")))
+
+    @app.post("/api/router/restore")
+    def api_router_restore():
+        body = request.get_json(silent=True) or {}
+        return jsonify(orch.router_restore(
+            ip=body.get("ip", ""),
+            username=body.get("username", "root") or "root",
+            password=body.get("password", "")))
+
     @app.post("/api/dns/verify")
     def api_verify():
         body = request.get_json(silent=True) or {}
@@ -97,9 +99,6 @@ def create_app(orch, on_exit=None) -> Flask:
     def api_dns_status():
         return jsonify(orch.dns_status())
 
-    # ──────────────────────────────────────────────
-    # 端口劫持（搭配加速器的主方案）
-    # ──────────────────────────────────────────────
     @app.get("/api/divert/status")
     def api_divert_status():
         return jsonify(orch.divert_status())
@@ -116,9 +115,6 @@ def create_app(orch, on_exit=None) -> Flask:
     def api_hijack():
         return jsonify(orch.hijack_state())
 
-    # ──────────────────────────────────────────────
-    # 步骤 2B：内置 DNS
-    # ──────────────────────────────────────────────
     @app.post("/api/builtin/start")
     def api_builtin_start():
         return jsonify(orch.enable_builtin_dns())
@@ -149,9 +145,6 @@ def create_app(orch, on_exit=None) -> Flask:
         ok, detail = orch.dns.selftest()
         return jsonify({"ok": ok, "detail": detail, "upstreams": servers})
 
-    # ──────────────────────────────────────────────
-    # 步骤 3：加速器与 PS5 网络
-    # ──────────────────────────────────────────────
     @app.post("/api/ps5net")
     def api_ps5net():
         body = request.get_json(silent=True) or {}
@@ -164,9 +157,6 @@ def create_app(orch, on_exit=None) -> Flask:
     def api_ps5net_autofill():
         return jsonify(orch.autofill_ps5_net())
 
-    # ──────────────────────────────────────────────
-    # 步骤 4：登录
-    # ──────────────────────────────────────────────
     @app.post("/api/qr/new")
     def api_qr_new():
         return jsonify(orch.qr_new())
@@ -187,11 +177,10 @@ def create_app(orch, on_exit=None) -> Flask:
     def api_area():
         body = request.get_json(silent=True) or {}
         return jsonify(orch.save_area(str(body.get("area_id", "236")),
-                                      body.get("title", "")))
+                                      body.get("title", ""),
+                                      body.get("twitch_channel"),
+                                      body.get("twitch_proxy")))
 
-    # ──────────────────────────────────────────────
-    # 步骤 5/6：直播
-    # ──────────────────────────────────────────────
     @app.post("/api/output/mode")
     def api_output_mode():
         body = request.get_json(silent=True) or {}
@@ -243,9 +232,6 @@ def create_app(orch, on_exit=None) -> Flask:
     def api_hide():
         return jsonify({"ok": False, "msg": "浏览器模式无法隐藏窗口，直接关掉窗口即可"})
 
-    # ──────────────────────────────────────────────
-    # 更新
-    # ──────────────────────────────────────────────
     from core import updater as updater_mod
     _up = updater_mod.get_updater(paths.APP_VERSION)
 

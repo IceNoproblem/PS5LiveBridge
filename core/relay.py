@@ -1,16 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-core/relay.py —— 把截到的 PS5 流转发到 B 站（ffmpeg 流复制）
-
-为什么不转码：
-    PS5 推的是 H.264 + AAC，B 站直接吃。转码只会白白吃 CPU、加延迟、掉画质。
-    实测 -c copy 端到端延迟 1~2 秒，转码要 3 秒以上还烫机器。
-
-几个必要参数（少一个就可能推不上去）：
-    -flvflags no_duration_filesize  B 站不接受带 duration/filesize 的 FLV 头
-    -rtmp_live live                 告诉 ffmpeg 这是直播流，别等文件结尾
-    -fflags +genpts                 时间戳重排，PS5 的 PTS 偶尔跳
-"""
 from __future__ import annotations
 
 import os
@@ -23,7 +10,17 @@ from . import logbus, paths
 
 
 def find_ffmpeg() -> str:
-    """优先用随程序分发的 ffmpeg.exe（用户机器上不一定装了），再退回系统 PATH。"""
+    """
+    统一走 ffmpeg_mgr 的探测（它会看 FFMPEG_PATH 环境变量、
+    随包 tools/、系统 PATH，比这里原来那套更全）。
+    """
+    try:
+        from .ffmpeg_mgr import find_ffmpeg as _find
+        p = _find()
+        if p:
+            return p
+    except Exception:
+        pass
     for name in ("ffmpeg.exe", "ffmpeg"):
         p = paths.resource_path("tools", name)
         if os.path.exists(p):
@@ -47,12 +44,10 @@ class Relay(object):
         self._tail = []
         self._tail_lock = threading.Lock()
         self._watch = None
+        self._watch_gen = 0
         self._stopping = False
-        self.on_drop = None          # callable(reason) 意外中断时回调
+        self.on_drop = None
 
-    # ──────────────────────────────────────────────
-    # 状态
-    # ──────────────────────────────────────────────
     @property
     def running(self) -> bool:
         return bool(self.proc and self.proc.poll() is None)
@@ -74,9 +69,6 @@ class Relay(object):
             if len(self._tail) > 200:
                 del self._tail[:100]
 
-    # ──────────────────────────────────────────────
-    # 启动
-    # ──────────────────────────────────────────────
     def start(self, input_url: str, output_url: str) -> bool:
         with self._lock:
             self.stop(_internal=True)
@@ -119,9 +111,7 @@ class Relay(object):
 
         logbus.ok("开始把 PS5 画面转发到 B 站", tag="转发")
         threading.Thread(target=self._read_stderr, args=(self.proc,), daemon=True).start()
-        if self._watch:
-            self._watch.cancel()
-            self._watch = None
+        self._watch = None
         return True
 
     def _read_stderr(self, proc):
@@ -139,18 +129,18 @@ class Relay(object):
         except Exception:
             pass
 
-    # ──────────────────────────────────────────────
-    # 监控（ffmpeg 意外退出要能自己拉起来）
-    # ──────────────────────────────────────────────
     def start_watchdog(self, on_drop=None, max_restarts=8):
         self.on_drop = on_drop
         self.restarts = 0
-        self._watchdog_loop(on_drop, max_restarts)
+        self._watch_gen += 1
+        self._watchdog_loop(on_drop, max_restarts, self._watch_gen)
 
-    def _watchdog_loop(self, on_drop, max_restarts):
+    def _watchdog_loop(self, on_drop, max_restarts, gen):
         def loop():
             while True:
                 time.sleep(2)
+                if gen != self._watch_gen:
+                    return
                 if self._stopping:
                     return
                 if not self.proc:
@@ -185,12 +175,10 @@ class Relay(object):
         self._watch = threading.Thread(target=loop, name="relay-watchdog", daemon=True)
         self._watch.start()
 
-    # ──────────────────────────────────────────────
-    # 停止
-    # ──────────────────────────────────────────────
     def stop(self, _internal: bool = False) -> None:
         was_running = self.running
         self._stopping = True
+        self._watch_gen += 1
         p = self.proc
         self.proc = None
         if p and p.poll() is None:

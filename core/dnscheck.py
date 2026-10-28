@@ -1,30 +1,13 @@
-# -*- coding: utf-8 -*-
-"""
-core/dnscheck.py —— 「重定向到底成没成」的判定器
-
-这是整个向导的分水岭：检测通过就走路由器方案，检测失败才允许启用内置 DNS。
-所以判定必须说清楚「问的是谁、答的是什么」，不能只给一个红绿灯。
-
-判定逻辑：
-    对每一个候选 DNS 服务器（路由器 / 本机 / 系统 DNS / 127.0.0.1），
-    逐个查 4 个代表域名，看是否都答成本机 IP。
-    只要有一个来源全部命中，就认为「PS5 那份解析已经指向本机」。
-
-额外识别一种关键错案：
-    查询返回 198.18.x.x / 198.19.x.x —— 那是加速器的 fake-ip。
-    说明 PS5 的 DNS 已经被加速器接管，路由器上的 hosts 根本没机会生效，
-    此时必须走内置 DNS 分支（并且上游要填加速器 DNS）。
-"""
 from __future__ import annotations
 
 from . import dnsserver, netutil
 
-# 每个劫持后缀挑一个代表域名，够判定，也不至于太慢
 CHECK_DOMAINS = [
     "contribute.live-video.net",
+    "global-contribute.live-video.net",
     "ingest.global-contribute.live-video.net",
-    "live.twitch.tv",
     "irc.twitch.tv",
+    "tmi.twitch.tv",
 ]
 
 PUBLIC_HINTS = ("不是本机",)
@@ -127,7 +110,6 @@ def verify(expected_ip: str, target=None, domains=None, mode: str = "router") ->
 
     entries = candidates(include_self=(mode == "builtin"))
     if mode == "builtin":
-        # 内置 DNS 模式下只验「本机有没有在正确劫持」，路由器那条与它无关
         entries = [e for e in entries if e["kind"] == "self"]
     else:
         entries = [e for e in entries if e["kind"] != "self"]
@@ -154,13 +136,11 @@ def verify(expected_ip: str, target=None, domains=None, mode: str = "router") ->
             r["kind"] = entry["kind"]
             results.append(r)
             fake_any = fake_any or r.get("fake_ip", False)
-            # 路由器 / 本机 命中优先于系统 DNS / 内置 DNS
             if r["ok"] and (winner is None or _rank(r) < _rank(winner)):
                 winner = r
 
     results.sort(key=_rank)
 
-    # 内置 DNS 自己也算赢，但优先级最低：只有前面全灭时才算
     ok = winner is not None
     hint = ""
     if ok:

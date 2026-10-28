@@ -1,15 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-ui/window.py —— 把界面装进一个「看起来像软件」的窗口
-
-三级降级，从好到将就：
-    1. pywebview（装了才用）—— 真正的原生窗口，能拿到关闭事件
-    2. Edge / Chrome 的 --app 模式 —— 没有地址栏和标签页，视觉上就是独立应用；
-       用一个独立 user-data-dir 起进程，窗口关掉进程就退，能当关闭信号用
-    3. 默认浏览器 —— 最差也能用，只是多一个标签页
-
-产品不能因为「某个依赖没装」就打不开，所以这里必须层层兜底。
-"""
 from __future__ import annotations
 
 import os
@@ -19,7 +7,6 @@ import time
 
 from core import logbus, netutil, paths
 
-# Windows 上 Edge 的常见安装位置
 EDGE_PATHS = [
     r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
     r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
@@ -104,9 +91,8 @@ def open_app_window(url: str, title: str, on_close=None, stop_event=None) -> str
                 return
             time.sleep(0.5)
 
-    # ── 1. 原生窗口 ──
     try:
-        import webview  # pywebview
+        import webview
     except Exception:
         webview = None
 
@@ -132,18 +118,15 @@ def open_app_window(url: str, title: str, on_close=None, stop_event=None) -> str
         except Exception as e:
             logbus.warn("原生窗口不可用（%s），尝试 app 模式" % e)
 
-    # ── 2. 浏览器 app 模式 ──
     browser = _find_browser()
     if browser:
         t0 = time.time()
         proc = _app_mode(title, browser, url)
         if proc is not None:
             logbus.info("界面窗口已打开（app 模式）")
-            # 窗口进程退出 = 用户关掉了窗口
             wait_loop(lambda: proc.poll() is not None)
             elapsed = time.time() - t0
             if stop_event is not None and stop_event.is_set():
-                # 用户点了「退出」
                 return "app"
             if proc.poll() is None or elapsed >= 3.0:
                 if on_close:
@@ -152,14 +135,10 @@ def open_app_window(url: str, title: str, on_close=None, stop_event=None) -> str
                     except Exception:
                         pass
                 return "app"
-            # 秒退 = 浏览器没活下来，不是用户关窗
             logbus.warn("浏览器窗口 %.1f 秒就退出了，多半是浏览器拒绝管理员权限启动，改开默认浏览器"
                         % elapsed)
 
-    # ── 3. 默认浏览器 ──
     try:
-        # 走 explorer.exe 交给 shell 启动：不继承管理员令牌，浏览器不会自我保护退出。
-        # 直接 webbrowser.open() 在提权进程里拉起来的还是提权浏览器，可能重蹈覆辙。
         if netutil.IS_WINDOWS:
             subprocess.Popen(["explorer.exe", url],
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -168,7 +147,7 @@ def open_app_window(url: str, title: str, on_close=None, stop_event=None) -> str
             webbrowser.open(url)
         logbus.info("已在默认浏览器打开界面：%s" % url)
         _notify_browser_fallback(url)
-        wait_loop(lambda: False)      # 只能靠界面上的「退出」或 Ctrl+C
+        wait_loop(lambda: False)
         return "browser"
     except Exception as e:
         logbus.error("连浏览器都没打开（%s）。请手动访问 %s" % (e, url))

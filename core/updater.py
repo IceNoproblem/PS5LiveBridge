@@ -1,17 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-core/updater.py —— 自动更新（GitHub Releases）
-
-两端一套检查逻辑，安装方式不同：
-    Windows 桌面版：下载 zip → 起更新脚本 → 自己退出 → 脚本换文件 → 自动重启。
-        正在运行的 exe 不能覆盖自己，所以必须借外部脚本的手。
-    容器版：容器不能替换自己。检查到新版只提示，真正的更新交给
-        watchtower（compose 的 auto-update profile）或手动 docker compose pull。
-
-安全边界：
-    只从 GitHub 官方仓库的 Releases 下载，不跟随任何网页里的链接；
-    下载前后校验文件大小；用户数据（config / 凭据 / 日志）永不覆盖。
-"""
 from __future__ import annotations
 
 import json
@@ -27,8 +13,6 @@ import zipfile
 
 from . import logbus, paths
 
-# PyInstaller 冻结后 urllib 找不到系统 CA 证书，必须用 certifi 提供的 CA 包。
-# 不加这段，更新检查会报 SSL: CERTIFICATE_VERIFY_FAILED。
 try:
     import certifi
     _SSL_CTX = ssl.create_default_context(cafile=certifi.where())
@@ -39,15 +23,11 @@ REPO = "IceNoproblem/PS5LiveBridge"
 API_LATEST = "https://api.github.com/repos/%s/releases/latest" % REPO
 RELEASES_PAGE = "https://github.com/%s/releases" % REPO
 
-# 检查频率：启动 30 秒后第一次，之后每 12 小时。
-# GitHub 匿名 API 限速 60 次/小时，这个频率远在限内。
 CHECK_DELAY = 30.0
 CHECK_INTERVAL = 12 * 3600.0
 
-# 更新包落盘位置（随用户数据走，程序目录里的 data/update）
 UPDATE_DIR = os.path.join(paths.DATA_DIR, "update")
 
-# 换版本时绝不覆盖的文件 / 目录
 KEEP = {"config.json", "bili_credential.json", "logs", "data",
         "启动轨迹.txt", "崩溃日志.txt", "update", ".DS_Store"}
 
@@ -72,7 +52,7 @@ class Updater(object):
         self.app_version = str(app_version)
         self._lock = threading.RLock()
         self._state = {
-            "state": "idle",          # idle / checking / available / downloading / ready / installing / error
+            "state": "idle",
             "current": self.app_version,
             "latest": "",
             "notes": "",
@@ -85,7 +65,6 @@ class Updater(object):
         self._stop = False
         self._thread = None
 
-    # ── 状态 ──────────────────────────────────────────
     def snapshot(self) -> dict:
         with self._lock:
             return dict(self._state)
@@ -94,7 +73,6 @@ class Updater(object):
         with self._lock:
             self._state.update(kw)
 
-    # ── 后台巡检 ──────────────────────────────────────
     def start(self, enabled: bool = True) -> None:
         if not enabled or self._thread is not None:
             return
@@ -116,7 +94,6 @@ class Updater(object):
                     return
                 time.sleep(1)
 
-    # ── 检查 ──────────────────────────────────────────
     def check(self, force: bool = False) -> dict:
         """查 GitHub 最新版。force=True 忽略缓存。返回 snapshot()。"""
         with self._lock:
@@ -129,7 +106,6 @@ class Updater(object):
         try:
             info = self._fetch_latest()
         except Exception as e:
-            # 网络不通不是错误，安静降级；点过「检查」再把原因带出去
             self._set(state="idle", error=str(e)[:200], checked_at=time.time())
             return self.snapshot()
 
@@ -167,7 +143,6 @@ class Updater(object):
         return {"latest": tag.lstrip("vV"), "notes": data.get("body") or "",
                 "asset_url": asset_url, "asset_size": asset_size}
 
-    # ── 安装（Windows）────────────────────────────────
     def install(self, on_before_exit=None) -> dict:
         """
         下载 → 校验 → 解压 → 交棒更新脚本 → 退出。
@@ -176,9 +151,14 @@ class Updater(object):
         snap = self.snapshot()
         if snap["state"] != "available" or not snap["asset_url"]:
             return {"ok": False, "detail": "没有可安装的更新"}
-        if paths.PLATFORM != "windows":
+        if paths.PLATFORM == "docker":
             return {"ok": False, "detail": "容器版不能自我替换，请在宿主机执行：\n"
                                           "docker compose pull && docker compose up -d"}
+        if paths.PLATFORM == "macos":
+            return {"ok": False, "detail": "macOS 版暂不支持自动更新。\n"
+                                          "请到 GitHub Releases 手动下载新版 .app 替换。"}
+        if paths.PLATFORM != "windows":
+            return {"ok": False, "detail": "当前平台不支持自动更新。"}
 
         t = threading.Thread(target=self._install_bg,
                              args=(on_before_exit,), daemon=True)
@@ -199,7 +179,6 @@ class Updater(object):
             if size and os.path.getsize(zip_path) != size:
                 raise RuntimeError("下载不完整（大小对不上），请重试")
 
-            # 解压出 <zip>/PS5LiveBridge/ 这一层
             new_dir = os.path.join(UPDATE_DIR, "new")
             if os.path.isdir(new_dir):
                 shutil.rmtree(new_dir, ignore_errors=True)
@@ -223,14 +202,13 @@ class Updater(object):
                     pass
 
             self._set(state="installing")
-            # 起更新脚本（独立进程），主程序随即退出，脚本换完文件再把新程序拉起来
             kwargs = {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0)}
             subprocess.Popen(
                 ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
                  "-File", script],
                 **kwargs)
             time.sleep(1.0)
-            os._exit(0)     # 交给更新脚本收尾；走正常退出路径会把 Job 对象里的子进程带走，nginx 已经在回调里停了
+            os._exit(0)
         except Exception as e:
             logbus.error("更新失败：%s" % e, tag="更新")
             self._set(state="error", error=str(e)[:300])
@@ -308,7 +286,6 @@ Remove-Item -Path $PSCommandPath -Force -ErrorAction SilentlyContinue
         return script
 
 
-# 进程级单例（orchestrator / web 共用一个实例）
 _UPDATER: Updater = None
 _UP_LOCK = threading.Lock()
 
