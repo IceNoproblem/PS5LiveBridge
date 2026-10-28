@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import ssl
 import subprocess
 import sys
 import threading
@@ -25,6 +26,14 @@ import urllib.request
 import zipfile
 
 from . import logbus, paths
+
+# PyInstaller 冻结后 urllib 找不到系统 CA 证书，必须用 certifi 提供的 CA 包。
+# 不加这段，更新检查会报 SSL: CERTIFICATE_VERIFY_FAILED。
+try:
+    import certifi
+    _SSL_CTX = ssl.create_default_context(cafile=certifi.where())
+except ImportError:
+    _SSL_CTX = ssl.create_default_context()
 
 REPO = "IceNoproblem/PS5LiveBridge"
 API_LATEST = "https://api.github.com/repos/%s/releases/latest" % REPO
@@ -143,7 +152,7 @@ class Updater(object):
             "User-Agent": "PS5LiveBridge/" + self.app_version,
             "Accept": "application/vnd.github+json",
         })
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=10, context=_SSL_CTX) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         tag = data.get("tag_name") or ""
         asset_url, asset_size = "", 0
@@ -228,7 +237,7 @@ class Updater(object):
 
     def _download(self, url: str, dest: str, total: int) -> None:
         req = urllib.request.Request(url, headers={"User-Agent": "PS5LiveBridge/" + self.app_version})
-        with urllib.request.urlopen(req, timeout=60) as resp, open(dest, "wb") as f:
+        with urllib.request.urlopen(req, timeout=60, context=_SSL_CTX) as resp, open(dest, "wb") as f:
             done = 0
             while True:
                 chunk = resp.read(256 * 1024)
