@@ -27,3 +27,16 @@ nginx-rtmp/temp/*
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ── 运行时数据 ──
+progress.json
+data/
+rtmp_progress.txt
+
+# 调试笔记
+启动轨迹.txt
+崩溃日志.txt
+
+# 备份与旧截图
+*.bak
+docs/screens/old/

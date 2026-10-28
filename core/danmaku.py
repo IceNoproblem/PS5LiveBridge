@@ -1,16 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-core/danmaku.py —— B 站直播弹幕 WebSocket 客户端
-
-职责单一：连上 B 站弹幕服务器，把「弹幕 / 礼物 / 舰长 / 醒目留言」解出来，
-交给上层（编排器）决定要不要回注到 PS5 画面。
-
-协议细节：
-    * 包头 16 字节：total(4) header(4) ver(2) op(4) seq(4)，大端。
-    * ver=0 明文 JSON，ver=1 心跳，ver=2 zlib 压缩，ver=3 brotli 压缩。
-      压缩包解开后是一串完整的小包，要递归解。
-    * 认证 op=7，心跳 op=2 每 30 秒，服务端通知 op=5。
-"""
 from __future__ import annotations
 
 import asyncio
@@ -128,8 +115,8 @@ class DanmakuClient(object):
 
     def __init__(self, bili, on_message=None, on_state=None):
         self.bili = bili
-        self.on_message = on_message      # callable(dict) —— 同步回调
-        self.on_state = on_state          # callable(str) —— connected/closed/error
+        self.on_message = on_message
+        self.on_state = on_state
         self.room_id = 0
         self.connected = False
         self.running = False
@@ -141,7 +128,6 @@ class DanmakuClient(object):
         self.count = 0
         self.last_at = 0.0
 
-    # ---------- 连接 ----------
     async def start(self, room_id: int) -> bool:
         await self.stop()
         self.room_id = room_id
@@ -236,8 +222,6 @@ class DanmakuClient(object):
         }
         session = aiohttp.ClientSession()
         self._session = session
-        # 弹幕有冷场期，接收超时必须关掉，否则十几秒没消息就被判超时、不停重连。
-        # 新旧 aiohttp 的写法不一样，按版本分支，别指望用户装的都是最新版。
         ws_kw = {"headers": headers, "heartbeat": None}
         if hasattr(aiohttp, "ClientWSTimeout"):
             ws_kw["timeout"] = aiohttp.ClientWSTimeout(ws_receive=None)

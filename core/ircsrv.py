@@ -1,17 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-core/ircsrv.py —— 本地 IRC 服务器（PS5 的弹幕通道）
-
-PS5 开播时会连 tmi.twitch.tv:6667 走 IRC 拉弹幕，我们把这条连接接到本机，
-就能把 B 站弹幕「喂」进 PS5 的画面叠加层。
-
-协议要点（都是踩过坑才写上的）：
-    * CAP LS/REQ/ACK 必须应答，否则 PS5 的 IRC 客户端会卡在协商阶段。
-    * 一定要在 NICK 之后主动 JOIN 频道：PS5 自己不 JOIN，它等服务器把它拉进去。
-    * 必要时主动发 PING，PS5 长时间没数据会以为自己掉线。
-    * Windows 上不能给 asyncio.start_server 传 reuse_port —— 会直接抛异常，
-      而且异常被 catch 住后表现为「6667 永远不监听」，极其隐蔽。
-"""
 from __future__ import annotations
 
 import asyncio
@@ -20,7 +6,7 @@ import time
 
 from . import logbus
 
-HEARTBEAT_TIMEOUT = 18000  # 5 小时，PS5 的会话很长
+HEARTBEAT_TIMEOUT = 18000
 
 
 class IrcClient(object):
@@ -39,7 +25,6 @@ class IrcClient(object):
         self.alive = True
         self.joined = False
 
-    # ---------- 收发 ----------
     def _check(self) -> bool:
         if not self.writer or self.writer.is_closing():
             self.alive = False
@@ -62,7 +47,6 @@ class IrcClient(object):
         except Exception:
             self.alive = False
 
-    # ---------- 频道 ----------
     async def join_channel(self) -> None:
         if self.joined or not self._check():
             return
@@ -75,7 +59,6 @@ class IrcClient(object):
         logbus.ok("PS5 已进入弹幕频道 %s" % target, tag="IRC")
         self.server._fire_join(target)
 
-    # ---------- 命令 ----------
     async def handle(self, line: str) -> None:
         if not line or not self._check():
             return
@@ -101,8 +84,6 @@ class IrcClient(object):
                 ("376", ">"),
             ):
                 await self.send(":tmi.twitch.tv %s %s :%s" % (num, n, text))
-            # 真 Twitch 不会主动把客户端拉进频道，但 PS5 自己也不发 JOIN，
-            # 所以必须在 WELCOME 之后由我们把它 join 进去。
             await self.join_channel()
 
         elif cmd == "CAP":
@@ -127,7 +108,6 @@ class IrcClient(object):
         elif cmd == "JOIN":
             if len(parts) >= 2:
                 ch = parts[1]
-                # PS5 自己发 JOIN 时以它给的频道名为准，否则我们后面发 PRIVMSG 会被它丢掉
                 want = ch.lstrip(":#")
                 if want and want != self.server.channel:
                     logbus.info("PS5 指定频道 %s，后续弹幕发往这里" % ch, tag="IRC")
@@ -150,7 +130,6 @@ class IrcClient(object):
         elif cmd == "QUIT":
             self.alive = False
 
-    # ---------- 主循环 ----------
     async def run(self) -> None:
         try:
             while self._check():
@@ -185,10 +164,9 @@ class IrcServer(object):
         self.channel = "ps5"
         self.running = False
         self._server = None
-        self.on_join = None          # callable(channel)
-        self.on_drop = None          # callable()
+        self.on_join = None
+        self.on_drop = None
 
-    # ---------- 生命周期 ----------
     async def start(self, host: str = "0.0.0.0", port: int = 6667) -> bool:
         use_reuse = (sys.platform != "win32") and hasattr(__import__("socket"), "SO_REUSEPORT")
         try:
@@ -196,7 +174,6 @@ class IrcServer(object):
                 self._handle, host, port, reuse_address=True, reuse_port=use_reuse)
         except (ValueError, OSError) as e:
             if use_reuse:
-                # 退化一次：Windows 上 reuse_port 不被支持
                 try:
                     self._server = await asyncio.start_server(
                         self._handle, host, port, reuse_address=True)
@@ -260,7 +237,6 @@ class IrcServer(object):
             except Exception:
                 pass
 
-    # ---------- 注入 ----------
     @property
     def connected(self) -> bool:
         return any(c.alive for c in self.clients)

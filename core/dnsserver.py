@@ -1,17 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-core/dnsserver.py —— 内置 DNS 服务器（纯标准库，无第三方依赖）
-
-只在「路由器重定向做不通」这条分支使用：
-    PS5 的 DNS 指向本机 -> 本进程应答 -> 推流域名返回本机 IP，
-    其余域名原样转发给上游（必须是加速器 DNS，否则开播握手会绕过加速）。
-
-要点：
-    * 同时监听 UDP/53 与 TCP/53。应答被截断时客户端会改用 TCP 重试，
-      只做 UDP 会导致部分域名解析失败。
-    * 上游可热替换：用户在引导页填了加速器 DNS 之后立刻生效，不用重启。
-    * 记录每一次查询，向导靠它判断「PS5 的流量真的到本机了没有」。
-"""
 from __future__ import annotations
 
 import socket
@@ -23,20 +9,92 @@ from collections import deque
 QTYPE_A = 1
 QTYPE_AAAA = 28
 
-# 绝对不能劫持的域名：动了 PS5 就连不上索尼 / 开不了播
+
+REDIRECT_DOMAINS = (
+    "contribute.live-video.net",
+    "global-contribute.live-video.net",
+    "ingest.global-contribute.live-video.net",
+    "irc.twitch.tv",
+    "tmi.twitch.tv",
+)
+
+PROXY_DOMAINS = (
+    "api.twitch.tv",
+    "ingest.twitch.tv",
+)
+
+CHECK_DOMAINS = (
+    "contribute.live-video.net",
+    "live-push.bilivideo.com",
+)
+
 NEVER_HIJACK = (
-    "api.twitch.tv", "ingest.twitch.tv",
     "playstation.net", "playstation.com", "sony.com",
     "sonyentertainmentnetwork.com",
-    "bilibili.com", "bilivideo.com", "hdslb.com",
+    "api.bilibili.com", "www.bilibili.com", "passport.bilibili.com",
+    "hdslb.com",
 )
 
 DEFAULT_UPSTREAM = ["223.5.5.5", "119.29.29.29"]
 
 
-# ──────────────────────────────────────────────────────────────
-# 报文解析
-# ──────────────────────────────────────────────────────────────
+def detect_upstream() -> list:
+    """
+    自动检测系统上游 DNS（v5.0.0，参照 PSLinkB）。
+    - Windows：读注册表 Get-DnsClientServerAddress
+    - Unix/macOS：读 /etc/resolv.conf
+    失败则用默认值。
+    """
+    import sys
+    import subprocess
+    result = []
+    try:
+        if sys.platform == "win32":
+            r = subprocess.run(
+                ["powershell", "-Command",
+                 "(Get-DnsClientServerAddress -AddressFamily IPv4 | "
+                 "Where-Object {$_.ServerAddresses}).ServerAddresses"],
+                capture_output=True, timeout=3)
+            for line in r.stdout.decode().splitlines():
+                ip = line.strip()
+                if ip and "." in ip and ip not in result:
+                    result.append(ip)
+        else:
+            try:
+                with open("/etc/resolv.conf") as f:
+                    for line in f:
+                        if line.startswith("nameserver"):
+                            ip = line.split()[1].strip()
+                            if ip not in result:
+                                result.append(ip)
+            except FileNotFoundError:
+                pass
+    except Exception:
+        pass
+    return result or list(DEFAULT_UPSTREAM)
+
+
+def check_dns_health(upstream: str = "", domain: str = "") -> bool:
+    """
+    检查 DNS 配置是否生效（v5.0.0）。
+    查询 CHECK_DOMAINS，验证返回 IP 是本机。
+    """
+    import socket
+    if not domain:
+        domain = CHECK_DOMAINS[0] if CHECK_DOMAINS else "contribute.live-video.net"
+    if not upstream:
+        upstream = "127.0.0.1"
+    try:
+        result = socket.getaddrinfo(domain, None, socket.AF_INET)
+        ips = [r[4][0] for r in result]
+        for ip in ips:
+            if ip.startswith("192.168.") or ip.startswith("127."):
+                return True
+        return False
+    except Exception:
+        return False
+
+
 def parse_qname(data: bytes, offset: int):
     """解析域名，返回 (小写域名, 名字之后的位置)。支持压缩指针。"""
     labels = []
@@ -128,7 +186,7 @@ def parse_answers(data: bytes):
             pos += rdlen
             if rtype == QTYPE_A and rdlen == 4:
                 ips.append(socket.inet_ntoa(rdata))
-            elif rtype == 5:  # CNAME
+            elif rtype == 5:
                 try:
                     name, _ = parse_qname(data, pos - rdlen)
                     if name:
@@ -165,9 +223,6 @@ def build_servfail(query: bytes) -> bytes:
     return qid + struct.pack("!HHHHH", flags, 0, 0, 0, 0)
 
 
-# ──────────────────────────────────────────────────────────────
-# 对外查询工具（检测、诊断都用它）
-# ──────────────────────────────────────────────────────────────
 def query(server: str, domain: str, qtype: int = QTYPE_A,
           timeout: float = 2.5, port: int = 53, follow_cname: bool = True):
     """
@@ -206,9 +261,6 @@ def query(server: str, domain: str, qtype: int = QTYPE_A,
     return True, ips
 
 
-# ──────────────────────────────────────────────────────────────
-# 统计
-# ──────────────────────────────────────────────────────────────
 class Stats(object):
     def __init__(self):
         self._lock = threading.Lock()
@@ -218,8 +270,9 @@ class Stats(object):
         self.failed = 0
         self.started_at = time.time()
         self.clients = {}
-        self.recent = deque(maxlen=80)
+        self.recent = deque(maxlen=200)
         self.hits = {}
+        self._file_lock = threading.Lock()
 
     def record(self, client_ip, qname, hit, ok=True):
         with self._lock:
@@ -239,6 +292,18 @@ class Stats(object):
             self.recent.appendleft({"t": time.time(), "ip": client_ip,
                                     "q": qname, "hit": bool(hit)})
 
+        try:
+            from . import paths
+            import os
+            path = os.path.join(paths.LOGS_DIR, "dns_queries.log")
+            with self._file_lock:
+                with open(path, "a", encoding="utf-8") as f:
+                    f.write("%s\t%s\t%s\t%s\n" % (
+                        time.strftime("%H:%M:%S"), client_ip, qname,
+                        "HIT" if hit else "fwd"))
+        except Exception:
+            pass
+
     def snapshot(self):
         with self._lock:
             now = time.time()
@@ -253,7 +318,7 @@ class Stats(object):
                 "forwarded": self.forwarded, "failed": self.failed,
                 "uptime": round(now - self.started_at, 1),
                 "clients": clients[:12],
-                "recent": list(self.recent)[:15],
+                "recent": list(self.recent)[:60],
                 "hits": dict(sorted(self.hits.items(), key=lambda kv: -kv[1])[:10]),
             }
 
@@ -267,14 +332,11 @@ class Stats(object):
         return False
 
 
-# ──────────────────────────────────────────────────────────────
-# 服务器
-# ──────────────────────────────────────────────────────────────
 class DnsServer(object):
     def __init__(self, answer_ip, domains=None, upstreams=None, port=53, verbose=False):
         self.answer_ip = answer_ip
-        self.domains = set(d.lower().strip(".") for d in (domains or []))
-        self._upstreams = list(upstreams or DEFAULT_UPSTREAM)
+        self.domains = set(d.lower().strip(".") for d in (domains or REDIRECT_DOMAINS))
+        self._upstreams = list(upstreams or detect_upstream())
         self.port = int(port)
         self.verbose = verbose
         self.stats = Stats()
@@ -286,7 +348,6 @@ class DnsServer(object):
         self._threads = []
         self._up_lock = threading.Lock()
 
-    # ---------- 上游 ----------
     @property
     def upstreams(self):
         with self._up_lock:
@@ -300,7 +361,6 @@ class DnsServer(object):
             self._upstreams = clean
         return True
 
-    # ---------- 匹配 ----------
     def is_hijacked(self, qname: str) -> bool:
         qname = qname.rstrip(".").lower()
         for d in NEVER_HIJACK:
@@ -313,7 +373,6 @@ class DnsServer(object):
                 return True
         return False
 
-    # ---------- 转发 ----------
     def _forward(self, query_bytes, use_tcp=False):
         for upstream in self.upstreams:
             try:
@@ -337,7 +396,9 @@ class DnsServer(object):
                     s.sendto(query_bytes, (upstream, 53))
                     resp, _ = s.recvfrom(4096)
                     s.close()
-                    return resp
+                    if resp[:2] == query_bytes[:2]:
+                        return resp
+                    continue
             except Exception:
                 try:
                     s.close()
@@ -376,7 +437,6 @@ class DnsServer(object):
         self.stats.record(client_ip, qname, False, ok=False)
         return build_servfail(data)
 
-    # ---------- 监听循环 ----------
     def _serve_udp(self):
         while self.running:
             try:
@@ -429,7 +489,6 @@ class DnsServer(object):
             except Exception:
                 pass
 
-    # ---------- 启停 ----------
     def bind(self) -> bool:
         """
         先试 0.0.0.0；失败再试只绑定本机 IP。

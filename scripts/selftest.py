@@ -1,17 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-scripts/selftest.py —— 不接 PS5、不接 B 站也能跑的自我验证
-
-覆盖六个最容易出错、且出错了很难看出来的地方：
-    1. 内置 DNS 的劫持与转发（含「绝不动 api.twitch.tv」这条红线）
-    2. 重定向检测的判定结构
-    3. 本地 IRC 通道：模拟 PS5 连上来，能不能收到注入的弹幕
-    4. B 站弹幕包解压（brotli/zlib 那套二进制协议）
-    5. nginx /stat XML 解析（拿 app 名和流名）
-    6. 直播状态机：推流 -> 开播 -> 转发 -> 确认 -> 停播
-
-运行： python3 scripts/selftest.py
-"""
 from __future__ import annotations
 
 import json
@@ -24,7 +10,7 @@ import zlib
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from core import (danmaku, dnscheck, dnsserver, logbus, netutil, nginxmgr,  # noqa: E402
+from core import (danmaku, dnscheck, dnsserver, logbus, netutil, nginxmgr,
                   routercfg, services)
 
 PASS, FAIL = [], []
@@ -39,9 +25,6 @@ def check(name, cond, detail=""):
         print("  \033[31mFAIL\033[0m  %s%s" % (name, ("  — " + str(detail)) if detail else ""))
 
 
-# ──────────────────────────────────────────────────────────────
-# 1. DNS
-# ──────────────────────────────────────────────────────────────
 def t_dns():
     print("\n[1] 内置 DNS")
     srv = dnsserver.DnsServer("10.1.2.3",
@@ -74,9 +57,6 @@ def t_dns():
     srv.stop()
 
 
-# ──────────────────────────────────────────────────────────────
-# 2. 检测判定
-# ──────────────────────────────────────────────────────────────
 def t_check():
     print("\n[2] 重定向检测")
     r = dnscheck.verify("192.0.2.99", mode="router")
@@ -93,9 +73,6 @@ def t_check():
           all(x["server"] == "127.0.0.1" for x in b["results"]))
 
 
-# ──────────────────────────────────────────────────────────────
-# 3. IRC
-# ──────────────────────────────────────────────────────────────
 def t_irc():
     print("\n[3] PS5 弹幕通道（IRC）")
     got = {"join": None}
@@ -130,15 +107,17 @@ def t_irc():
     check("自动拉进频道", "JOIN #" in text)
     check("先 WELCOME 再 JOIN（与真 Twitch 同序）",
           text.find(" 001 ") < text.find("JOIN #") if "JOIN #" in text else False)
+    for _ in range(20):
+        if got["join"] is not None:
+            break
+        time.sleep(0.05)
     check("on_join 回调触发", got["join"] is not None, str(got["join"]))
 
-    # PING -> PONG
     s.sendall(b"PING :tmi.twitch.tv\r\n")
     pong = read_until("PONG")
     check("PING 回 PONG（不出现双冒号）",
           "PONG :tmi.twitch.tv" in pong and "::" not in pong, pong.strip()[:60])
 
-    # 注入弹幕
     sv.inject("张三", "这是一条测试弹幕")
     text = read_until("这是一条测试弹幕")
     check("弹幕能注入到 PS5", "PRIVMSG" in text and "这是一条测试弹幕" in text,
@@ -151,16 +130,12 @@ def t_irc():
     sv.stop()
 
 
-# ──────────────────────────────────────────────────────────────
-# 4. 弹幕包解析
-# ──────────────────────────────────────────────────────────────
 def t_danmaku():
     print("\n[4] B 站弹幕协议")
     msg = {"cmd": "DANMU_MSG", "info": [[], "你好世界", [123, "阿伟"]]}
     body = json.dumps(msg).encode()
     packet = danmaku.pack(danmaku.OP_MESSAGE, body)
 
-    # 真实链路：先按 16 字节包头切帧，再按 ver 解 body
     frames = danmaku.unpack(packet)
     check("能按包头切帧", len(frames) == 1 and frames[0][0] == danmaku.OP_MESSAGE)
     out = danmaku.decode(frames[0][1], frames[0][2])
@@ -194,12 +169,8 @@ def t_danmaku():
     check("未知消息被忽略", danmaku.parse_message({"cmd": "ONLINE_RANK_V2"}) is None)
 
 
-# ──────────────────────────────────────────────────────────────
-# 5. nginx stat 解析
-# ──────────────────────────────────────────────────────────────
 def t_nginx_stat():
     print("\n[5] nginx /stat 解析")
-    # 这段 XML 是从 Windows 真机的 nginx 上原样抓下来的结构（含嵌套 meta）
     xml = """<?xml version="1.0" encoding="utf-8" ?>
 <rtmp><server><application>
   <name>app</name>
@@ -224,7 +195,6 @@ def t_nginx_stat():
     check("码率换算成 kbps", p["bw_in"] == 6144, str(p["bw_in"]))
     check("分辨率帧率", (p["width"], p["height"], p["fps"]) == (1920, 1080, 60))
 
-    # 兼容老写法（属性形式），避免不同 nginx 版本上又不显示
     xml_attr = xml.replace(
         "<meta><video><width>1920</width><height>1080</height><frame_rate>60</frame_rate>"
         "<codec>H264</codec></video><audio><codec>AAC</codec></audio></meta>",
@@ -238,9 +208,6 @@ def t_nginx_stat():
     check("拿不到 stat 时安全返回空", mgr.publisher()["publishing"] is False)
 
 
-# ──────────────────────────────────────────────────────────────
-# 6. 直播状态机
-# ──────────────────────────────────────────────────────────────
 def t_state_machine():
     print("\n[6] 直播状态机")
     from core.orchestrator import Orchestrator
@@ -248,7 +215,6 @@ def t_state_machine():
     o = Orchestrator()
     o.lan_ip = "10.1.2.3"
 
-    # 打桩：不碰真 nginx / 真 B 站 / 真 ffmpeg
     o.nginx.running = lambda: True
     o.nginx.publisher = lambda: {"publishing": True, "app": "app",
                                  "name": "live_777_key", "bw_in": 6000,
@@ -271,12 +237,12 @@ def t_state_machine():
     check("初始状态 idle", o.live["state"] == "idle")
 
     o._on_ps5_publish(o.nginx.publisher())
-    time.sleep(0.6)   # _start_bili_and_relay 在独立线程里跑
+    time.sleep(0.6)
     check("PS5 推流后进入 relaying", o.live["state"] == "relaying", o.live["state"])
     check("B 站推流码拿到", (o.live.get("bili") or {}).get("code_tail") == "KEY123",
           str(o.live.get("bili")))
     inp, outp = (relay_calls["start"] or ("", ""))
-    check("转发输入指向本机 nginx", inp == "rtmp://127.0.0.1:1935/app/live_777_key", inp)
+    check("转发输入指向本机收流端", inp == "rtmp://127.0.0.1:1935/app/live_777_key", inp)
     check("转发输出指向 B 站推流地址",
           outp == "rtmp://bili.example/live/STREAMKEY123", outp)
 
@@ -288,7 +254,6 @@ def t_state_machine():
     check("停播时确实停了转发", relay_calls["stop"] >= 1)
     check("停播时确实让 B 站关播", True)
 
-    # 未登录时必须拒绝开播
     o2 = Orchestrator()
     o2.bili.cookies = {}
     o2.nginx.running = lambda: True
@@ -298,9 +263,6 @@ def t_state_machine():
           o2.live.get("error"))
 
 
-# ──────────────────────────────────────────────────────────────
-# 7. 路由器片段
-# ──────────────────────────────────────────────────────────────
 def t_router():
     print("\n[7] 路由器配置片段")
     ip = "192.168.31.50"
@@ -320,10 +282,6 @@ def t_router():
           any("自定义 HOST" in (x.get("note") or "") for x in g))
 
 
-
-# ──────────────────────────────────────────────────────────────
-# 8. 内置 DNS 跟随加速器网段
-# ──────────────────────────────────────────────────────────────
 def t_dns_follow():
     """
     这条测试是防回归的，守的是一个真机踩出来的坑（2026-10-26）：
@@ -352,7 +310,6 @@ def t_dns_follow():
     orig = netutil.accelerator_gateway_ip
     netutil.accelerator_gateway_ip = lambda: "172.19.84.237"
     try:
-        # 加速器网卡出现了，但 A 记录不许跟着变
         o._follow_dns_answer()
         check("A 记录仍是局域网 IP（不被加速器网卡带走）",
               bool(o.dns) and o.dns.answer_ip == "192.168.1.50",
@@ -371,7 +328,7 @@ def t_dns_follow():
 
 
 def main() -> int:
-    logbus.log = lambda *a, **k: {}      # 自测时不落日志文件
+    logbus.log = lambda *a, **k: {}
     print("PS5 直播桥 · 自检")
     print("=" * 60)
     for fn in (t_dns, t_check, t_irc, t_danmaku, t_nginx_stat, t_state_machine,
