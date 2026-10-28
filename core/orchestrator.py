@@ -848,30 +848,42 @@ class Orchestrator(object):
 
     def _face_verify_retry_loop(self) -> None:
         """
-        人脸验证自动重试。
-        先用 check_face_status 查验证状态，通过就立即开播；
-        还没通过就继续等。比盲试 start_live 更快更准。
+        人脸验证自动重试（参照 PSLinkB 的 face_watcher 设计）。
+        - 前段：每 1 秒查 check_face_status，Verified 就立即开播
+        - fallback：验证过后/查询异常时，每 10 秒盲试开播
+        - 超时 3 分钟
         """
-        max_attempts = 40   # 10 分钟（每 15 秒查一次）
-        for attempt in range(max_attempts):
-            time.sleep(15)
+        start = time.time()
+        fallback = False
+
+        while True:
+            # 超时 3 分钟
+            if time.time() - start > 180:
+                self._fail_live("人脸验证等待超时（3 分钟）。请在手机上完成验证后点「手动开播」。")
+                return
+            # PS5 停推了就不用再试
             if self.live.get("state") != "face_verify":
                 return
             if not self.bili.logged_in:
                 self._fail_live("登录已失效，请重新扫码（第 4 步）。")
                 return
 
-            # 先查人脸验证状态
-            status = self.bili.check_face_status()
-            if status.startswith("error"):
-                logbus.warn("查询人脸状态失败：%s" % status, tag="B站")
-            elif status == "verified":
-                logbus.ok("人脸验证已完成，正在开播…", tag="B站")
+            if not fallback:
+                # 探测模式：每 1 秒查验证状态
+                time.sleep(1)
+                status = self.bili.check_face_status()
+                if status == "verified":
+                    logbus.ok("人脸验证已完成，正在开播…", tag="B站")
+                    fallback = True   # 切到 fallback，立即开播
+                elif status.startswith("error"):
+                    logbus.warn("查询人脸状态异常（%s），切 fallback 模式" % status, tag="B站")
+                    fallback = True
+                # NotYet → 继续等
             else:
-                logbus.info("人脸验证中…（第 %d 次检查）" % (attempt + 1), tag="B站")
-                continue   # 还没通过，继续等
+                # fallback 模式：每 10 秒盲试开播
+                time.sleep(10)
 
-            # 验证通过（或查询失败但重试）→ 尝试开播
+            # 尝试开播
             area = str(self.cfg.get("BILIBILI_AREA_ID", "236"))
             title = self.cfg.get("BILIBILI_TITLE", "")
             r = self.bili.start_live(area_id=area, title=title)
@@ -882,13 +894,14 @@ class Orchestrator(object):
                 return
             code = r.get("code")
             if code in (60024, 60043):
+                # 还要人脸，刷新 URL 继续等
                 url = r.get("face_url") or ""
                 with self.lock:
                     self.live["face_url"] = url
-                continue   # 继续等
+                continue
+            # 其他错误
             self._fail_live("B 站开播失败：%s（%s）" % (r.get("msg"), code))
             return
-        self._fail_live("人脸验证等待超时（10 分钟）。请在手机上完成验证后点「手动开播」。")
 
     def _relay_after_start(self, r: dict) -> None:
         """start_live 成功后的转发启动（从 _start_bili_and_relay 后半段拆出来复用）。"""
