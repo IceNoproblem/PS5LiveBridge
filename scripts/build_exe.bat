@@ -8,27 +8,28 @@ setlocal
 chcp 65001 >nul
 cd /d "%~dp0.."
 
-echo [1/5] Checking Python...
+echo [1/6] Checking Python...
 python --version || goto :fail
 
-echo [2/5] Installing dependencies...
+echo [2/6] Installing dependencies...
 python -m pip install --upgrade pip >nul
 python -m pip install -r requirements.txt || goto :fail
 python -m pip install "pydivert>=3.0" || goto :fail
 python -m pip install pyinstaller || goto :fail
 
-echo [3/5] Detecting optional pywebview...
+echo [3/6] Detecting optional pywebview...
 set PV=
 python -c "import webview" 2>nul && set PV=--collect-all webview
 if defined PV (echo     pywebview found - native window enabled) else (echo     pywebview not installed - will use Edge app mode)
 
-echo [4/5] Cleaning old output...
+echo [4/6] Cleaning old output...
 if exist build rmdir /s /q build
 if exist dist rmdir /s /q dist
 
-echo [5/5] Building...
+echo [5/6] Building...
 python -m PyInstaller --noconfirm --clean --noconsole ^
   --name PS5LiveBridge ^
+  --icon "assets\icon.ico" ^
   --add-data "web;web" ^
   --add-data "nginx-rtmp;nginx-rtmp" ^
   --add-data "README.md;." ^
@@ -39,6 +40,7 @@ python -m PyInstaller --noconfirm --clean --noconsole ^
   --hidden-import aiohttp ^
   --hidden-import flask ^
   --collect-all pydivert ^
+  --collect-data certifi ^
   %PV% ^
   main.py || goto :fail
 
@@ -78,27 +80,6 @@ set PS5LB_NO_POPUP=1
 start /wait "" "dist\PS5LiveBridge\PS5LiveBridge.exe" --version
 if errorlevel 1 goto :fail
 echo     exe starts OK
-
-echo.
-echo [7/7] Writing launcher scripts...
-REM Written with plain echo lines. %%~dp0 becomes %~dp0 in the output file
-REM (a single %~dp0 here would be expanded by cmd to THIS machine's path).
-> "dist\PS5LiveBridge\start-app.bat" (
-  echo @echo off
-  echo cd /d "%%~dp0"
-  echo start "" "PS5LiveBridge.exe"
-)
-> "dist\PS5LiveBridge\diag.bat" (
-  echo @echo off
-  echo cd /d "%%~dp0"
-  echo set PS5LB_NO_POPUP=1
-  echo start /wait "" "PS5LiveBridge.exe" --check
-  echo.
-  echo Report saved in the logs folder.
-  echo pause
-)
-if exist "dist\PS5LiveBridge\start-app.bat" echo     start-app.bat
-if exist "dist\PS5LiveBridge\diag.bat" echo     diag.bat
 
 echo.
 echo ============================================================
