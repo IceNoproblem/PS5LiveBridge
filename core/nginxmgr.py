@@ -25,13 +25,10 @@ rtmp {{
     server {{
         listen {rtmp_port};
         chunk_size 4096;
-        # PS5 推的 app 名固定是 app（Twitch ingest 的标准路径 /app/<streamkey>）；
-        # live / stream 是给其他设备/工具兜底的别名。
         application app {{
             live on;
             record off;
             interleave on;
-            # 半开推流会话 5 秒释放流名，否则 PS5 重连会被拒（BadName）
             drop_idle_publisher 5s;
             allow play all;
         }}

@@ -17,6 +17,10 @@ class Orchestrator(object):
     def __init__(self):
         self.cfg = paths.load_config()
         self.progress = paths.load_progress()
+        try:
+            logbus.set_debug(bool(self.cfg.get("DEBUG_LOG")))
+        except Exception:
+            pass
         self.bili = bilimod.Bilibili()
         self.services = services.Services(
             self.bili,
@@ -378,6 +382,15 @@ class Orchestrator(object):
                     up_dns = u
                     break
             proxy = (self.cfg.get("TWITCH_PROXY") or "").strip()
+            if not proxy:
+                try:
+                    from . import twitch_title as _tt
+                    auto = _tt.detect_local_proxy()
+                    if auto:
+                        proxy = auto
+                        logbus.info("代理栏留空，自动使用本机代理 %s" % auto, tag="中继")
+                except Exception as e:
+                    logbus.warn("探测本机代理失败：%s" % e, tag="中继")
             r = https_relay.HttpsRelay(port=443, upstream_dns=up_dns or "223.5.5.5",
                                        proxy=proxy)
             if r.start():

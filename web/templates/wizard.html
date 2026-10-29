@@ -29,6 +29,17 @@
   <div class="topbar-actions">
     <span class="ipchip" id="ipchip">本机 IP 探测中</span>
     <a class="btn sm ghost gh-link"
+       href="https://space.bilibili.com/2250922"
+       target="_blank" rel="noopener noreferrer"
+       title="打开我的 B 站主页">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M17.8 4.9l1.6-1.6a1 1 0 0 0-1.4-1.4l-1.9 1.9c-.6-.2-1.3-.3-2.1-.3h-8c-.8 0-1.5.1-2.1.3L2 1.9a1 1 0 0 0-1.4 1.4l1.6 1.6C1.4 5.9 1 7.1 1 8.5v9C1 20.1 3 22 5.6 22h12.8c2.6 0 4.6-1.9 4.6-4.5v-9c0-1.4-.4-2.6-1.2-3.6zM8 17.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm8 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/>
+      </svg>
+      B 站
+    </a>
+    <button class="btn sm ghost gh-link" onclick="copyQq(this)"
+            title="遇到问题加群，点一下复制群号">QQ 群 1092104797</button>
+    <a class="btn sm ghost gh-link"
        href="https://github.com/IceNoproblem/PS5LiveBridge"
        target="_blank" rel="noopener noreferrer"
        title="打开 GitHub 项目页（有问题可以提 Issue）">
@@ -83,6 +94,10 @@
         <span class="rail-v" id="rail-relay">停止</span>
       </div>
       <div class="rail-row">
+        <span class="rail-k">收流服务</span>
+        <span class="rail-v" id="rail-nginx">—</span>
+      </div>
+      <div class="rail-row">
         <span class="rail-k">流确认</span>
         <span class="rail-v" id="rail-stream">—</span>
       </div>
@@ -126,6 +141,8 @@
         <span class="rail-k" title="PS5 有没有真的来查这台电脑的 DNS">PS5 查询</span>
         <span class="rail-v" id="rail-ps5seen">—</span>
       </div>
+
+
     </div>
   </aside>
 
@@ -151,25 +168,33 @@
 
         <div class="pick3" id="s1-pick">
           <button class="pickcard" id="pick-hosts" onclick="pickMode('hosts')">
-            <b>① 能改路由器 hosts</b>
-            <span>加速器装在路由器上，路由器支持自定义 hosts</span>
+            <b>方案一 · 改路由器 hosts</b>
+            <span>加速器装在路由器上，路由器后台能自定义 hosts。<br>
+              配一次永久生效，PS5 什么都不用改。</span>
+            <em>适合：小米 / 华硕 / 梅林 / OpenWrt，后台有「hosts 修改」这一项</em>
           </button>
           <button class="pickcard" id="pick-dns" onclick="pickMode('dns')">
-            <b>② 改不了路由器 hosts</b>
-            <span>加速器装在路由器上，但路由器没这个功能</span>
+            <b>方案二 · 路由器改不了 hosts</b>
+            <span>加速器在路由器上，但后台翻遍了也找不到 hosts。<br>
+              让这台电脑临时当 DNS，PS5 只改一个 DNS 地址。</span>
+            <em>适合：运营商送的光猫、后台功能被锁的路由器</em>
           </button>
           <button class="pickcard" id="pick-divert" onclick="pickMode('divert')">
-            <b>③ 路由器和 hosts 都动不了</b>
-            <span>只能用电脑上的加速器（UU / 迅游 PC 版）</span>
+            <b>方案三 · 路由器和 hosts 都动不了</b>
+            <span>加速器只能装在电脑上（UU / 迅游 PC 版），<br>
+              PS5 的流量本来就经过这台电脑。</span>
+            <em>适合：电脑上开加速器，PS5 走加速器的虚拟网卡</em>
           </button>
         </div>
 
 
         <div id="mode-hosts" style="display:none">
-          <h3>改路由器的 hosts</h3>
+          <h3>方案一 · 改路由器的 hosts</h3>
           <p class="small dim" style="margin-top:-4px">
             把下面这几个推流域名指到这台电脑（<span class="mono" id="s1-ip2">—</span>），
-            PS5 保持自动获取就行。只动推流域名，PS5 上网、PSN 都照常。
+            PS5 保持自动获取就行。<br>
+            只动推流域名，PS5 上网、PSN、联机对战都不受影响。
+            这条路配一次就长期有效，PS5 重启也不丢。
           </p>
           <div class="tabs" id="router-tabs"></div>
           <div id="router-body"></div>
@@ -205,16 +230,23 @@
 
 
         <div id="mode-dns" style="display:none">
-          <h3>开内置 DNS（需要代理）</h3>
+          <h3>方案二 · 开内置 DNS</h3>
           <p class="small dim" style="margin-top:-4px">
-            路由器改不了 hosts，那就让这台电脑自己当 DNS：
-            把推流和 Twitch 的域名答成本机地址，PS5 的 DNS 指过来就行。
+            路由器改不了 hosts，那就让这台电脑临时当 DNS：
+            把推流和 Twitch 的域名答成本机地址，PS5 的网络设置里只改 DNS 一栏。<br>
+            好处是不碰路由器；代价是 <b>PS5 每次重启都可能要重设一次 DNS</b>，
+            而且这台电脑必须一直开着。
           </p>
 
-          <div class="field" style="max-width:520px">
-            <label>代理服务器（必填）</label>
-            <input id="in-proxy-1st" class="proxy-big"
-                   placeholder="http://192.168.110.99:7890">
+          <div class="field" style="max-width:800px">
+            <label>代理服务器（留空 = 自动用本机 Clash / mihomo）</label>
+            <div class="proxrow">
+              <input id="in-proxy-1st" class="proxy-big"
+                     placeholder="留空就自动检测本机有没有装代理软件">
+              <button class="btn primary" id="btn-proxy-1st"
+                      onclick="checkProxy('1st')">检测</button>
+            </div>
+            <div class="proxmsg" id="prox-msg-1st"></div>
           </div>
 
           <div class="note warn">
@@ -224,7 +256,7 @@
             <b>否则 Twitch 应用打不开，你也点不到「开始直播」</b>。
             <br><br>
             加速器是装在路由器上的，它只加速 PS5 的流量，帮不到这台电脑，所以这里要单独填一个。
-            常见写法：<span class="mono">http://192.168.110.99:7890</span>
+            写法：<span class="mono">http://主机:端口</span>（例 http://192.168.1.100:7890）。留空表示不使用代理。
             （局域网里另一台跑 Clash/mihomo 的机器也可以）。
           </div>
 
@@ -248,11 +280,12 @@
 
 
         <div id="mode-divert" style="display:none">
-          <h3>开流量接管</h3>
+          <h3>方案三 · 开流量接管</h3>
           <p class="small dim" style="margin-top:-4px">
-            在本机直接拦下 PS5 的推流，不碰路由器、也不改 DNS。
-            <b>需要程序以管理员身份运行</b>，否则开不起来。
-            <br>前提：加速器装在<b>这台电脑</b>上（PS5 的流量要经过本机）。
+            在本机网卡层直接拦下 PS5 的推流，不碰路由器、也不改 DNS。
+            <b>需要以管理员身份运行</b>，否则驱动加载不起来。<br>
+            前提是加速器装在<b>这台电脑</b>上，PS5 的流量真的经过本机 ——
+            如果是路由器版加速器，选方案一或方案二。
           </p>
           <div class="flexline">
             <button class="btn primary" id="s1-btn-bridge" onclick="toggleBridge()">开启流量接管</button>
@@ -285,6 +318,55 @@
 
         <div id="s2-verdict"></div>
         <div id="s2-results"></div>
+      </div>
+
+      <div class="card" id="diag-card">
+        <div class="card-h">
+          <h2>诊断</h2>
+          <div class="spacer"></div>
+          <button class="btn sm" onclick="loadDiag(1)">刷新</button>
+        </div>
+        <p class="card-sub">
+          出问题时先看这里。本机、PS5、Twitch 三侧状态摆在一起，
+          哪一环断了能直接看出来，不用靠猜。
+        </p>
+
+        <div class="diagbar" id="diag-verdict">还没采集</div>
+
+        <div class="diaggrid">
+          <div class="diagbox">
+            <div class="diagbox-h">本机</div>
+            <div id="diag-local"><div class="kvrow dim"><span>—</span></div></div>
+          </div>
+          <div class="diagbox">
+            <div class="diagbox-h">Twitch</div>
+            <div id="diag-twitch"><div class="kvrow dim"><span>未查询</span></div></div>
+          </div>
+        </div>
+
+        <div class="diagbox-h" style="margin-top:16px">发现的问题</div>
+        <ul class="diagissues" id="diag-issues"><li class="dim">—</li></ul>
+
+        <div id="sniff-block">
+        <div class="diagbox-h" style="margin-top:16px">PS5 连接嗅探</div>
+        <p class="small dim" style="margin:8px 0 10px">
+          抓 30 秒，看 PS5 到底往哪些端口发起连接。Twitch 推流除了 1935，
+          还有 <span class="mono">2805-2899</span> 一段备用端口 ——
+          它要是连了备用端口又没连本机，推流就进不来，而且界面上看不出来。
+        </p>
+        <div class="btn-row">
+          <button class="btn" id="sniff-btn" onclick="toggleSniff()">开始嗅探（30 秒）</button>
+          <span class="small" id="sniff-msg"></span>
+        </div>
+        <div id="sniff-result"></div>
+        </div>
+
+        <div class="btn-row" style="margin-top:16px">
+          <button class="btn" onclick="exportDiag()">导出诊断包</button>
+          <span class="small dim" id="diag-export-msg"></span>
+          <div class="spacer"></div>
+          <span class="small dim">问题没解决就把诊断包发到群 1092104797</span>
+        </div>
       </div>
     </section>
 
@@ -439,8 +521,14 @@
                 <input id="in-twitch" class="input-lg" placeholder="留空即可 —— 自动从推流密钥识别">
               </div>
               <div class="field">
-                <label>Twitch 代理（抓标题要用，连不上 Twitch 时必须填）</label>
-                <input id="in-proxy" class="input-lg" placeholder="例如 http://127.0.0.1:7890">
+                <label>Twitch 代理（抓标题要用）</label>
+                <div class="proxrow">
+                  <input id="in-proxy" class="input-lg"
+                         placeholder="留空 = 自动用本机代理；填了按填的来">
+                  <button class="btn" id="btn-proxy-4"
+                          onclick="checkProxy('4')">检测</button>
+                </div>
+                <div class="proxmsg" id="prox-msg-4"></div>
               </div>
             </div>
             <p class="small dim" style="margin-top:6px">
@@ -532,6 +620,8 @@
             <option value="warn">警告 / 错误</option>
             <option value="step">只看步骤</option>
           </select>
+          <button class="btn xs ghost" id="log-debug-btn" onclick="toggleDebugLog()"
+                  title="打开后记录中继连接、嗅探包、更新比对等详细日志">调试</button>
           <button class="btn xs ghost" onclick="copyLogs()">复制</button>
           <button class="btn xs ghost" onclick="clearLogs()">清空</button>
         </div>

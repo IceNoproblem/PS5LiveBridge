@@ -8,7 +8,7 @@ import time
 
 APP_NAME = "PS5LiveBridge"
 APP_TITLE = "PS5 直播桥"
-APP_VERSION = "5.0.0"
+APP_VERSION = "5.0.1"
 
 IS_WINDOWS = sys.platform == "win32"
 IS_MACOS = sys.platform == "darwin"
@@ -152,6 +152,8 @@ DEFAULT_CONFIG = {
     "STAT_PORT": 8080,
     "TWITCH_CHANNEL": "",
     "TWITCH_PROXY": "",
+
+    "DEBUG_LOG": False,
     "RELAY_VIDEO_BITRATE": 0,
 
     "OUTPUT_MODE": "direct",

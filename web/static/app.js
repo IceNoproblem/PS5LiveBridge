@@ -74,6 +74,7 @@ function applyCaps(st) {
   show('mode-dns', false);
   show('mode-divert', false);
   show('mode-hosts', true);
+  show('sniff-block', false);
 
   show('lt-hijack', false);
   show('rail-mode-row', false);
@@ -124,6 +125,10 @@ async function tick() {
   const st = await api('/api/state');
   if (!st || st.error) return;
   S.state = st;
+  try {
+    const dbg = await api('/api/logs/debug');
+    applyDebugBtn(dbg && dbg.on);
+  } catch (e) {}
 
   const sv = st.services || {};
   const ps5 = (sv.nginx && sv.nginx.publisher) || {};
@@ -258,6 +263,24 @@ async function tick() {
 
 
   const pub = (sv.nginx && sv.nginx.publisher) || {};
+
+
+  if (S.step === 2 && Date.now() - (S.diagAt || 0) > 60000) {
+    loadDiag();
+  }
+
+
+  {
+    const ngOn = !!(sv.nginx && sv.nginx.running);
+    if (ngOn) {
+      setRail('rail-nginx', '运行中', 'ok');
+    } else if (onAir) {
+      setRail('rail-nginx', '异常（已停）', 'err');
+      if ($('rail-nginx')) $('rail-nginx').title = '直播中出现这个说明收流服务挂了，推流会立刻中断';
+    } else {
+      setRail('rail-nginx', '未启动', 'warn');
+    }
+  }
   if (pub.publishing && pub.width) {
     const res = pub.height >= 2160 ? '4K' : (pub.height >= 1440 ? '2K' : (pub.height >= 1080 ? '1080p' : (pub.height >= 720 ? '720p' : pub.height + 'p')));
     const mb = ((pub.bw_in || 0) / 1000).toFixed(1);
@@ -559,6 +582,276 @@ function renderGuides() {
 
   if (it.note) html += '<div class="note warn">' + esc(it.note) + '</div>';
   $('router-body').innerHTML = html;
+}
+
+function fmtTs(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts * 1000);
+  const p = (n) => String(n).padStart(2, '0');
+  return (d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+function kvRows(rows) {
+  return rows.map((r) =>
+    '<div class="kvrow"><span>' + esc(r[0]) + '</span><b class="' + (r[2] || '') + '">'
+    + esc(r[1]) + '</b></div>').join('');
+}
+
+async function loadDiag(force) {
+  const bar = $('diag-verdict');
+  if (bar) { bar.className = 'diagbar'; bar.textContent = '正在采集本机状态…'; }
+  S.diagAt = Date.now();
+
+  let d = null;
+  try { d = await api('/api/diag'); } catch (e) {}
+  if (!d || d.error) {
+    if (bar) {
+      bar.className = 'diagbar err';
+      bar.textContent = '诊断采集失败：' + ((d && d.error) || '接口没响应');
+    }
+    return;
+  }
+
+  const L = d.local || {};
+  const rows = [];
+
+  const rtmp = L.rtmp || {};
+  const nginxOn = !!((L.nginx || {}).running);
+  if (rtmp.listening) {
+
+
+    const proc = String(rtmp.process || '').toLowerCase();
+    const named = proc !== '';
+    const isNginx = proc.indexOf('nginx') >= 0;
+    const ok = nginxOn && (!named || isNginx);
+    const label = ok
+      ? '监听中'
+      : ('被 ' + (rtmp.process || '别的进程') + ' 占用');
+    rows.push(['收流 ' + rtmp.port, label, ok ? 'ok' : 'err']);
+  } else {
+    rows.push(['收流 ' + rtmp.port, '未监听', 'err']);
+  }
+
+  const irc = L.irc || {};
+  rows.push(['弹幕 ' + irc.port, irc.listening ? '监听中' : '未监听', irc.listening ? 'ok' : 'warn']);
+
+  const dns = L.dns || {};
+  if (dns.mode === 'dns') {
+    rows.push(['内置 DNS', dns.running ? '运行中' : '应开未开', dns.running ? 'ok' : 'err']);
+  } else if (dns.running) {
+    rows.push(['内置 DNS', '运行中', 'ok']);
+  } else {
+    rows.push(['内置 DNS', '没用到', '']);
+  }
+
+  const rl = L.relay || {};
+  rows.push(['443 中继', rl.running ? '运行中' : '未启动', rl.running ? 'ok' : (dns.mode === 'dns' ? 'warn' : '')]);
+
+  const fw = L.firewall || {};
+  const fwAll = Object.keys(fw);
+  const fwOk = fwAll.filter((k) => fw[k] === true).length;
+  rows.push(['防火墙', fwOk + '/' + fwAll.length + ' 条已放行',
+    fwOk === fwAll.length ? 'ok' : 'warn']);
+
+  const pub = (L.nginx || {}).publisher || {};
+  if (pub.present) {
+    const q = pub.width ? (pub.width + 'x' + pub.height + ' ' + Math.round((pub.kbps || 0) / 1000) + 'M') : '';
+    rows.push(['推流会话', '有（已 ' + pub.uptime + 's）' + (q ? ' ' + q : ''), 'ok']);
+  } else {
+    rows.push(['推流会话', '无', '']);
+  }
+
+  rows.push(['直播阶段', L.live_state || 'idle', '']);
+  if (d.version) rows.push(['版本', 'v' + d.version + ' · ' + (d.platform || ''), '']);
+
+  if ($('diag-local')) $('diag-local').innerHTML = kvRows(rows);
+
+  const box = $('diag-issues');
+  if (box) {
+    const list = d.issues || [];
+    box.innerHTML = list.length
+      ? list.map((i) => '<li class="' + esc(i.level) + '">' + esc(i.msg) + '</li>').join('')
+      : '<li class="ok">没发现明显问题。</li>';
+  }
+
+  if (bar) {
+    bar.className = 'diagbar ' + (d.level || '');
+    bar.textContent = d.verdict || '';
+  }
+
+  queryTwitchDiag();
+}
+
+async function queryTwitchDiag() {
+  const box = $('diag-twitch');
+  if (!box) return;
+  box.innerHTML = '<div class="kvrow"><span>状态</span><b>查询中…</b></div>';
+
+  let t = null;
+  try { t = await api('/api/twitch/session'); } catch (e) {}
+  if (!t) {
+    box.innerHTML = '<div class="kvrow"><span>状态</span><b class="err">查询失败</b></div>';
+    return;
+  }
+
+  const rows = [];
+  if (!t.channel) {
+    rows.push(['频道', '没填', 'warn']);
+    box.innerHTML = kvRows(rows)
+      + '<div class="kvrow"><span>说明</span><b style="font-family:inherit">第 4 步填上 Twitch 频道名，这里才能查</b></div>';
+    return;
+  }
+
+  rows.push(['频道', t.channel, '']);
+  if (t.verdict === 'live') rows.push(['当前', '直播中', 'warn']);
+  else if (t.verdict === 'stale') rows.push(['当前', '未在播（刚播过）', 'warn']);
+  else if (t.verdict === 'offline') rows.push(['当前', '未在播', 'ok']);
+  else rows.push(['当前', '查不到', 'err']);
+
+  const lb = t.last_broadcast || {};
+  if (lb.started_at) {
+    rows.push(['上次直播', fmtTs(lb.ts) + '  ' + String(lb.title || '').slice(0, 14), '']);
+  }
+  rows.push(['历史录像', (t.vod_count || 0) > 0 ? t.vod_count + ' 个' : '无',
+    (t.vod_count || 0) > 0 ? 'ok' : '']);
+  if (t.proxy) rows.push(['走的是', String(t.proxy).replace(/^https?:\/\//, ''), '']);
+  rows.push(['耗时', (t.ms || 0) + 'ms', '']);
+
+  box.innerHTML = kvRows(rows);
+  if (t.advice) {
+    box.innerHTML += '<div class="kvrow"><span>建议</span><b style="font-family:inherit;font-size:14px;line-height:1.5">'
+      + esc(t.advice) + '</b></div>';
+  }
+}
+
+let _sniffTimer = null;
+
+async function toggleSniff() {
+  const btn = $('sniff-btn');
+  if (!btn) return;
+
+  if (btn.dataset.on === '1') {
+    if (_sniffTimer) clearInterval(_sniffTimer);
+    await api('/api/sniff/stop', {});
+    btn.dataset.on = '0';
+    btn.textContent = '开始嗅探（30 秒）';
+    renderSniff(await api('/api/sniff/status'));
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '启动中…';
+  const r = await api('/api/sniff/start', { seconds: 30 });
+  btn.disabled = false;
+  if (!r || r.ok === false) {
+    if ($('sniff-msg')) $('sniff-msg').textContent = (r && r.error) || '嗅探起不来';
+    btn.textContent = '开始嗅探（30 秒）';
+    return;
+  }
+
+  btn.dataset.on = '1';
+  btn.textContent = '停止';
+  renderSniff(r);
+  _sniffTimer = setInterval(async () => {
+    const st = await api('/api/sniff/status');
+    if (!st) return;
+    renderSniff(st);
+    if (!st.running) {
+      clearInterval(_sniffTimer);
+      btn.dataset.on = '0';
+      btn.textContent = '再嗅一次';
+    }
+  }, 1000);
+}
+
+function renderSniff(st) {
+  const box = $('sniff-result');
+  if (!box || !st) return;
+
+  const msg = $('sniff-msg');
+  if (msg) {
+    msg.textContent = st.running
+      ? ('剩 ' + st.remain + ' 秒 · 已抓 ' + st.total + ' 个连接 · ' + (st.ps5_ip || '自动识别'))
+      : '';
+  }
+
+  if (!st.ports || !st.ports.length) {
+    box.innerHTML = st.verdict
+      ? '<div class="diagbar ' + (st.level || '') + '" style="margin-top:10px">' + esc(st.verdict) + '</div>'
+      : '';
+    return;
+  }
+
+  let html = '<div class="diagbox" style="margin-top:10px">';
+  st.ports.forEach((p) => {
+    const cls = (p.alt && p.remote) ? 'err' : (p.local ? 'ok' : 'warn');
+    const dest = p.dst && p.dst.length ? p.dst.join(', ') : '本机';
+    html += '<div class="kvrow"><span>' + p.port + '</span><b class="' + cls + '">'
+      + p.count + ' 次 → ' + esc(dest) + (p.alt ? '  ⚠ 备用端口' : '') + '</b></div>';
+  });
+  html += '</div>';
+  if (st.verdict) {
+    html += '<div class="diagbar ' + (st.level || '') + '">' + esc(st.verdict) + '</div>';
+  }
+  box.innerHTML = html;
+}
+
+async function exportDiag() {
+  const msg = $('diag-export-msg');
+  if (msg) msg.textContent = '正在打包…';
+  try {
+    const r = await api('/api/diag/export', {});
+    if (r && r.ok && r.url) {
+      window.open(r.url, '_blank');
+      if (msg) msg.textContent = '已生成：' + r.name;
+    } else {
+      if (msg) msg.textContent = '导出失败：' + ((r && r.msg) || '未知错误');
+    }
+  } catch (e) {
+    if (msg) msg.textContent = '导出失败：' + e;
+  }
+}
+
+function applyDebugBtn(on) {
+  const btn = $('log-debug-btn');
+  if (!btn) return;
+  btn.classList.toggle('on', !!on);
+  btn.textContent = on ? '调试 开' : '调试';
+  btn.title = on
+    ? '正在记录详细日志（会写很多行），排查完记得关掉'
+    : '打开后记录中继连接、嗅探包、更新比对等详细日志';
+}
+
+async function toggleDebugLog() {
+  const cur = await api('/api/logs/debug');
+  const next = !(cur && cur.on);
+  const r = await api('/api/logs/debug', { on: next });
+  applyDebugBtn(r && r.on);
+  if (!next) {
+    tick();
+  }
+}
+
+function copyQq(el) {
+  const num = '1092104797';
+  const flash = () => {
+    const old = el.textContent;
+    el.textContent = '已复制';
+    setTimeout(() => { el.textContent = old; }, 1200);
+  };
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = num;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); flash(); } catch (e) {}
+    document.body.removeChild(ta);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(num).then(flash).catch(fallback);
+  } else {
+    fallback();
+  }
 }
 
 function copyCode(btn) {
@@ -1229,6 +1522,11 @@ async function checkUpdate(force) {
           alert('命令已复制，在 NAS 终端里执行：\n\n' + cmd + '\n\n'
             + '想要全自动更新：compose 里启用 auto-update profile。');
         });
+    } else if (r.scope === 'web') {
+      const kb = Math.round((r.web_size || 0) / 1024);
+      showUpdateBar(
+        `发现新版本 v${ver}（只有界面文件变了，要下载 ${kb} KB）`,
+        '立即更新', doUpdate);
     } else {
       showUpdateBar(`发现新版本 v${ver}（当前 v${esc(r.current)}）`,
         '立即更新', doUpdate);
@@ -1252,6 +1550,11 @@ async function doUpdate() {
     if (!s) return;
     if (s.state === 'downloading') {
       b.textContent = `下载中 ${s.percent || 0}%`;
+    } else if (s.state === 'ready' && s.message && s.message.indexOf('界面') >= 0) {
+      clearInterval(timer);
+      b.textContent = '已更新';
+      b.disabled = true;
+      $('update-msg').textContent = '界面文件已更新，关掉程序重新打开后生效';
     } else if (s.state === 'installing') {
       b.textContent = '正在重启…';
       $('update-msg').textContent = '正在应用更新，软件会自动重启';
@@ -1435,22 +1738,76 @@ async function pickMode(which, silent) {
 }
 
 
+async function checkProxy(which) {
+  const first = which === '1st';
+  const inp = first ? $('in-proxy-1st') : $('in-proxy');
+  const btn = first ? $('btn-proxy-1st') : $('btn-proxy-4');
+  const box = first ? $('prox-msg-1st') : $('prox-msg-4');
+  if (!inp || !box) return;
+
+  const val = (inp.value || '').trim();
+  const label = btn ? btn.textContent : '检测';
+  if (btn) { btn.disabled = true; btn.textContent = '检测中…'; }
+  box.className = 'proxmsg on';
+  box.textContent = val ? '正在测试这个代理…' : '正在测试直连，并检查本机代理…';
+
+  try {
+    const r = await api('/api/proxy/check', { proxy: val });
+    const v = (r && r.verdict) || 'error';
+    let cls = 'ok';
+    if (v === 'none' || v === 'proxy_bad' || v === 'error') cls = 'err';
+    else if (v === 'local_ok') cls = 'warn';
+    box.className = 'proxmsg on ' + cls;
+    box.innerHTML = esc((r && r.advice) || '检测完成');
+    if (!val && r && r.chosen) {
+      box.innerHTML += '<br>实际会用：<b>' + esc(r.chosen) + '</b>';
+    }
+  } catch (e) {
+    box.className = 'proxmsg on err';
+    box.textContent = '检测失败：' + (e && e.message ? e.message : e);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  }
+}
+
 async function saveProxyAndStartDns() {
   const el = $('in-proxy-1st');
   const proxy = (el ? el.value : '').trim();
-  if (!proxy) {
-    alert('请先填代理服务器。\n\n这条路必须有一个能上外网的代理，'
-      + '否则 Twitch 应用会打不开，也就点不到「开始直播」。');
+
+  if (proxy && !/^(https?:\/\/)?[\w.-]+:\d+/.test(proxy)) {
+    alert('代理格式看起来不对。\n格式是 http://主机:端口，例如 http://192.168.1.100:7890');
     if (el) el.focus();
     return;
   }
-  if (!/^(https?:\/\/)?[\w.-]+:\d+/.test(proxy)) {
-    alert('代理格式看起来不对。\n正确写法类似：http://192.168.110.99:7890');
-    return;
+
+  if (!proxy) {
+    const btn = $('btn-proxy-1st');
+    const box = $('prox-msg-1st');
+    const label = btn ? btn.textContent : '检测';
+    if (btn) { btn.disabled = true; btn.textContent = '检测中…'; }
+    if (box) { box.className = 'proxmsg on'; box.textContent = '正在确认本机有没有能上外网的通道…'; }
+    let ck = null;
+    try { ck = await api('/api/proxy/check', { proxy: '' }); } catch (e) {}
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+
+    if (!ck) {
+      alert('检测没拿到结果，请重试，或直接填一个代理地址。');
+      return;
+    }
+    const ok = ck.verdict === 'direct_ok' || ck.verdict === 'local_ok';
+    if (box) {
+      box.className = 'proxmsg on ' + (ok ? (ck.verdict === 'local_ok' ? 'warn' : 'ok') : 'err');
+      box.innerHTML = esc(ck.advice || '');
+      if (ok && ck.chosen) box.innerHTML += '<br>实际会用：<b>' + esc(ck.chosen) + '</b>';
+    }
+    if (!ok) {
+      alert('留空需要有能上外网的通道，但现在直连和本机代理都不通。\n\n'
+        + (ck.advice || '') + '\n\n请在上面填一个代理地址，或先打开 Clash / mihomo。');
+      return;
+    }
   }
+
   const st = S.state || {};
-
-
   const r = await api('/api/area', {
     area_id: (st.bili && st.bili.area_id) || '236',
     twitch_proxy: proxy,

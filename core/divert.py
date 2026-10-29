@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import threading
 import time
 
@@ -64,11 +65,40 @@ class PortInterceptor(object):
             parts.append("tcp.SrcPort == %d" % p)
         return "tcp and (" + " or ".join(parts) + ")"
 
+    @contextlib.contextmanager
+    def _open(self, filt):
+        """
+        打开 WinDivert 句柄，失败重试两次。
+
+        1450（系统资源不足）多数不是真的没内存，而是上一次的句柄还没被内核
+        回收 —— 点过停止马上再开、或者上一次启动失败后立刻重试，都会撞上。
+        原地等一会儿再开通常就成了，没必要让用户重启电脑。
+        """
+        last = None
+        for attempt in range(3):
+            w = pydivert.WinDivert(filt, layer=_LAYER_NETWORK)
+            try:
+                w.__enter__()
+            except Exception as e:
+                last = e
+                if attempt < 2:
+                    time.sleep(0.8)
+                continue
+            try:
+                yield w
+            finally:
+                try:
+                    w.__exit__(None, None, None)
+                except Exception:
+                    pass
+            return
+        raise last
+
     def _loop(self):
         local_ips = _local_ips()
         filt = self.build_filter()
         try:
-            with pydivert.WinDivert(filt, layer=_LAYER_NETWORK) as w:
+            with self._open(filt) as w:
                 self.running = True
                 self.started_at = time.time()
                 self._log("端口劫持已启动：%s -> 本机 %s"
@@ -282,6 +312,15 @@ def _explain_open_error(exc) -> str:
         return "权限不足：端口劫持必须以管理员身份运行本程序。"
     if "1275" in text or "driver" in low:
         return "WinDivert 驱动被系统或杀毒软件拦截，请把本程序加入白名单。"
+    if "1450" in text or "系统资源不足" in text:
+        return ("系统资源不足，WinDivert 驱动申请不到内存（错误 1450）。"
+                "这几乎都是上一次的驱动句柄还没释放，或者安全软件压着不让开。"
+                "按顺序试：\n"
+                "1. 重启电脑（最有效，八成就是这个）\n"
+                "2. 把本程序整个目录加进杀毒软件白名单，再试一次\n"
+                "3. 任务管理器 → 性能 → 内存，看「非分页缓冲池」是否超过 1GB，"
+                "超过说明系统池有泄漏，重启能清掉\n"
+                "4. 确认装的是 64 位系统，用的是 64 位的程序包")
     return "端口劫持启动失败：%s" % text
 
 
