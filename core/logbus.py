@@ -21,6 +21,19 @@ _TO_STDOUT = paths.PLATFORM == "docker" or \
 
 LEVELS = ("debug", "info", "success", "warn", "error", "step")
 
+_DEBUG = threading.Event()
+
+
+def set_debug(on: bool) -> None:
+    if on:
+        _DEBUG.set()
+    else:
+        _DEBUG.clear()
+
+
+def debug_enabled() -> bool:
+    return _DEBUG.is_set()
+
 
 def _open_file():
     global _FILE_HANDLE
@@ -38,6 +51,8 @@ def _open_file():
 
 def log(msg: str, level: str = "info", tag: str = "") -> dict:
     """记一条日志，返回这条记录（前端有时要立即展示）。"""
+    if level == "debug" and not _DEBUG.is_set():
+        return {}
     now = time.time()
     item = {
         "t": "%s.%03d" % (time.strftime("%H:%M:%S", time.localtime(now)),
@@ -74,6 +89,13 @@ def log(msg: str, level: str = "info", tag: str = "") -> dict:
         except Exception:
             pass
     return item
+
+
+def debug(msg: str, **kw) -> dict:
+    """调试日志。开关关着时什么都不做。"""
+    if not _DEBUG.is_set():
+        return {}
+    return log(msg, level="debug", **kw)
 
 
 def info(msg: str, **kw) -> dict:

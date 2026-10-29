@@ -235,6 +235,128 @@ def create_app(orch, on_exit=None) -> Flask:
     from core import updater as updater_mod
     _up = updater_mod.get_updater(paths.APP_VERSION)
 
+    @app.get("/api/logs/debug")
+    def api_logs_debug_get():
+        return jsonify({"on": logbus.debug_enabled()})
+
+    @app.post("/api/logs/debug")
+    def api_logs_debug_set():
+        body = request.get_json(silent=True) or {}
+        on = bool(body.get("on"))
+        logbus.set_debug(on)
+        try:
+            if orch.cfg.get("DEBUG_LOG") != on:
+                orch.cfg = paths.save_config({"DEBUG_LOG": on})
+        except Exception as e:
+            logbus.warn("保存调试开关失败：%s" % e, tag="日志")
+        logbus.info("调试日志已%s" % ("打开" if on else "关闭"), tag="日志")
+        if on:
+            logbus.debug("这是一条调试日志，出现它说明开关生效了", tag="日志")
+        return jsonify({"on": on})
+
+    @app.get("/api/diag")
+    def api_diag():
+        from core import diag
+        try:
+            return jsonify(diag.collect(orch))
+        except Exception as e:
+            logbus.error("诊断采集失败：%s" % e)
+            return jsonify({"error": str(e), "issues": [], "local": {}}), 500
+
+    @app.post("/api/sniff/start")
+    def api_sniff_start():
+        from core import sniff
+        body = request.get_json(silent=True) or {}
+        ip = str(body.get("ip") or "").strip() or sniff.guess_ps5_ip(orch)
+        try:
+            secs = int(body.get("seconds") or 30)
+        except (TypeError, ValueError):
+            secs = 30
+        ok, err = sniff.get_sniffer().start(ip, secs)
+        snap = sniff.get_sniffer().snapshot()
+        snap["ok"] = ok
+        if err:
+            snap["error"] = err
+        return jsonify(snap)
+
+    @app.post("/api/sniff/stop")
+    def api_sniff_stop():
+        from core import sniff
+        sniff.get_sniffer().stop()
+        return jsonify(sniff.get_sniffer().snapshot())
+
+    @app.get("/api/sniff/status")
+    def api_sniff_status():
+        from core import sniff
+        snap = sniff.get_sniffer().snapshot()
+        if not snap.get("ps5_ip"):
+            snap["guess"] = sniff.guess_ps5_ip(orch)
+        return jsonify(snap)
+
+    @app.post("/api/diag/export")
+    def api_diag_export():
+        from core import diag
+        try:
+            r = diag.export(orch)
+            return jsonify({"ok": True, "name": r["name"], "size": r["size"],
+                            "url": "/api/diag/file/" + r["name"]})
+        except Exception as e:
+            logbus.error("诊断包导出失败：%s" % e)
+            return jsonify({"ok": False, "msg": str(e)})
+
+    @app.get("/api/diag/file/<name>")
+    def api_diag_file(name):
+        import os
+        from flask import send_file
+        if (not name.startswith("diag-") or not name.endswith(".zip")
+                or "/" in name or "\\" in name or ".." in name):
+            return jsonify({"ok": False, "msg": "非法文件名"}), 400
+        p2 = os.path.join(paths.DATA_DIR, "diag", name)
+        if not os.path.exists(p2):
+            return jsonify({"ok": False, "msg": "文件不存在"}), 404
+        try:
+            return send_file(p2, as_attachment=True, download_name=name)
+        except TypeError:
+            return send_file(p2, as_attachment=True, attachment_filename=name)
+
+    @app.get("/api/twitch/session")
+    def api_twitch_session():
+        from core import twitch_title
+        ch = (orch.cfg.get("TWITCH_CHANNEL") or "").strip()
+        px = (orch.cfg.get("TWITCH_PROXY") or "").strip()
+        if not ch:
+            pub = ((orch.snapshot().get("live") or {}).get("ps5") or {})
+            ch = twitch_title.parse_broadcaster_id(pub.get("key") or "")
+        try:
+            return jsonify(twitch_title.fetch_session(ch, proxy=px, timeout=8.0))
+        except Exception as e:
+            return jsonify({"ok": False, "verdict": "unknown",
+                            "error": "查询失败：%s" % e, "advice": "",
+                            "channel": ch, "last_broadcast": {}, "local": []})
+
+    @app.post("/api/proxy/check")
+    def api_proxy_check():
+        """
+        代理检测。给两个输入框旁边的按钮用。
+
+        不传 proxy（或传空）：先测直连，再扫本机代理，告诉用户要不要填。
+        传了 proxy：只测这一条。
+        """
+        from core import twitch_title
+        body = request.get_json(silent=True) or {}
+        proxy = str(body.get("proxy") or "").strip()
+        try:
+            timeout = float(body.get("timeout") or 6.0)
+        except (TypeError, ValueError):
+            timeout = 6.0
+        try:
+            return jsonify(twitch_title.check(proxy, timeout=timeout))
+        except Exception as e:
+            return jsonify({"verdict": "error", "advice": "检测失败：%s" % e,
+                            "mode": "explicit" if proxy else "auto",
+                            "direct": None, "local": [], "chosen": "",
+                            "result": {}})
+
     @app.get("/api/update/check")
     def api_update_check():
         body = request.args

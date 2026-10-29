@@ -68,6 +68,11 @@ if errorlevel 1 goto :fail
 echo     exe starts OK
 
 echo.
+echo [last] generating manifest for incremental update...
+python scripts\gen_manifest.py dist\PS5LiveBridge
+if errorlevel 1 echo     WARN: manifest failed - update will fall back to full package
+echo.
+
 echo ============================================================
 echo  DONE.  Run: dist\PS5LiveBridge\PS5LiveBridge.exe
 echo  Remember: UAC prompt must be accepted (port 53 + firewall).

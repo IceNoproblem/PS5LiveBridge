@@ -232,6 +232,12 @@ class HttpsRelay:
                 client.close()
                 return
             sni = extract_sni(first_data)
+            try:
+                from . import logbus
+                logbus.debug("隧道 %s（%d 字节 ClientHello）"
+                             % (sni or "无 SNI", len(first_data)), tag="中继")
+            except Exception:
+                pass
             if not sni:
                 try:
                     from . import logbus

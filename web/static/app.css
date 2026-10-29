@@ -903,3 +903,172 @@ select {
 .srcrow .bar i.full { background: var(--ok); }
 
 .grow { flex: 1 1 auto; }
+
+.rail-qq {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--dim);
+}
+.rail-qq a {
+  color: var(--accent);
+  text-decoration: none;
+  font-family: var(--mono);
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 6px;
+  transition: background .15s;
+}
+.rail-qq a:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.proxrow {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+.proxrow input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.proxrow .btn {
+  flex: 0 0 auto;
+  height: 56px;
+  padding: 0 20px;
+  font-size: 16px;
+}
+.proxmsg {
+  margin-top: 8px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--dim);
+  display: none;
+}
+.proxmsg.on {
+  display: block;
+}
+.proxmsg.ok {
+  color: var(--ok, #4ade80);
+}
+.proxmsg.warn {
+  color: var(--warn, #fbbf24);
+}
+.proxmsg.err {
+  color: var(--err, #f87171);
+}
+.proxmsg b {
+  color: var(--fg);
+}
+
+.pick3 .pickcard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+}
+.pick3 .pickcard em {
+  font-style: normal;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--dim);
+  opacity: .82;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+
+.diagbar {
+  margin: 14px 0 16px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 16px;
+  line-height: 1.5;
+  background: rgba(255, 255, 255, .045);
+  border-left: 3px solid var(--line-2);
+  color: var(--fg);
+}
+.diagbar.ok { border-left-color: var(--ok, #4ade80); }
+.diagbar.warn { border-left-color: var(--warn, #fbbf24); }
+.diagbar.err { border-left-color: var(--err, #f87171); }
+
+.diaggrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+@media (max-width: 1180px) {
+  .diaggrid { grid-template-columns: 1fr; }
+}
+.diagbox {
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, .14);
+}
+.diagbox-h {
+  padding: 8px 14px;
+  font-size: 15px;
+  color: var(--dim);
+  background: rgba(255, 255, 255, .04);
+  border-bottom: 1px solid var(--line);
+}
+.kvrow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 14px;
+  font-size: 15px;
+  border-top: 1px solid rgba(255, 255, 255, .045);
+}
+.kvrow:first-child { border-top: 0; }
+.kvrow > span { flex: 0 0 96px; color: var(--dim); }
+.kvrow > b {
+  flex: 1 1 auto;
+  font-weight: 500;
+  font-family: var(--mono);
+  font-size: 14.5px;
+  word-break: break-all;
+}
+.kvrow > b.ok { color: var(--ok, #4ade80); }
+.kvrow > b.warn { color: var(--warn, #fbbf24); }
+.kvrow > b.err { color: var(--err, #f87171); }
+
+.diagissues {
+  list-style: none;
+  margin: 8px 0 16px;
+  padding: 0;
+}
+.diagissues li {
+  padding: 7px 12px;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  font-size: 15px;
+  line-height: 1.5;
+  background: rgba(255, 255, 255, .03);
+  border-left: 3px solid var(--line-2);
+}
+.diagissues li.err { border-left-color: var(--err, #f87171); }
+.diagissues li.warn { border-left-color: var(--warn, #fbbf24); }
+.diagissues li.info { border-left-color: var(--accent); }
+.diagissues li.ok { border-left-color: var(--ok, #4ade80); }
+.diagissues li.dim { color: var(--dim); }
+
+.btn.on {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.logline.debug {
+  color: var(--dim);
+  opacity: .72;
+}
+.logline.debug .lv {
+  opacity: .8;
+}
