@@ -75,6 +75,12 @@ start /wait "" "dist\PS5LiveBridge\PS5LiveBridge.exe" --version
 if errorlevel 1 goto :fail
 echo     exe starts OK
 
+rem --version runs before "from ui import window", so it cannot catch a missing
+rem ui package. Check the frozen archive directly instead.
+python -m PyInstaller.utils.cliutils.archive_viewer -l -r "dist\PS5LiveBridge\PS5LiveBridge.exe" 2>nul | findstr /i /c:"'ui'" >nul
+if errorlevel 1 goto :fail
+echo     ui module bundled OK
+
 echo.
 echo [last] generating manifest for incremental update...
 python scripts\gen_manifest.py dist\PS5LiveBridge
