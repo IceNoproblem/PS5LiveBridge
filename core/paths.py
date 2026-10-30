@@ -8,7 +8,7 @@ import time
 
 APP_NAME = "PS5LiveBridge"
 APP_TITLE = "PS5 直播桥"
-APP_VERSION = "5.0.1"
+APP_VERSION = "5.1.0"
 
 IS_WINDOWS = sys.platform == "win32"
 IS_MACOS = sys.platform == "darwin"
@@ -153,10 +153,33 @@ DEFAULT_CONFIG = {
     "TWITCH_CHANNEL": "",
     "TWITCH_PROXY": "",
 
+    # 收流实现：Windows 用 rtmp-forwarder（单进程、省内存）；
+    # 容器和 Linux 继续用 nginx-rtmp —— rtmpf 的二进制没有 Linux 版，
+    # 容器里找不到会直接起不来收流。
+    "RTMP_IMPL": "nginx" if PLATFORM in ("docker", "linux") else "rtmpf",
+
+    # ── 画面叠加（要重编码，默认关闭）──
+    "OVERLAY_TEXT": "",
+    "OVERLAY_FONT_SIZE": 42,
+    "OVERLAY_COLOR": "#ffffff",
+    "OVERLAY_ALPHA": 0.9,
+    "OVERLAY_BG_ALPHA": 0.0,
+    "OVERLAY_POS": "top-left",
+    "OVERLAY_X": 0.04,
+    "OVERLAY_Y": 0.04,
+
+    # 叠加烧给谁：B 站那一路 / 本地取流那一路，可以都要
+    "OVERLAY_TO_BILI": True,
+    "OVERLAY_TO_LOCAL": True,
+
+
     "DEBUG_LOG": False,
     "RELAY_VIDEO_BITRATE": 0,
 
     "OUTPUT_MODE": "direct",
+
+    "PUSH_BILI": True,
+    "LOCAL_STREAM": True,
 
     "AUTO_START_LIVE": True,
     "AUTO_RELAY": True,

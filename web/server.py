@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import os
+import sys
 import threading
 
-from flask import Flask, jsonify, render_template, request, send_from_directory
+from flask import (Flask, Response, jsonify, render_template, request,
+                     send_from_directory, stream_with_context)
 
 from core import logbus, netutil, paths
 
@@ -253,6 +256,154 @@ def create_app(orch, on_exit=None) -> Flask:
         if on:
             logbus.debug("这是一条调试日志，出现它说明开关生效了", tag="日志")
         return jsonify({"on": on})
+
+    _OVERLAY_KEYS = (
+        "OVERLAY_TO_BILI", "OVERLAY_TO_LOCAL",
+        "OVERLAY_TEXT", "OVERLAY_FONT_SIZE", "OVERLAY_COLOR", "OVERLAY_ALPHA",
+        "OVERLAY_BG_ALPHA", "OVERLAY_POS", "OVERLAY_X", "OVERLAY_Y",
+    )
+
+    @app.get("/api/overlay")
+    def api_overlay_get():
+        return jsonify({k: orch.cfg.get(k) for k in _OVERLAY_KEYS})
+
+    @app.post("/api/overlay")
+    def api_overlay_set():
+        body = request.get_json(silent=True) or {}
+        patch = {}
+        for k in _OVERLAY_KEYS:
+            if k in body:
+                patch[k] = body[k]
+        if not patch:
+            return jsonify({"ok": False, "msg": "没有要改的"}), 400
+        # 滤镜参数（位置/字号/颜色）是写死在 ffmpeg 滤镜串里的，
+        # 只改配置不会让正在跑的那条链路重新生成 —— 必须重启转码才能生效。
+        # 文本内容不同，它靠 reload 重读 txt，不用重启。
+        # OVERLAY_TEXT 也在里面：drawtext 不再 reload，文字只在开播时读一次，
+        # 所以改了内容必须重启转码才能看到。
+        # OVERLAY_TO_BILI / OVERLAY_TO_LOCAL 也要重启：
+        # 它们决定 ffmpeg 输出几路，改完必须重建进程才生效。
+        _layout_keys = ("OVERLAY_TEXT", "OVERLAY_TO_BILI", "OVERLAY_TO_LOCAL",
+                        "OVERLAY_X", "OVERLAY_Y", "OVERLAY_FONT_SIZE",
+                        "OVERLAY_COLOR", "OVERLAY_ALPHA", "OVERLAY_BG_ALPHA",
+                        )
+        need_restart = any(k in patch for k in _layout_keys)
+
+        orch.cfg = paths.save_config(patch)
+        try:
+            orch.overlay.write(orch.cfg)
+        except Exception:
+            pass
+
+        restarted = False
+        if need_restart and orch.live.get("state") in ("live", "relaying"):
+            _addr = getattr(orch, "_last_addr", "")
+            _code = getattr(orch, "_last_code", "")
+            if _addr and _code:
+                try:
+                    # 只重启转码这一段，不重新调 B 站开播（会触发风控）
+                    orch.relay.stop()
+                    restarted = bool(orch._start_push(_addr, _code))
+                except Exception as e:
+                    logbus.warn("按新参数重启转码失败：%s" % e, tag="叠加")
+
+        logbus.info("画面叠加设置已更新（%s%s）"
+                    % ("开启" if orch.has_overlay() else "关闭",
+                       "，已按新参数重启转码" if restarted else ""), tag="叠加")
+        return jsonify({"ok": True, "active": orch.has_overlay(),
+                        "restarted": restarted})
+
+    @app.get("/api/netcheck")
+    def api_netcheck():
+        return jsonify(orch.netcheck(force=request.args.get("force") == "1"))
+
+    @app.get("/api/outputs")
+    def api_outputs_get():
+        return jsonify({
+            "push_bili": orch.push_bili(),
+            "local_stream": orch.local_stream(),
+        })
+
+    @app.post("/api/outputs")
+    def api_outputs_set():
+        body = request.get_json(silent=True) or {}
+        r = orch.set_outputs(body.get("push_bili"), body.get("local_stream"))
+        return jsonify(r)
+
+    @app.get("/api/paths")
+    def api_paths():
+        from core import paths as _p
+        info = {
+            "base_dir": _p.BASE_DIR,
+            "frozen": _p.is_frozen(),
+            "executable": sys.executable,
+            "meipass": getattr(sys, "_MEIPASS", ""),
+            "cwd": os.getcwd(),
+            "rtmf_exe": getattr(orch.nginx, "exe", ""),
+        }
+        if hasattr(orch.nginx, "_bases"):
+            info["candidates"] = [
+                {"path": x, "exists": os.path.exists(x)}
+                for x in orch.nginx._bases()
+            ]
+        return jsonify(info)
+
+    @app.get("/api/rtmp_impl")
+    def api_rtmp_impl_get():
+        return jsonify({
+            "impl": orch.cfg.get("RTMP_IMPL") or "nginx",
+            "active": "rtmpf" if getattr(orch, "native_relay", False) else "nginx",
+        })
+
+    @app.post("/api/rtmp_impl")
+    def api_rtmp_impl_set():
+        body = request.get_json(silent=True) or {}
+        impl = (body.get("impl") or "").strip().lower()
+        if impl not in ("nginx", "rtmpf"):
+            return jsonify({"ok": False, "error": "只能是 nginx 或 rtmpf"}), 400
+        orch.cfg = paths.save_config({"RTMP_IMPL": impl})
+        active = "rtmpf" if getattr(orch, "native_relay", False) else "nginx"
+        logbus.info("收流实现已设为 %s（%s）"
+                    % (impl, "重启后生效" if impl != active else "当前已生效"),
+                    tag="收流")
+        return jsonify({"ok": True, "impl": impl, "need_restart": impl != active})
+
+    @app.get("/api/preview.flv")
+    def api_preview_flv():
+        """
+        把收流端(rtmp-forwarder)的 HTTP-FLV 代理出来。
+
+        不让前端直连它的端口：那个端口只听 127.0.0.1，而且直连会有跨域。
+        代理之后前端只要请求同源的 /api/preview.flv 就能看画面。
+        """
+        # 预览始终拉 PS5 的原始画面（不烧字）。
+        # 叠加效果由前端覆盖层画在上面，拖到哪儿就是哪儿，同时实时改后端。
+        port = int(getattr(orch.nginx, "web_port", 0) or 0)
+        if not port:
+            return jsonify({"error": "当前收流实现不支持本地预览"}), 400
+        import requests
+        url = "http://127.0.0.1:%d/live/stream.flv" % port
+        try:
+            up = requests.get(url, stream=True, timeout=(3, None),
+                              proxies={"http": None, "https": None})
+            up.raise_for_status()
+        except Exception as e:
+            return jsonify({"ok": False, "error": "拉不到预览流：%s" % e}), 502
+
+        def _pump():
+            try:
+                for chunk in up.iter_content(8192):
+                    if chunk:
+                        yield chunk
+            finally:
+                try:
+                    up.close()
+                except Exception:
+                    pass
+
+        resp = Response(stream_with_context(_pump()), mimetype="video/x-flv")
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
 
     @app.get("/api/diag")
     def api_diag():

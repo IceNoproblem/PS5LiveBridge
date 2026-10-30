@@ -91,24 +91,29 @@ function goStep(n, silent) {
   document.querySelectorAll('.stepc').forEach((el) => el.classList.remove('active'));
   const el = $('step-' + n);
   if (el) el.classList.add('active');
+  const key = String(n);
   document.querySelectorAll('#stepnav a').forEach((a) => {
-    const s = Number(a.dataset.step);
-    a.classList.toggle('active', s === n);
-    a.classList.toggle('done', S.state && Number(S.state.step) > s);
+    const s = String(a.dataset.step);
+    a.classList.toggle('active', s === key);
+    const sn = Number(s);
+    a.classList.toggle('done', !isNaN(sn) && S.state && Number(S.state.step) > sn);
   });
   window.scrollTo({ top: 0, behavior: 'smooth' });
-  if (!silent) api('/api/step', { step: n });
+  if (!silent && !isNaN(Number(n))) api('/api/step', { step: Number(n) });
 
   if (n === 1) loadGuides();
   if (n === 3) renderNet();
   if (n === 4) renderLogin();
-  if (n === 5) renderLive();
+  if (n === 5) { renderLive(); loadOverlay(); }
+  else if (typeof stopMiniPreview === 'function') stopMiniPreview();
+  if (key === 'diag') loadDiag(1);
 }
 
 document.querySelectorAll('#stepnav a').forEach((a) => {
   a.addEventListener('click', (e) => {
     e.preventDefault();
-    goStep(Number(a.dataset.step));
+    const ds = a.dataset.step;
+    goStep(isNaN(Number(ds)) ? ds : Number(ds));
   });
 });
 
@@ -129,6 +134,8 @@ async function tick() {
     const dbg = await api('/api/logs/debug');
     applyDebugBtn(dbg && dbg.on);
   } catch (e) {}
+  loadRtmpImpl();
+  loadNetcheck();
 
   const sv = st.services || {};
   const ps5 = (sv.nginx && sv.nginx.publisher) || {};
@@ -137,6 +144,9 @@ async function tick() {
   const live = st.live || {};
   const hj = st.hijack || {};
   const dv = hj.divert || {};
+  const outs = st.outputs || {};
+  const overlayOn = !!outs.overlay;
+  const channel = (live.bili && live.bili.channel) || '';
 
 
   {
@@ -154,7 +164,7 @@ async function tick() {
 
   if ($('ipchip')) $('ipchip').textContent = '本机 ' + (st.lan_ip || '未探测');
 
-  if ($('ver-chip') && st.version) $('ver-chip').textContent = 'v' + st.version;
+  if ($('rail-ver') && st.version) $('rail-ver').textContent = 'v' + st.version;
   if ($('rail-ip')) $('rail-ip').textContent = st.lan_ip || '—';
 
 
@@ -182,15 +192,6 @@ async function tick() {
     }
   }
 
-  if ($('rail-mode')) {
-    let modeText = '未开启';
-    if (dv.running) {
-      modeText = '流量接管';
-    } else if (hj.dns_running) {
-      modeText = '内置 DNS';
-    }
-    $('rail-mode').textContent = modeText;
-  }
   if ($('s3-lanip')) $('s3-lanip').textContent = st.lan_ip || '未探测';
 
 
@@ -227,32 +228,67 @@ async function tick() {
   setRail('rail-state', stageText, stageCls);
 
 
-  const ch = (live.bili && live.bili.channel) || '';
-  setRail('rail-channel',
-    ch === 'electron' ? '客户端模式' : (ch === 'livehime' ? '直播姬模式' : '—'), '');
+  // 两段链路分开：PS5→本机 / 本机→B站
+  const _pub = (sv.nginx && sv.nginx.publisher) || {};
+  const _ps5On = !!_pub.publishing;
+  setRail('rail-ps5-link', _ps5On ? '已连' : '未连', _ps5On ? 'ok' : '');
 
-  setRail('rail-relay', relay.running ? '转发中' : '停止', relay.running ? 'ok' : '');
+  const _pushing = live.state === 'live' || live.state === 'relaying';
+  const _pushOff = st.outputs && st.outputs.push_bili === false;
+  setRail('rail-bili-link',
+    _pushing ? '推流中' : (_pushOff ? '已关闭' : (_ps5On ? '开播中' : '未推')),
+    _pushing ? 'ok' : (_pushOff ? '' : ''));
 
+  setRail('rail-relay',
+    _pushing ? (st.rtmp_impl === 'rtmpf' ? 'rtmp-forwarder' : 'ffmpeg') : '—',
+    _pushing ? 'ok' : '');
 
-  let sTxt = '—', sCls = '';
-  if (live.state === 'live' || live.state === 'relaying' || live.state === 'local') {
-    sTxt = '已确认'; sCls = 'ok';
-  } else if (live.state === 'starting' || live.state === 'face_verify') {
-    sTxt = '确认中'; sCls = 'warn';
+  // 弹幕两段链路（第 5 步卡片）
+  const _dmOn = !!(sv.danmaku && sv.danmaku.connected);
+  const _ircOn = !!(sv.irc && sv.irc.ps5);
+  if ($('m-dm-link')) {
+    $('m-dm-link').className = 'v ' + (_dmOn ? 'ok' : 'err');
+    $('m-dm-link').innerHTML = _dmOn
+      ? '已连<br><small>B 站弹幕</small>' : '未连';
   }
-  setRail('rail-stream', sTxt, sCls);
+  if ($('m-irc-link')) {
+    $('m-irc-link').className = 'v ' + (_ircOn ? 'ok' : 'warn');
+    $('m-irc-link').innerHTML = _ircOn
+      ? '已连<br><small>PS5 进了直播间</small>'
+      : (_ircOn === false && sv.irc && sv.irc.running
+        ? '等待<br><small>PS5 还没进直播间</small>' : '未连');
+  }
+
+  // 第 5 步的小预览：有流自动播，流停自动关
+  if (S.step === 5) syncMiniPreview(_ps5On);
 
 
   const dnsMode = st.dns_mode || 'router';
-  let dnsText;
-  if (dnsMode === 'builtin') {
-    dnsText = '内置 DNS';
-  } else if (isDocker()) {
-    dnsText = '路由器';
-  } else {
-    dnsText = '端口劫持';
+  {
+    const w = $('accel-warn');
+    if (w) w.style.display = (dnsMode === 'builtin') ? '' : 'none';
   }
-  setRail('rail-dns', dnsText, 'ok');
+  // 加速方案：三种走法的真实状态
+  //
+  // DNS_MODE 只有 builtin / router 两个值：
+  //   方案一（路由器 hosts）→ router，端口接管没跑
+  //   方案二（内置 DNS）    → builtin
+  //   方案三（端口接管）    → router + divert 在跑
+  // 所以 router 下要靠 divert 是否运行来区分一和三，
+  // 不能像以前那样用 isDocker() 判断（Windows 上方案一会显示错）。
+  const divertRunning = !!(st.hijack && st.hijack.running);
+  let dnsText, dnsCls = '';
+  if (dnsMode === 'builtin') {
+    dnsText = '方案二·内置DNS';
+    dnsCls = (st.hijack && st.hijack.dns_running) ? 'ok' : 'err';
+  } else if (divertRunning) {
+    dnsText = '方案三·端口接管';
+    dnsCls = 'ok';
+  } else {
+    dnsText = '方案一·路由器hosts';
+    dnsCls = 'ok';
+  }
+  setRail('rail-dns', dnsText, dnsCls);
 
 
   setRail('rail-dm', ((sv.danmaku && sv.danmaku.count) || 0) + ' 条', '');
@@ -305,12 +341,15 @@ async function tick() {
   }
 
 
-  const pick3 = S.modePick;
+  // 没在第 1 步选过方案时，用 dns_mode 反推，否则标题会显示成方案三的文案
+  const pick3 = S.modePick
+    || (((S.state && S.state.dns_mode) === 'builtin') ? 'dns'
+        : ((dv.running) ? 'divert' : 'hosts'));
   if ($('s3-title')) {
     if (pick3 === 'hosts') {
       $('s3-title').textContent = '第 3 步 · PS5 什么都不用改';
     } else if (pick3 === 'dns') {
-      $('s3-title').textContent = '第 3 步 · 改 PS5 的 DNS';
+      $('s3-title').textContent = '第 3 步 · 把 PS5 的 DNS 指到这台电脑';
     } else if (pick3 === 'divert') {
       $('s3-title').textContent = '第 3 步 · 把加速器的四个数填进 PS5';
     } else {
@@ -322,7 +361,10 @@ async function tick() {
 
 
   const modeNote = $('s3-mode-note');
-  const pk = S.modePick;
+  // modePick 是第 1 步选的方案。如果没选过（老配置 / 直接跑到第 3 步），
+  // 就从 dns_mode 反推：builtin 说明在用方案二。
+  const pk = S.modePick
+    || (((S.state && S.state.dns_mode) === 'builtin') ? 'dns' : '');
   if (modeNote) {
     if (pk === 'hosts') {
       modeNote.innerHTML = '<b>你走的是「改路由器 hosts」</b>：路由器已经把推流地址指过来了，'
@@ -462,11 +504,27 @@ async function tick() {
     face_verify: '人脸验证',
   };
   if ($('m-ps5')) {
-    $('m-ps5').textContent = ps5.publishing ? '已收到' : '等待';
-    $('m-bili').textContent = live.state === 'live' ? '直播中'
-      : (live.state === 'relaying' ? '已开播' : (live.state === 'error' ? '失败'
-      : (live.state === 'face_verify' ? '待验证' : '—')));
-    $('m-relay').textContent = relay.running ? '转发中' : '未转发';
+    // 两段链路分开显示：PS5→本机、本机→B站
+    const ps5On = !!ps5.publishing;
+    $('m-ps5').className = 'v ' + (ps5On ? 'ok' : 'warn');
+    $('m-ps5').innerHTML = ps5On
+      ? `已连<br><small>${ps5.width || 0}×${ps5.height || 0} ${ps5.fps || 0}fps ${ps5.bw_in || 0}kbps</small>`
+      : '未连';
+
+    const pushing = live.state === 'live' || live.state === 'relaying';
+    $('m-bili').className = 'v ' + (pushing ? 'ok'
+      : (live.state === 'error' ? 'err' : (outs.push_bili ? 'warn' : '')));
+    $('m-bili').innerHTML = pushing
+      ? `推流中<br><small>${esc(channel || '已开播')}</small>`
+      : (live.state === 'error' ? '失败'
+        : (live.state === 'face_verify' ? '待验证'
+        : (outs.push_bili ? '等待 PS5' : '已关闭')));
+
+    const engine = st.rtmp_impl === 'rtmpf' ? 'rtmp-forwarder' : 'nginx + ffmpeg';
+    $('m-relay').className = 'v ' + (pushing ? 'ok' : '');
+    $('m-relay').innerHTML = pushing
+      ? `${engine}<br><small>${overlayOn ? '叠加 + 重编码' : '原样转发'}</small>`
+      : '空闲';
     $('m-quality').innerHTML = ps5.publishing
       ? `${ps5.width || 0}×${ps5.height || 0}<br><small>${ps5.bw_in || 0} kbps</small>`
       : '—';
@@ -476,9 +534,6 @@ async function tick() {
     $('m-dmcount').textContent = dm.count || 0;
     $('m-irc').textContent = (sv.irc && sv.irc.ps5) ? '已连' : '未连';
     $('m-room').textContent = (st.bili && st.bili.room_id) ? st.bili.room_id : '—';
-    $('s6-badge').textContent = stateMap[live.state] || live.state;
-    $('s6-badge').className = 'badge ' + (live.state === 'live' ? 'ok'
-      : live.state === 'error' ? 'err' : (live.state === 'face_verify' ? 'warn' : ''));
     $('s5-badge').textContent = stateMap[live.state] || '等 PS5';
     $('s5-badge').className = 'badge ' + (live.state === 'live' ? 'ok'
       : live.state === 'error' ? 'err' : 'warn');
@@ -622,8 +677,9 @@ async function loadDiag(force) {
 
     const proc = String(rtmp.process || '').toLowerCase();
     const named = proc !== '';
-    const isNginx = proc.indexOf('nginx') >= 0;
-    const ok = nginxOn && (!named || isNginx);
+    // 收流端可能是 nginx，也可能是 rtmp-forwarder（进程名 rtmf.exe）
+    const isOwn = /nginx|rtmf|rtmpf|rtmp-forwarder/.test(proc);
+    const ok = nginxOn && (!named || isOwn);
     const label = ok
       ? '监听中'
       : ('被 ' + (rtmp.process || '别的进程') + ' 占用');
@@ -652,6 +708,82 @@ async function loadDiag(force) {
   const fwOk = fwAll.filter((k) => fw[k] === true).length;
   rows.push(['防火墙', fwOk + '/' + fwAll.length + ' 条已放行',
     fwOk === fwAll.length ? 'ok' : 'warn']);
+
+  // 画面叠加状态
+  const ovd = L.overlay || {};
+  const ovbox = $('diag-overlay');
+  if (ovbox) {
+    const rows2 = [];
+    rows2.push(['叠加', ovd.active ? '已开启' : '未开启',
+      ovd.active ? 'ok' : '']);
+    if (ovd.active) {
+      rows2.push(['悬浮文字', ovd.text_len ? (ovd.text_len + ' 个字') : '空',
+        ovd.text_len ? 'ok' : 'warn']);
+      rows2.push(['弹幕队列', (ovd.dm_count || 0) + ' 条', '']);
+      rows2.push(['字体', ovd.font ? ovd.font.split(/[\\/]/).pop() : '未找到',
+        ovd.font ? 'ok' : 'err']);
+      const bad = (ovd.files || []).filter((f) => f.size !== 512);
+      rows2.push(['文本文件',
+        (ovd.files || []).length + ' 个' + (bad.length ? '，' + bad.length + ' 个大小异常' : '，全部 512 字节'),
+        bad.length ? 'warn' : 'ok']);
+    }
+    ovbox.innerHTML = kvRows(rows2);
+  }
+
+  // 转码与推流
+  const rly = L.relay_info || {};
+  const rbox = $('diag-relay');
+  if (rbox) {
+    const rows3 = [];
+    rows3.push(['转码进程', rly.running ? '运行中' : '未运行',
+      rly.running ? 'ok' : '']);
+    rows3.push(['推流方式', rly.impl === 'rtmpf' ? 'rtmp-forwarder' : 'nginx+ffmpeg', '']);
+    if (rly.bitrate) rows3.push(['目标码率', rly.bitrate, '']);
+    if (rly.restarts) rows3.push(['重启次数', rly.restarts + ' 次',
+      rly.restarts > 3 ? 'warn' : '']);
+    if (rly.error) rows3.push(['最近错误', rly.error.slice(0, 80), 'err']);
+    rbox.innerHTML = kvRows(rows3);
+  }
+
+  // 端口全景
+  const po = (L.ports && L.ports.items) || [];
+  const pbox = $('diag-ports');
+  if (pbox) {
+    if (!po.length) {
+      pbox.innerHTML = '<div class="kvrow dim"><span>没有数据</span></div>';
+    } else {
+      const labels = {
+        53: 'DNS', 443: 'HTTPS 中继', 1935: '收流', 6667: '弹幕', 5000: '界面',
+      };
+      pbox.innerHTML = po.map((x) => {
+        const name = labels[x.port] || '管理口';
+        const ok = !!x.listening;
+        const who = x.process ? (' · ' + esc(x.process)) : '';
+        return '<div class="kvrow"><span>' + x.port + ' ' + name + who
+          + '</span><b class="' + (ok ? 'ok' : 'err') + '">'
+          + (ok ? '已开' : '未开') + '</b></div>';
+      }).join('');
+    }
+  }
+
+  // 防火墙明细
+  const fbox = $('diag-fw');
+  if (fbox) {
+    const keys = Object.keys(fw);
+    if (!keys.length) {
+      fbox.innerHTML = '<div class="kvrow dim"><span>没有数据</span></div>';
+    } else {
+      const miss = keys.filter((k) => fw[k] !== true);
+      const head = '<div class="kvrow"><span>规则放行</span><b class="'
+        + (miss.length ? 'warn' : 'ok') + '">'
+        + (keys.length - miss.length) + '/' + keys.length + '</b></div>';
+      const lines = miss.length
+        ? miss.map((k) => '<div class="kvrow"><span>&nbsp;&nbsp;缺：' + esc(k)
+            + '</span><b class="warn">未放行</b></div>').join('')
+        : '<div class="kvrow"><span>&nbsp;&nbsp;全部已放行</span><b class="ok">✓</b></div>';
+      fbox.innerHTML = head + lines;
+    }
+  }
 
   const pub = (L.nginx || {}).publisher || {};
   if (pub.present) {
@@ -812,6 +944,54 @@ async function exportDiag() {
   }
 }
 
+let _flvPlayer = null;
+
+function togglePreview() {
+  const box = $('preview-box');
+  const btn = $('preview-btn');
+  if (!box) return;
+
+  if (box.style.display === 'block') {
+    if (_flvPlayer) {
+      try {
+        _flvPlayer.pause();
+        _flvPlayer.unload();
+        _flvPlayer.detachMediaElement();
+        _flvPlayer.destroy();
+      } catch (e) {}
+      _flvPlayer = null;
+    }
+    box.style.display = 'none';
+    if (btn) btn.textContent = '本地看画面';
+    return;
+  }
+
+  if (typeof flvjs === 'undefined') {
+    alert('播放组件没加载，刷新页面再试');
+    return;
+  }
+  if (!flvjs.isSupported()) {
+    alert('这个浏览器不支持 FLV 播放，换 Edge 或 Chrome');
+    return;
+  }
+
+  box.style.display = 'block';
+  if (btn) btn.textContent = '停止预览';
+  _flvPlayer = flvjs.createPlayer({
+    type: 'flv',
+    url: '/api/preview.flv',
+    isLive: true,
+    hasAudio: false,
+  });
+  _flvPlayer.attachMediaElement($('preview-video'));
+  _flvPlayer.on(flvjs.Events.ERROR, () => {
+    if (btn) btn.textContent = '本地看画面';
+    box.style.display = 'none';
+  });
+  _flvPlayer.load();
+  _flvPlayer.play().catch(() => {});
+}
+
 function applyDebugBtn(on) {
   const btn = $('log-debug-btn');
   if (!btn) return;
@@ -820,6 +1000,32 @@ function applyDebugBtn(on) {
   btn.title = on
     ? '正在记录详细日志（会写很多行），排查完记得关掉'
     : '打开后记录中继连接、嗅探包、更新比对等详细日志';
+}
+
+async function loadRtmpImpl() {
+  try {
+    const r = await api('/api/rtmp_impl');
+    const sel = $('rtmp-impl');
+    const hint = $('impl-hint');
+    if (sel && r) sel.value = r.impl || 'nginx';
+    if (hint) {
+      hint.textContent = r && r.impl === r.active
+        ? '当前生效'
+        : '重启程序后生效';
+    }
+  } catch (e) {}
+}
+
+async function setRtmpImpl(v) {
+  const r = await api('/api/rtmp_impl', { impl: v });
+  const hint = $('impl-hint');
+  if (!r || !r.ok) {
+    if (hint) hint.textContent = (r && r.error) || '保存失败';
+    return;
+  }
+  if (hint) {
+    hint.textContent = r.need_restart ? '已保存，重启程序后生效' : '当前生效';
+  }
 }
 
 async function toggleDebugLog() {
@@ -1163,7 +1369,10 @@ async function renderNet() {
   const accel = env.accel_procs || [];
 
 
-  const routerDone = (S.modePick === 'hosts')
+  const dnsMode = (S.state && S.state.dns_mode) || 'router';
+  const _pk3 = S.modePick
+    || (((S.state && S.state.dns_mode) === 'builtin') ? 'dns' : '');
+  const routerDone = (_pk3 === 'hosts')
     || (!S.modePick && !(dv.running) && !(S.state && S.state.hijack && S.state.hijack.dns_running)
         && !!(S.state && S.state.progress_dns_ok));
   if (accel.length) {
@@ -1172,6 +1381,16 @@ async function renderNet() {
     $('s3-accel').innerHTML = `<div class="verdict ok"><div class="icon">✓</div><div>
         <h4>本机加速器：${esc(accel.join('、'))}</h4>
         <p>确认它在给 PS5 加速。它给的四个数，下面照抄。</p>
+        </div></div>`;
+  } else if (dnsMode === 'builtin' || _pk3 === 'dns') {
+    // 方案二：PS5 直接把 DNS 指到本机，压根不需要加速器
+    $('s3-badge').textContent = '方案二 · 不用加速器';
+    $('s3-badge').className = 'badge ok';
+    $('s3-accel').innerHTML = `<div class="verdict ok"><div class="icon">✓</div><div>
+        <h4>这个方案不需要本机加速器</h4>
+        <p>你用的是<b>内置 DNS</b> 方案：PS5 直接把这台电脑当 DNS，
+        跟加速器没有关系，本机装没装加速器都一样。</p>
+        <p>这页不用填，直接去第 4 步。</p>
         </div></div>`;
   } else if (routerDone) {
     $('s3-badge').textContent = '加速器在路由器上';
@@ -1201,7 +1420,10 @@ async function autofillNet() {
   if (r.gateway || r.dns) {
     $('s3-fillnote').textContent = '网关和 DNS 已填，IP 和掩码照加速器抄。';
   } else {
-    $('s3-fillnote').textContent = '本机没找到加速器，四个数请照加速器界面手动抄。';
+    const dm = (S.state && S.state.dns_mode) || 'router';
+    $('s3-fillnote').textContent = (dm === 'builtin')
+      ? '方案二不用填 PS5 的网络参数，PS5 保持自动获取就行。'
+      : '本机没找到加速器，四个数请照加速器界面手动抄。';
   }
 
 
@@ -1343,29 +1565,227 @@ function renderLive() {
   }
 }
 
+let _ncAt = 0;
+
+async function loadNetcheck(force) {
+  if (!force && Date.now() - _ncAt < 60000) return;
+  _ncAt = Date.now();
+  let d = null;
+  try { d = await api('/api/netcheck' + (force ? '?force=1' : '')); } catch (e) {}
+  if (!d) return;
+
+  const v = d.version || {};
+  if ($('rail-ver-latest')) {
+    if (v.latest) {
+      const same = v.is_latest === true;
+      $('rail-ver-latest').textContent = same ? ('v' + v.latest + ' 已最新')
+        : ('v' + v.latest + ' 可更新');
+      $('rail-ver-latest').className = 'rail-v ' + (same ? 'ok' : 'warn');
+    } else {
+      $('rail-ver-latest').textContent = '查不到';
+      $('rail-ver-latest').className = 'rail-v';
+    }
+  }
+
+  const px = d.proxy || {};
+  if ($('rail-proxy')) {
+    if (px.configured) {
+      const shown = px.configured.replace(/^https?:\/\//, '');
+      // 列宽有限，只显示状态，完整地址挂在 title 上
+      $('rail-proxy').textContent = px.ok ? ('已连 ' + px.ms + 'ms') : '不通';
+      $('rail-proxy').title = shown;
+      $('rail-proxy').className = 'rail-v ' + (px.ok ? 'ok' : 'err');
+    } else {
+      $('rail-proxy').textContent = '未配置';
+      $('rail-proxy').className = 'rail-v';
+    }
+  }
+
+  const tw = d.twitch || {};
+  if ($('rail-twitch')) {
+    $('rail-twitch').textContent = tw.ok ? ('通 ' + tw.ms + 'ms') : '不通';
+    $('rail-twitch').className = 'rail-v ' + (tw.ok ? 'ok' : 'err');
+  }
+
+  const gh = d.github || {};
+  if ($('rail-github')) {
+    $('rail-github').textContent = gh.ok ? ('通 ' + gh.ms + 'ms') : '不通';
+    $('rail-github').className = 'rail-v ' + (gh.ok ? 'ok' : 'err');
+  }
+}
+
+let _ovLoaded = false;
+let _ovPos = { x: 0.04, y: 0.04 };
+let _dmX = 0.5;
+let _dmY = 0.86;
+let _ovSaveTimer = null;
+let _ovDrag = null;
+
+// 把当前叠加设置画到预览框上——没直播也能看到文字长什么样
+function renderOvPreview() {
+  const el = $('ov-drag');
+  const layer = $('ov-layer');
+  if (!el || !layer) return;
+
+
+  const txt = ($('ov-text') && $('ov-text').value) || '';
+  if (!txt.trim()) { el.style.display = 'none'; return; }
+
+  const size = Number($('ov-size') && $('ov-size').value) || 42;
+  const color = ($('ov-color') && $('ov-color').value) || '#ffffff';
+  const alpha = (Number($('ov-alpha') && $('ov-alpha').value) || 90) / 100;
+  const bgAlpha = (Number($('ov-bgalpha') && $('ov-bgalpha').value) || 0) / 100;
+
+  // 按预览宽度等比缩放字号（预览是按 1920 宽模拟的）
+  const w = layer.getBoundingClientRect().width || 340;
+  const scale = w / 1920;
+
+  el.style.display = '';
+  el.textContent = txt;
+  el.style.fontSize = Math.max(9, size * scale) + 'px';
+  el.style.color = color;
+  el.style.opacity = alpha;
+  el.style.background = bgAlpha > 0.02
+    ? 'rgba(0,0,0,' + bgAlpha + ')' : 'transparent';
+  applyOvPos();
+
+  if (!_ovDrag) bindOvDrag();
+}
+
+// 拖动时别每像素都发请求，节流 400ms
+function ovSaveThrottled() {
+  if (_ovSaveTimer) return;
+  _ovSaveTimer = setTimeout(() => {
+    _ovSaveTimer = null;
+    ovSave(true);
+  }, 400);
+}
+
+function applyOvPos() {
+  const el = $('ov-drag');
+  if (!el) return;
+  el.style.left = (_ovPos.x * 100) + '%';
+  el.style.top = (_ovPos.y * 100) + '%';
+}
+
+function bindOvDrag() {
+  const el = $('ov-drag');
+  const layer = $('ov-layer');
+  if (!el || !layer || _ovDrag) return;
+  _ovDrag = {};
+
+  el.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    const r = layer.getBoundingClientRect();
+    _ovDrag.moving = true;
+    _ovDrag.sx = e.clientX;
+    _ovDrag.sy = e.clientY;
+    _ovDrag.ox = _ovPos.x;
+    _ovDrag.oy = _ovPos.y;
+    _ovDrag.w = r.width || 1;
+    _ovDrag.h = r.height || 1;
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!_ovDrag.moving) return;
+    const nx = _ovDrag.ox + (e.clientX - _ovDrag.sx) / _ovDrag.w;
+    const ny = _ovDrag.oy + (e.clientY - _ovDrag.sy) / _ovDrag.h;
+    _ovPos.x = Math.min(0.95, Math.max(0, nx));
+    _ovPos.y = Math.min(0.95, Math.max(0, ny));
+    applyOvPos();
+    ovSaveThrottled();
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (!_ovDrag.moving) return;
+    _ovDrag.moving = false;
+    ovSave();          // 松手就存坐标
+  });
+}
+
+
+async function loadOverlay(force) {
+  if (_ovLoaded && !force) return;
+  let d = null;
+  try { d = await api('/api/overlay'); } catch (e) {}
+  if (!d) return;
+  _ovLoaded = true;
+
+  const set = (id, v) => { const el = $(id); if (el && v !== undefined && v !== null) el.value = v; };
+  const chk = (id, v) => { const el = $(id); if (el) el.checked = !!v; };
+  const pct = (id, v) => { const el = $(id); if (el) el.value = Math.round((Number(v) || 0) * 100); };
+
+  set('ov-text', d.OVERLAY_TEXT || '');
+  _ovPos.x = (typeof d.OVERLAY_X === 'number') ? d.OVERLAY_X : 0.04;
+  _ovPos.y = (typeof d.OVERLAY_Y === 'number') ? d.OVERLAY_Y : 0.04;
+  set('ov-size', d.OVERLAY_FONT_SIZE || 42);
+  set('ov-color', d.OVERLAY_COLOR || '#ffffff');
+  pct('ov-alpha', d.OVERLAY_ALPHA);
+  pct('ov-bgalpha', d.OVERLAY_BG_ALPHA);
+
+  chk('ov-tobili', d.OVERLAY_TO_BILI !== false);
+  chk('ov-tolocal', d.OVERLAY_TO_LOCAL !== false);
+  renderOvPreview();
+}
+
+function ovDirty() {
+  const m = $('ov-msg');
+  if (m) m.textContent = '有改动，点保存生效';
+  renderOvPreview();
+}
+
+async function ovSave(silent) {
+  const num = (id, dflt) => {
+    const el = $(id);
+    const v = el ? Number(el.value) : NaN;
+    return isNaN(v) ? dflt : v;
+  };
+  const val = (id) => { const el = $(id); return el ? el.value : ''; };
+  const on = (id) => { const el = $(id); return !!(el && el.checked); };
+
+  const body = {
+    OVERLAY_TEXT: val('ov-text'),
+    OVERLAY_FONT_SIZE: num('ov-size', 42),
+    OVERLAY_COLOR: val('ov-color'),
+    OVERLAY_ALPHA: num('ov-alpha', 90) / 100,
+    OVERLAY_BG_ALPHA: num('ov-bgalpha', 0) / 100,
+    OVERLAY_X: _ovPos.x,
+    OVERLAY_Y: _ovPos.y,
+
+    OVERLAY_TO_BILI: on('ov-tobili'),
+    OVERLAY_TO_LOCAL: on('ov-tolocal'),
+  };
+
+  const r = await api('/api/overlay', body);
+  const m = $('ov-msg');
+  if (!r || !r.ok) {
+    if (m) m.textContent = (r && r.msg) || '保存失败';
+    return;
+  }
+  if (m && !silent) {
+    m.textContent = r.active ? '已实时生效' : '已保存（当前不叠加）';
+  }
+}
+
 function renderOutputMode() {
   const st = S.state || {};
   const live = st.live || {};
-  const mode = live.output_mode || 'direct';
-  if ($('pick-direct')) {
-    $('pick-direct').classList.toggle('on', mode === 'direct');
-    $('pick-local').classList.toggle('on', mode === 'local');
-  }
+  const outs = st.outputs || {};
+  renderOutputs(outs);
+
   const box = $('s5-local');
   if (!box) return;
-  if (mode !== 'local') { box.innerHTML = ''; return; }
+  if (!outs.local_stream) { box.innerHTML = ''; return; }
 
   const url = live.local_url || '';
-  const ready = live.state === 'local';
+  const ready = !!url;
   box.innerHTML = `
     <div class="urlbox">
       <span class="mono" id="s5-url">${esc(url || '等 PS5 开始直播后出现地址')}</span>
       ${ready ? '<button class="btn sm" onclick="copyUrl()">复制</button>' : ''}
     </div>
-    <p class="small dim">
-      OBS 里加「媒体源」→ 取消勾选「本地文件」→ 把这个地址填进去。
-      拉流后由 OBS 推流到 B 站。这一模式不会替你开播，也不需要登录 B 站。
-    </p>`;
+    <p class="sma">用 OBS / PotPlayer 拉这个地址就能本地看，不影响推 B 站。</p>
+  `;
 }
 
 function copyUrl() {
@@ -1377,30 +1797,79 @@ function copyUrl() {
   });
 }
 
-async function setOutputMode(mode) {
-  const r = await api('/api/output/mode', { mode });
-  if (r && !r.ok) { alert('切换失败：' + (r.msg || '未知原因')); return; }
+let _miniPlayer = null;
+
+async function setOutputs() {
+  const push = $('sw-push') && $('sw-push').checked;
+  const local = $('sw-local') && $('sw-local').checked;
+  const r = await api('/api/outputs', { push_bili: push, local_stream: local });
+  if (!r || !r.ok) { alert((r && r.msg) || '保存失败'); return; }
   await tick();
-  renderOutputMode();
 }
 
-async function manualStart() {
-  const r = await api('/api/live/start', {});
-  if (!r.ok) alert(r.msg || '开播失败');
-  tick();
+function renderOutputs(o) {
+  if (!o) return;
+  const a = $('sw-push'), b = $('sw-local');
+  if (a) a.checked = !!o.push_bili;
+  if (b) b.checked = !!o.local_stream;
 }
 
-async function stopLive() {
-  if (!confirm('停止直播？B 站会一起关播，PS5 那边请自己停。')) return;
-  await api('/api/live/stop', { reason: '用户手动停止' });
-  tick();
+let _miniOn = false;
+
+function startMiniPreview() {
+  const box = $('miniprev');
+  const msg = $('miniprev-msg');
+  if (!box || typeof flvjs === 'undefined' || !flvjs.isSupported()) return;
+  if (_miniOn) return;
+
+  const v = $('minivideo');
+  if (!v) return;
+  try {
+    _miniPlayer = flvjs.createPlayer({
+      type: 'flv', url: '/api/preview.flv', isLive: true, hasAudio: false,
+      // 低延迟：默认缓冲 3~5 秒，会把"本地预览比 B 站快"这个差别吃掉，
+      // 看起来两边同步。开启追帧后本地预览能压到 1 秒内。
+      liveBufferLatencyChasing: true,
+      liveBufferLatencyMaxLatency: 1.2,
+      liveBufferLatencyMinRemain: 0.3,
+      lazyLoad: false,
+      enableStashBuffer: false,
+      stashInitialSize: 128,
+    });
+    _miniPlayer.attachMediaElement(v);
+    _miniPlayer.on(flvjs.Events.ERROR, () => {
+      stopMiniPreview();
+      if (msg) msg.textContent = '等 PS5 推流…';
+    });
+    _miniPlayer.load();
+    _miniPlayer.play().catch(() => {});
+    _miniOn = true;
+    if (msg) msg.textContent = '直播中';
+  } catch (e) {
+    _miniOn = false;
+  }
 }
 
-async function testInject() {
-  const r = await api('/api/test/inject', { text: '' });
-  alert(r.ok ? '发了，看 PS5 画面。' : (r.msg || '发送失败'));
+function stopMiniPreview() {
+  if (_miniPlayer) {
+    try {
+      _miniPlayer.pause();
+      _miniPlayer.unload();
+      _miniPlayer.detachMediaElement();
+      _miniPlayer.destroy();
+    } catch (e) {}
+    _miniPlayer = null;
+  }
+  _miniOn = false;
 }
 
+// 有 PS5 流就自动播，断了就停
+function syncMiniPreview(publishing) {
+  if (publishing) startMiniPreview();
+  else if (_miniOn) stopMiniPreview();
+  // 每轮同步都重画覆盖层，保证预览里的设计稿和弹幕占位一直在
+  renderOvPreview();
+}
 
 function renderDanmaku(list) {
   const box = $('dmlist');
@@ -1582,7 +2051,13 @@ async function doUpdate() {
   const forced = Number(q.get('step') || 0);
   let step = forced || Number((st && st.step) || 1);
   if (step < 1 || step > 5) step = 1;
-  goStep(step, true);
+  // 支持 ?step=5 / ?step=diag 直接定位（截图和排障时用）
+  const _qs = new URLSearchParams(location.search).get('step');
+  if (_qs) {
+    goStep(isNaN(Number(_qs)) ? _qs : Number(_qs), true);
+  } else {
+    goStep(step, true);
+  }
 
   tick();
   setInterval(tick, 1500);
@@ -1880,4 +2355,28 @@ async function useBuiltinDns() {
 async function stopBuiltinDns() {
   await api('/api/builtin/stop', {});
   location.reload();
+}
+
+async function manualStart() {
+  const r = await api('/api/live/start', {});
+  if (!r.ok) alert(r.msg || '开播失败');
+  tick();
+}
+
+async function setOutputMode(mode) {
+  const r = await api('/api/output/mode', { mode });
+  if (r && !r.ok) { alert('切换失败：' + (r.msg || '未知原因')); return; }
+  await tick();
+  renderOutputMode();
+}
+
+async function stopLive() {
+  if (!confirm('停止直播？B 站会一起关播，PS5 那边请自己停。')) return;
+  await api('/api/live/stop', { reason: '用户手动停止' });
+  tick();
+}
+
+async function testInject() {
+  const r = await api('/api/test/inject', { text: '' });
+  alert(r.ok ? '发了，看 PS5 画面。' : (r.msg || '发送失败'));
 }

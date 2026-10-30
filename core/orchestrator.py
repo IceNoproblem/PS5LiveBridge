@@ -7,6 +7,7 @@ import time
 from collections import deque
 
 from . import bili as bilimod
+from . import overlay, rtmf
 from . import (config_store, danmaku_history, danmaku_throttle, divert,
                dnscheck, dnsserver, eventbus, ffmpeg_mgr, logbus, netutil,
                netwatch, nginxmgr, paths, relay, routercfg, services,
@@ -28,11 +29,23 @@ class Orchestrator(object):
             on_ps5_join=self._on_ps5_join,
             on_ps5_drop=self._on_ps5_drop,
         )
-        self.nginx = nginxmgr.NginxManager(
-            rtmp_port=int(self.cfg.get("RTMP_PORT", 1935)),
-            stat_port=int(os.environ.get("PS5LB_STAT_PORT", "8099")),
-        )
+        _impl = (os.environ.get("PS5LB_RTMP_IMPL")
+                 or self.cfg.get("RTMP_IMPL") or "nginx").strip().lower()
+        _rtmp_port = int(self.cfg.get("RTMP_PORT", 1935))
+        if _impl in ("rtmpf", "rtmp-forwarder", "rtmp_forwarder"):
+            self.nginx = rtmf.RtmpForwarderManager(rtmp_port=_rtmp_port)
+            self.native_relay = True
+        else:
+            self.nginx = nginxmgr.NginxManager(
+                rtmp_port=_rtmp_port,
+                stat_port=int(os.environ.get("PS5LB_STAT_PORT", "8099")),
+            )
+            self.native_relay = False
         self.relay = relay.Relay()
+        self.overlay = overlay.Overlay()
+        # 叠加模式下用来接住 ffmpeg 的第二路输出，供本地预览
+        self.preview_srv = rtmf.RtmpForwarderManager(
+            rtmp_port=19350, web_port=8097)
         self.dns = None
         self.divert = None
         self.hijack_error = ""
@@ -362,10 +375,10 @@ class Orchestrator(object):
                          args=(ups,), daemon=True).start()
         if ok:
             logbus.ok("内置 DNS 已启动：%s，上游 %s" % (detail, ",".join(ups)), tag="DNS")
-            health = dnscheck.upstream_health(ups[0]) if ups else {"ok": False}
-            if health.get("ok") and not health.get("accelerated"):
-                logbus.warn("上游 DNS 不是加速器 DNS，PS5 很可能开不了播。"
-                            "请在下一步把加速器给出的 DNS 填进来。", tag="DNS")
+            # 这里不再提示「上游不是加速器 DNS」：
+            # 这个方案（内置 DNS）本来就是让 PS5 把 DNS 指向本机，
+            # 上游只负责转发普通域名解析，跟加速器无关。
+            # 那条提示只对「路由器 hosts」方案有意义，之前挂错地方了。
         else:
             logbus.error("内置 DNS 自检失败：%s" % detail, tag="DNS")
         return {"ok": ok, "detail": detail, "upstreams": ups}
@@ -374,8 +387,13 @@ class Orchestrator(object):
         """内置 DNS 模式配套：443 上起中继，把劫持域名的 HTTPS 转回真服务器。"""
         try:
             from . import https_relay
-            if getattr(self, "_https_relay", None):
+            _old = getattr(self, "_https_relay", None)
+            if _old is not None and _old.is_running:
                 return
+            if _old is not None:
+                try: _old.stop()
+                except Exception: pass
+                self._https_relay = None
             up_dns = ""
             for u in (upstreams or []):
                 if u and netutil.classify_dns(u) != "none":
@@ -769,7 +787,7 @@ class Orchestrator(object):
                      res, pub.get("fps", 0) or "?", pub.get("bw_in", 0)),
                   tag="推流")
 
-        if self.output_mode() == "local":
+        if not self.push_bili():
             with self.lock:
                 self.live["ps5"] = pub
                 self._set_state("local")
@@ -883,6 +901,9 @@ class Orchestrator(object):
         一旦抛未捕获异常线程就静默死掉，状态会永远卡在「正在开播」，
         界面上看起来就是点了开播后一直转圈、什么都不发生。
         """
+        if not self.push_bili():
+            logbus.warn("「推流到 B 站」是关着的，不会开播。要推请在第五步把它打开", tag="直播")
+            return
         try:
             self._do_start_live(app, name)
         except Exception as e:
@@ -927,23 +948,122 @@ class Orchestrator(object):
 
         self._protect_relay_target(out_url, addr)
 
-        if hasattr(self.nginx, "set_destination"):
-            try:
-                self.nginx.set_destination(addr, code)
-                self.services.notify_ps5("B 站已开播，画面正在同步")
-            except Exception as e:
-                self._fail_live("转发启动失败：%s" % e)
-        else:
+        self._start_push(addr, code)
+
+    def has_overlay(self) -> bool:
+        """
+        要不要烧字幕。只看悬浮文字。
+
+        弹幕叠加已经下线：drawtext 的 reload 在 Windows 上会让 ffmpeg
+        反复崩（0xC0000005 / 0xC0000374），画面断断续续没法用。
+        B 站观众在播放器里本来就能看弹幕，不烧进画面不影响观看。
+        """
+        return bool((self.cfg.get("OVERLAY_TEXT") or "").strip())
+
+    def _start_push(self, addr: str, code: str) -> bool:
+        """
+        统一的推流入口。
+
+        两条路：
+          · 没有叠加 → 用收流端自己的转发器，零转码，最轻
+          · 有叠加   → ffmpeg 拉本机的流，把 ASS 字幕烧进画面再推 B 站
+                       （必须重编码，走 QSV 硬编）
+        """
+        out_url = addr.rstrip("/") + "/" + code.lstrip("/")
+        self._protect_relay_target(out_url, addr)
+
+        # 缓存推流地址：改叠加参数要重启转码时直接复用，
+        # 不要重走 B 站开播接口（会触发 60031 风控）
+        self._last_out_url = out_url
+        self._last_addr = addr
+        self._last_code = code
+
+        _to_bili = bool(self.cfg.get("OVERLAY_TO_BILI", True))
+        _to_local = bool(self.cfg.get("OVERLAY_TO_LOCAL", True))
+
+        # 两个都不勾 = 等同没开叠加，走零转码那条路
+        if self.has_overlay() and (_to_bili or _to_local):
             pub = self.live.get("ps5") or {}
-            in_url = "rtmp://127.0.0.1:%d/%s/%s" % (
-                int(self.cfg.get("RTMP_PORT", 1935)),
-                pub.get("app", "app"), pub.get("name", ""))
-            if not self.relay.start(in_url, out_url):
-                self._fail_live(self.relay.last_error or "转发启动失败")
-                return
+            w = int(pub.get("width") or 1920)
+            h = int(pub.get("height") or 1080)
+            try:
+                self.overlay.write(self.cfg)
+            except Exception as e:
+                logbus.warn("生成叠加文本失败：%s" % e, tag="叠加")
+            # 用 drawtext 烧字（不用 reload：reload 在 Windows 上会让 ffmpeg 崩）
+            vf = self.overlay.filter_chain(self.cfg)
+            if not vf:
+                logbus.warn("叠加滤镜为空（可能缺中文字体），本次不叠加", tag="叠加")
+
+            # rtmp-forwarder 只收推流、不提供 RTMP 播放（拉它会报 Already publishing），
+            # 只能从它的 HTTP-FLV 接口拿流喂给 ffmpeg。
+            _web = int(getattr(self.nginx, "web_port", 0) or 0)
+            if _web:
+                in_url = "http://127.0.0.1:%d/live/stream.flv" % _web
+            else:
+                in_url = "rtmp://127.0.0.1:%d/%s/%s" % (
+                    int(self.cfg.get("RTMP_PORT", 1935)),
+                    pub.get("app", "app"), pub.get("name", ""))
+            br = int(pub.get("bw_in") or 0) or 6000
+            bitrate = "%dk" % br
+
+            # 「叠加到本地」才额外输出一路给 OBS 拉；
+            # 本地画面预览不从这里取 —— 预览看的是 PS5 原始画面，
+            # 叠加效果由前端覆盖层实时呈现，这样省掉一路编码。
+            preview_url = ""
+            if _to_local:
+                try:
+                    if not self.preview_srv.running():
+                        self.preview_srv.start()
+                    if self.preview_srv.running():
+                        preview_url = "rtmp://127.0.0.1:19350/preview/ov"
+                except Exception as e:
+                    logbus.warn("本地叠加输出起不来：%s" % e, tag="叠加")
+
+            target = out_url if _to_bili else (preview_url or out_url)
+
+            # 推 B 站的时候不传 preview_url，强制单路输出。
+            #
+            # 原因：i3-8100T 的核显扛不住两个 h264_qsv session（会 0xC0000005 崩），
+            # CPU 编码又跟不上实时（speed<1 直接卡死）。
+            # 而本地预览本来就不需要烧字——它拉的是 PS5 原始流，叠加效果由
+            # 前端覆盖层实时画。所以推 B 站时那一路没有存在的必要。
+            _pv = "" if _to_bili else preview_url
+            if not self.relay.start(in_url, target, vf=vf, bitrate=bitrate,
+                                    preview_url=_pv):
+                self._fail_live(self.relay.last_error or "叠加转发启动失败")
+                return False
             self.relay.start_watchdog(
                 on_drop=lambda reason: self._fail_live("转发中断：%s" % reason))
+            logbus.ok("画面叠加已启用（%s + %s 重编码）"
+                      % ("推 B 站" if _to_bili else "仅本地",
+                         bitrate), tag="叠加")
             self.services.notify_ps5("B 站已开播，画面正在同步")
+            return True
+
+        if hasattr(self.nginx, "set_destination"):
+            try:
+                ok = self.nginx.set_destination(addr, code)
+                if ok is False:
+                    self._fail_live(self.nginx.last_error or "转发启动失败")
+                    return False
+                self.services.notify_ps5("B 站已开播，画面正在同步")
+                return True
+            except Exception as e:
+                self._fail_live("转发启动失败：%s" % e)
+                return False
+
+        pub = self.live.get("ps5") or {}
+        in_url = "rtmp://127.0.0.1:%d/%s/%s" % (
+            int(self.cfg.get("RTMP_PORT", 1935)),
+            pub.get("app", "app"), pub.get("name", ""))
+        if not self.relay.start(in_url, out_url):
+            self._fail_live(self.relay.last_error or "转发启动失败")
+            return False
+        self.relay.start_watchdog(
+            on_drop=lambda reason: self._fail_live("转发中断：%s" % reason))
+        self.services.notify_ps5("B 站已开播，画面正在同步")
+        return True
 
     def _fix_relay_url(self, url: str) -> str:
         """
@@ -1174,26 +1294,8 @@ class Orchestrator(object):
         out_url = self._fix_relay_url(out_url)
         self._protect_relay_target(out_url, addr)
 
-        if hasattr(self.nginx, "set_destination"):
-            try:
-                self.nginx.set_destination(addr, code)
-                logbus.ok("已让收流进程带上 B 站目标（一体化转发）", tag="转发")
-            except Exception as e:
-                self._fail_live("转发启动失败：%s" % e)
-                return
-        else:
-            pub = self.live.get("ps5") or {}
-            app = pub.get("app", "app")
-            name = pub.get("name", "")
-            in_url = "rtmp://127.0.0.1:%d/%s/%s" % (
-                int(self.cfg.get("RTMP_PORT", 1935)), app, name)
-            if not self.relay.start(in_url, out_url):
-                self._fail_live(self.relay.last_error or "转发启动失败")
-                return
-            self.relay.start_watchdog(
-                on_drop=lambda reason: self._fail_live("转发中断：%s" % reason))
-
-        self.services.notify_ps5("B 站已开播，画面正在同步")
+        if not self._start_push(addr, code):
+            return
         threading.Thread(target=self._confirm_stream, daemon=True).start()
 
     def _confirm_stream(self, timeout: float = 5.0, retry: bool = True) -> None:
@@ -1236,6 +1338,35 @@ class Orchestrator(object):
     def output_mode(self) -> str:
         return "local" if self.cfg.get("OUTPUT_MODE") == "local" else "direct"
 
+    def push_bili(self) -> bool:
+        """
+        是否把流转推到 B 站。
+
+        旧配置只有 OUTPUT_MODE（direct/local 二选一），这里做一次兼容：
+        没写过 PUSH_BILI 的老用户，按 OUTPUT_MODE 推断。
+        """
+        if "PUSH_BILI" in self.cfg:
+            return bool(self.cfg.get("PUSH_BILI"))
+        return self.cfg.get("OUTPUT_MODE") != "local"
+
+    def local_stream(self) -> bool:
+        return bool(self.cfg.get("LOCAL_STREAM", True))
+
+    def set_outputs(self, push_bili=None, local_stream=None) -> dict:
+        upd = {}
+        if push_bili is not None:
+            upd["PUSH_BILI"] = bool(push_bili)
+        if local_stream is not None:
+            upd["LOCAL_STREAM"] = bool(local_stream)
+        if not upd:
+            return {"ok": False, "msg": "没有要改的"}
+        self.cfg = paths.save_config(upd)
+        logbus.info("输出方式：推 B 站 %s / 本地流 %s"
+                    % ("开" if self.push_bili() else "关",
+                       "开" if self.local_stream() else "关"), tag="推流")
+        return {"ok": True, "push_bili": self.push_bili(),
+                "local_stream": self.local_stream()}
+
     def local_play_url(self, app: str = "", name: str = "") -> str:
         """
         给 OBS 之类软件拉的地址。
@@ -1251,6 +1382,14 @@ class Orchestrator(object):
             app = ps5.get("app") or app
             name = ps5.get("name") or ""
         host = self.lan_ip or "127.0.0.1"
+        # 「叠加到本地」开着且预览端在跑，就给烧过字的那一路
+        try:
+            if (self.cfg.get("OVERLAY_TO_LOCAL", True)
+                    and self.has_overlay()
+                    and self.preview_srv.running()):
+                return "rtmp://%s:19350/preview/ov" % host
+        except Exception:
+            pass
         port = int(self.cfg.get("RTMP_PORT", 1935))
         return "rtmp://%s:%d/%s/%s" % (host, port, app, name)
 
@@ -1368,6 +1507,9 @@ class Orchestrator(object):
             pass
 
     def _on_danmaku(self, item: dict) -> None:
+        # 弹幕只做转发，不烧进画面。
+        # 烧弹幕靠 drawtext 读文件，而 drawtext 在 Windows 上做动态文字必崩
+        #（reload 会让 ffmpeg 0xC0000005），所以这个功能已经下线。
         self.danmaku_total += 1
         if item["kind"] in ("gift", "guard", "sc"):
             self.gift_total += 1
@@ -1380,7 +1522,20 @@ class Orchestrator(object):
         except Exception:
             pass
 
+        # ── 弹幕日志 ──
+        # 记「收到」和「转发」两个动作，出问题时能一眼看出断在哪一段：
+        # 只有「收到」没有「转发」→ 是 PS5 没连上
+        # 两个都有但画面没弹幕 → PS5 那边的问题
+        _u = item.get("user") or ""
+        _x = item.get("text") or ""
+        _k = item.get("kind") or "danmaku"
+        _label = {"danmaku": "弹幕", "gift": "礼物",
+                  "guard": "上舰", "sc": "醒目留言"}.get(_k, _k)
+        logbus.info("收到%s %s：%s" % (_label, _u, _x), tag="弹幕")
+
         if not self.services.ps5_connected:
+            logbus.warn("PS5 没连上弹幕通道，%s 的这条没转发" % (_u or "观众"),
+                        tag="弹幕")
             return
         kind = item["kind"]
         if kind == "danmaku":
@@ -1394,6 +1549,8 @@ class Orchestrator(object):
                                    "醒目留言 ¥%s：%s" % (item["price"] // 1000,
                                                         item["text"]),
                                    priority=1)
+
+        logbus.info("转发→PS5 %s：%s" % (_u, _x), tag="弹幕")
 
     def _on_ps5_join(self, channel: str) -> None:
         self.progress = paths.save_progress({"ps5_joined": time.time()})
@@ -1421,7 +1578,128 @@ class Orchestrator(object):
                 pub["uptime"] = 0
         return pub
 
+    def netcheck(self, force: bool = False) -> dict:
+        """
+        运行状态面板要的网络检查。60 秒缓存，别让每次 tick 都去打网络。
+
+        三项分开测：代理本身、Twitch、GitHub。Twitch 必须过代理，
+        GitHub 直连或代理都算通 —— 国内直连 api.github.com 一般能通。
+        """
+        import time as _t
+        now = _t.time()
+        if not force and getattr(self, "_nc_cache", None) \
+                and now - getattr(self, "_nc_at", 0) < 60:
+            return self._nc_cache
+
+        out = {
+            "proxy": {"configured": "", "ok": False, "ms": 0},
+            "twitch": {"ok": False, "ms": 0, "detail": ""},
+            "github": {"ok": False, "ms": 0, "detail": ""},
+            "version": {"current": paths.APP_VERSION, "latest": "",
+                        "is_latest": None},
+        }
+
+        proxy = (self.cfg.get("TWITCH_PROXY") or "").strip()
+        out["proxy"]["configured"] = proxy
+
+        def _probe(url, use_proxy):
+            import urllib.request
+            t0 = _t.time()
+            try:
+                handlers = []
+                if use_proxy and proxy:
+                    handlers.append(urllib.request.ProxyHandler(
+                        {"http": proxy, "https": proxy}))
+                else:
+                    handlers.append(urllib.request.ProxyHandler({}))
+                op = urllib.request.build_opener(*handlers)
+                req = urllib.request.Request(
+                    url, headers={"User-Agent": "Mozilla/5.0 PS5LiveBridge"})
+                with op.open(req, timeout=14) as r:
+                    r.read(256)
+                return True, int((_t.time() - t0) * 1000), ""
+            except Exception as e:
+                return False, int((_t.time() - t0) * 1000), str(e)[:80]
+
+        # 代理本身：直接连它的端口
+        if proxy:
+            try:
+                from urllib.parse import urlparse
+                u = urlparse(proxy if "://" in proxy else "http://" + proxy)
+                host, port = u.hostname, u.port or 80
+                import socket as _s
+                t0 = _t.time()
+                with _s.create_connection((host, port), timeout=4):
+                    pass
+                out["proxy"]["ok"] = True
+                out["proxy"]["ms"] = int((_t.time() - t0) * 1000)
+            except Exception as e:
+                out["proxy"]["ok"] = False
+                out["proxy"]["ms"] = 0
+
+        ok, ms, err = _probe("https://www.twitch.tv/", True)
+        if not ok and ("401" in err or "403" in err):
+            ok = True
+            err = ""
+        out["twitch"] = {"ok": ok, "ms": ms, "detail": err}
+
+        # GitHub 先试直连，不行再过代理（国内直连通常更快）
+        ok, ms, err = _probe("https://api.github.com/", False)
+        if not ok and proxy:
+            ok2, ms2, err2 = _probe("https://api.github.com/", True)
+            if ok2:
+                ok, ms, err = True, ms2, err2 + " (走代理)"
+        out["github"] = {"ok": ok, "ms": ms, "detail": err}
+
+        try:
+            import json as _j, urllib.request as _u
+            url = ("https://api.github.com/repos/IceNoproblem/"
+                   "PS5LiveBridge/releases/latest")
+            op = _u.build_opener(_u.ProxyHandler({}))
+            req = _u.Request(url, headers={
+                "User-Agent": "PS5LiveBridge",
+                "Accept": "application/vnd.github+json"})
+            with op.open(req, timeout=8) as r:
+                data = _j.loads(r.read().decode("utf-8", "ignore"))
+            tag = (data.get("tag_name") or "").lstrip("vV")
+            if tag:
+                out["version"]["latest"] = tag
+                cur = paths.APP_VERSION
+                if tag == cur:
+                    out["version"]["is_latest"] = True
+                else:
+                    # 本地可能比线上新（开发版还没发），这种情况也算"已最新"
+                    try:
+                        from .updater import parse_ver
+                        out["version"]["is_latest"] = parse_ver(cur) >= parse_ver(tag)
+                    except Exception:
+                        out["version"]["is_latest"] = False
+        except Exception as e:
+            out["version"]["detail"] = str(e)[:60]
+
+        self._nc_cache = out
+        self._nc_at = now
+        return out
+
     def snapshot(self) -> dict:
+        # 443 中继只在「点按钮启动内置 DNS」时被拉起，重启后会丢。
+        # 这里做一次性恢复：DNS_MODE 是 builtin 但中继没在跑，就补起来。
+        if not getattr(self, "_hr_checked", False):
+            self._hr_checked = True
+            _dns_ok = bool(self.dns and self.dns.running)
+            _cur = getattr(self, "_https_relay", None)
+            _hr_ok = bool(_cur is not None and _cur.is_running)
+            if self.cfg.get("DNS_MODE") == "builtin" and not _dns_ok:
+                # 重启后内置 DNS 不会自己回来（它只在点按钮时启动）。
+                # 这里补一次，起来后它会顺手把 443 中继拉起。
+                threading.Thread(target=self.enable_builtin_dns,
+                                 daemon=True).start()
+            elif not _hr_ok:
+                threading.Thread(target=self._auto_start_https_relay,
+                                 kwargs={"upstreams": None}, daemon=True).start()
+
+        _hr = getattr(self, "_https_relay", None)
+        _hr_on = bool(_hr is not None and _hr.is_running)
         with self.lock:
             live = dict(self.live)
             live["bili"] = dict(live.get("bili") or {})
@@ -1449,15 +1727,28 @@ class Orchestrator(object):
             "dns_mode": self.cfg.get("DNS_MODE", "router"),
             "dns_answer": self.dns_answer_hint(),
             "hijack": self.hijack_state(),
+            "outputs": {"push_bili": self.push_bili(),
+                        "local_stream": self.local_stream(),
+                        "overlay": self.has_overlay()},
+            "rtmp_impl": "rtmpf" if getattr(self, "native_relay", False) else "nginx",
             "services": {
                 "dns": dns_state,
                 "irc": {"running": self.services.irc.running,
                         "ps5": self.services.ps5_connected},
                 "nginx": {"running": self.nginx.running(),
                           "publisher": self._publisher_view(live)},
-                "relay": {"running": relay_running, "uptime": relay_uptime,
-                          "restarts": 0,
+                # 这里原来只有一个 running，但它是 nginx.forwarding（rtmpf 的转发状态），
+                # 跟 ffmpeg 编码进程没关系。排查时拿它判断 ffmpeg 死活会完全看错，
+                # 所以把两个状态分开暴露：
+                #   encoder    → ffmpeg 编码进程在不在（推 B 站那一路）
+                #   forwarding → rtmpf 收流端有没有在转发
+                "relay": {"running": relay_running,
+                          "encoder": self.relay.running,
+                          "forwarding": getattr(self.nginx, "forwarding", None),
+                          "uptime": relay_uptime,
+                          "restarts": getattr(self.relay, "restarts", 0),
                           "error": relay_error},
+            "https_relay": {"running": _hr_on, "port": 443},
                 "danmaku": {"connected": self.services.danmaku_connected,
                             "count": self.danmaku_total, "gift": self.gift_total},
             },

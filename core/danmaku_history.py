@@ -52,8 +52,30 @@ class DanmakuHistory:
             self._recent.append(record)
             if self._file:
                 try:
+                    # 不要每条 flush。
+                    #
+                    # 这个函数是在 asyncio 事件循环里被同步调用的（弹幕回调走
+                    # asyncio.ensure_future 那条线），每条弹幕都 flush 等于
+                    # 每条弹幕都做一次磁盘同步，弹幕密集时会把整个事件循环堵死：
+                    # Web 接口超时 → watchdog 判定断流 → 重启 ffmpeg → 画面断。
+                    # 实测「有弹幕就断」就是这个原因。
+                    #
+                    # 改成攒够 50 条或对象销毁时再 flush，正常关闭也会落盘。
                     self._file.write(json.dumps(record, ensure_ascii=False) + "\n")
+                    self._pending = getattr(self, "_pending", 0) + 1
+                    if self._pending >= 50:
+                        self._file.flush()
+                        self._pending = 0
+                except Exception:
+                    pass
+
+    def flush(self) -> None:
+        """把缓冲刷到磁盘。程序退出或切场次时调用。"""
+        with self._lock:
+            if self._file:
+                try:
                     self._file.flush()
+                    self._pending = 0
                 except Exception:
                     pass
 

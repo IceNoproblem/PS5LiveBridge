@@ -51,6 +51,14 @@ if exist tools\ffmpeg.exe (
   echo     otherwise the relay from PS5 to Bilibili will not start.
 )
 
+if exist tools\rtmf.exe (
+  if not exist "dist\PS5LiveBridge\tools" mkdir "dist\PS5LiveBridge\tools"
+  copy /y tools\rtmf.exe "dist\PS5LiveBridge\tools\" >nul
+  echo     bundled rtmf.exe
+) else (
+  echo     note: tools\rtmf.exe not found - rtmp-forwarder impl unavailable
+)
+
 copy /y README.md "dist\PS5LiveBridge\README.md" >nul 2>nul
 copy /y LICENSE "dist\PS5LiveBridge\LICENSE.txt" >nul 2>nul
 if exist config.example.json copy /y config.example.json "dist\PS5LiveBridge\" >nul

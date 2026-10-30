@@ -6,7 +6,8 @@ ENV PYTHONUNBUFFERED=1 \
     LANG=C.UTF-8 \
     TZ=Asia/Shanghai \
     PS5LB_DATA_DIR=/data \
-    PS5LB_WEB_HOST=0.0.0.0
+    PS5LB_WEB_HOST=0.0.0.0 \
+    PS5LB_RTMP_IMPL=nginx
 
 ARG APT_MIRROR=mirrors.aliyun.com
 ARG PIP_INDEX=https://mirrors.aliyun.com/pypi/simple/
@@ -24,6 +25,7 @@ RUN apt-get update \
         ffmpeg \
         ca-certificates \
         tzdata \
+        fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/* /etc/nginx/sites-enabled/default
 
 WORKDIR /app

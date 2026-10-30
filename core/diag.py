@@ -37,6 +37,80 @@ def _firewall() -> dict:
     return out
 
 
+def _ports_overview(orch) -> dict:
+    """
+    这台机器该开的端口有没有都开着。
+
+    443 和 8098 也要看：443 是 HTTPS 中继（Twitch 打不开时多半是它没起），
+    8098 是收流端的管理口（本地预览靠它）。
+    """
+    try:
+        web_port = int(getattr(orch.nginx, "web_port", 0) or 0)
+    except Exception:
+        web_port = 0
+
+    want = [53, 443, 1935, 6667, 5000]
+    if web_port:
+        want.append(web_port)
+
+    out = []
+    for port in want:
+        probe = _probe_port(port, "tcp")
+        udp = False
+        if port in (53,):
+            try:
+                udp = bool(netutil.port_listening(port, "udp"))
+            except Exception:
+                udp = False
+        out.append({
+            "port": port,
+            "listening": bool(probe["listening"]) or udp,
+            "udp": udp,
+            "process": probe["process"],
+        })
+    return {"items": out}
+
+
+def _overlay_stat(orch) -> dict:
+    """叠加这一路的实际状态，出问题时最常看这里。"""
+    out = {"active": False, "text_len": 0, "dm_count": 0,
+           "files": [], "font": ""}
+    try:
+        out["active"] = bool(orch.has_overlay())
+        cfg = orch.cfg
+        out["text_len"] = len((cfg.get("OVERLAY_TEXT") or "").strip())
+        out["dm_count"] = int(getattr(orch.overlay, "count", 0) or 0)
+        out["font"] = getattr(orch.overlay, "font", "") or ""
+
+        import os
+        d = getattr(orch.overlay, "_dir", "")
+        for name in ("ov_title.txt",) + tuple(
+                "ov_dm%d.txt" % i for i in range(5)):
+            p = os.path.join(d, name)
+            if os.path.exists(p):
+                out["files"].append({"name": name,
+                                     "size": os.path.getsize(p)})
+    except Exception:
+        pass
+    return out
+
+
+def _relay_stat(orch) -> dict:
+    out = {"running": False, "error": "", "impl": "",
+           "bitrate": "", "restarts": 0}
+    try:
+        r = getattr(orch, "relay", None)
+        if r is not None:
+            out["running"] = bool(r.running)
+            out["error"] = r.last_error or ""
+        out["impl"] = orch.cfg.get("RTMP_IMPL", "")
+        out["bitrate"] = str(getattr(r, "bitrate", "") or "")
+        out["restarts"] = int(getattr(r, "restarts", 0) or 0)
+    except Exception:
+        pass
+    return out
+
+
 def collect(orch) -> dict:
     """
     本机侧诊断，只读。
@@ -66,7 +140,7 @@ def collect(orch) -> dict:
     irc = _probe_port(irc_port)
 
     nginx = sv.get("nginx") or {}
-    relay = sv.get("relay") or {}
+    relay = sv.get("https_relay") or sv.get("relay") or {}
     pub = nginx.get("publisher") or {}
     publishing = bool(pub.get("publishing"))
     nginx_running = bool(nginx.get("running"))
@@ -95,6 +169,21 @@ def collect(orch) -> dict:
 
     hijack_mode = hj.get("mode") or ""
     dns_running = bool(hj.get("dns_running"))
+
+    # DNS 端口被别的程序占了（常见：UU 远程的 GameViewerService）
+    if not dns_running and rtmp.get("listening"):
+        try:
+            p53 = _probe_port(53, "udp")
+            who = p53.get("process") or ""
+            if who and "ps5livebridge" not in who.lower():
+                issues.append({
+                    "level": "err",
+                    "msg": "53 端口被 %s 占着，内置 DNS 起不来。"
+                           "关掉它的 DNS/网络优化功能，或退出该程序后重试。" % who,
+                })
+        except Exception:
+            pass
+
     relay_running = bool(relay.get("running"))
     relay_error = str(relay.get("error") or "").strip()
 
@@ -143,6 +232,9 @@ def collect(orch) -> dict:
                                        if isinstance(hj.get("divert"), dict) else False)},
             "relay": {"running": relay_running, "error": relay_error},
             "firewall": fw,
+            "ports": _ports_overview(orch),
+            "overlay": _overlay_stat(orch),
+            "relay_info": _relay_stat(orch),
             "live_state": live.get("state") or "idle",
         },
         "issues": issues,
