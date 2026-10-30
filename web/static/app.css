@@ -127,8 +127,34 @@ a:hover { text-decoration: underline; }
 
 
 .shell {
-  display: grid; grid-template-columns: 320px minmax(0, 1fr) 380px;
-  min-height: calc(100vh - 54px);
+  display: grid;
+  grid-template-columns: 292px 200px minmax(0, 1fr) 340px;
+  height: calc(100vh - var(--topbar-h, 54px));
+  overflow: hidden;
+}
+/* 四栏各滚各的，页面本身不滚 */
+.rail, .content {
+  overflow-y: auto;
+  overflow-x: hidden;
+  height: 100%;
+  min-height: 0;
+}
+.rail::-webkit-scrollbar, .content::-webkit-scrollbar { width: 8px; }
+.rail::-webkit-scrollbar-thumb, .content::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,.12); border-radius: 4px;
+}
+
+/* 窄屏逐步收窄，避免主区域被挤没 */
+@media (max-width: 1560px) {
+  .shell { grid-template-columns: 276px 190px minmax(0, 1fr) 312px; }
+}
+@media (max-width: 1360px) {
+  .shell { grid-template-columns: 200px minmax(0, 1fr) 300px; }
+  .rail-status { display: none; }
+}
+@media (max-width: 1100px) {
+  .shell { grid-template-columns: minmax(0, 1fr) 280px; }
+  .rail-steps { display: none; }
 }
 
 .rail {
@@ -390,7 +416,7 @@ select {
 
 
 .dmlist {
-  max-height: 220px; overflow-y: auto;
+  overflow-y: auto;
   border-radius: 12px;
   background: rgba(255, 255, 255, .03);
   border: 1px solid var(--line); padding: 8px;
@@ -737,6 +763,13 @@ select {
 .btn.gh-link:hover svg { opacity: 1; }
 
 
+.rail-row {
+  display: flex; align-items: baseline; gap: 8px;
+  white-space: nowrap;
+}
+.rail-v {
+  overflow: hidden; text-overflow: ellipsis;
+}
 .logpanel {
   position: sticky; top: var(--topbar-h, 64px);
   height: calc(100vh - var(--topbar-h, 64px));
@@ -1071,4 +1104,966 @@ select {
 }
 .logline.debug .lv {
   opacity: .8;
+}
+
+
+.preview-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 0;
+}
+.preview-hint {
+  font-size: 12px;
+  color: var(--dim);
+}
+.preview-box {
+  display: none;
+  margin-top: 10px;
+}
+.preview-box video {
+  width: 100%;
+  max-width: 720px;
+  border-radius: 10px;
+  background: #000;
+  border: 1px solid var(--line);
+}
+
+.impl-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 0;
+  flex-wrap: wrap;
+}
+.impl-label {
+  font-size: 13px;
+  color: var(--dim);
+}
+.impl-row select {
+  flex: 0 0 auto;
+  min-width: 260px;
+}
+
+.swrow { display: flex; gap: 12px; flex-wrap: wrap; margin: 10px 0 4px; }
+.sw {
+  flex: 1 1 260px; display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 14px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--line); background: rgba(255,255,255,.03);
+}
+.sw:hover { border-color: var(--line-2); background: rgba(255,255,255,.05); }
+.sw input { margin-top: 3px; width: 16px; height: 16px; accent-color: #4a7dff; flex: 0 0 auto; }
+.sw-t { display: block; font-size: 15px; font-weight: 600; }
+.sw-d { display: block; font-size: 12.5px; color: var(--dim); line-height: 1.5; margin-top: 2px; }
+.sw:has(input:checked) { border-color: rgba(74,125,255,.55); background: rgba(74,125,255,.08); }
+
+.miniprev {
+  margin: 12px 0 0; border: 1px solid var(--line); border-radius: 10px;
+  overflow: hidden; background: #000;
+}
+.miniprev-h {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 10px; background: rgba(255,255,255,.04);
+  font-size: 13px; color: var(--dim);
+}
+
+.miniprev video { display: block; }  /* 不播放也占位，保持 16:9 */
+.miniprev:not(.on) .miniprev-h { border-radius: 10px; }
+
+.miniprev {
+  width: 100%;
+  display: flex; flex-direction: column;
+  align-self: start;
+}
+.miniprev video {
+  aspect-ratio: 16 / 9;
+  height: auto !important;
+  flex: none !important;
+}
+.miniprev video {
+  display: block; width: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.accel-warn {
+  margin: 0 0 16px; padding: 14px 16px;
+  border-left: 3px solid #e8a33d;
+  background: rgba(232, 163, 61, .08);
+  border-radius: 8px;
+  line-height: 1.7;
+}
+
+.accel-steps {
+  margin: 10px 0 8px; padding-left: 22px;
+}
+.accel-steps li {
+  margin: 6px 0; line-height: 1.65;
+}
+.accel-tip {
+  font-size: 13px; color: var(--dim);
+  margin-top: 8px; padding-top: 8px;
+  border-top: 1px dashed rgba(255,255,255,.1);
+}
+
+/* 第 5 步：左边指标、右边预览 */
+.s5grid {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 16px;
+  align-items: stretch;
+  margin-top: 10px;
+}
+.s5metrics {
+  display: flex; flex-direction: column; gap: 8px;
+}
+.s5metrics .metric {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 12px;
+}
+.s5metrics .metric .k { flex: 0 0 auto; }
+.s5metrics .metric .v { text-align: right; }
+.swcol {
+  display: flex; flex-direction: column; gap: 10px;
+  margin-top: 16px;
+}
+.swcol .sw { flex: none; }
+@media (max-width: 1280px) {
+  .s5grid { grid-template-columns: minmax(0, 1fr); }
+  .miniprev { max-width: 100%; }
+}
+
+.ovbox {
+  margin: 16px 0; border: 1px solid var(--line);
+  border-radius: 10px; padding: 12px 14px;
+  background: rgba(255,255,255,.02);
+}
+.ovbox > summary {
+  cursor: pointer; font-size: 15px; font-weight: 600;
+  list-style: none; user-select: none;
+}
+.ovbox > summary::-webkit-details-marker { display: none; }
+.ovbox > summary::before {
+  content: "▸"; display: inline-block; width: 16px;
+  transition: transform .15s;
+}
+.ovbox[open] > summary::before { transform: rotate(90deg); }
+.ov-h {
+  margin: 16px 0 8px; font-size: 14px; color: var(--dim);
+  font-weight: 500; letter-spacing: .4px;
+}
+.ovgrid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px 14px;
+}
+.ovgrid label {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 13px; color: var(--dim);
+}
+.ovgrid input[type="text"], .ovgrid input[type="number"], .ovgrid select {
+  padding: 6px 9px; border-radius: 8px;
+  border: 1px solid var(--line-2); background: rgba(255,255,255,.05);
+  color: var(--text); font-size: 14px;
+}
+.ovgrid input[type="color"] {
+  width: 100%; height: 32px; padding: 2px;
+  border: 1px solid var(--line-2); border-radius: 8px;
+  background: rgba(255,255,255,.05);
+}
+.ovgrid input[type="range"] { width: 100%; }
+.ov-check {
+  flex-direction: row !important; align-items: center; gap: 8px !important;
+}
+
+
+/* 左列的叠加区块（常驻展开，不折叠） */
+.ovsec {
+  margin-top: 12px; padding-top: 12px;
+  border-top: 1px dashed var(--line-2);
+}
+.ovsec-h {
+  font-size: 13px; color: var(--dim); font-weight: 600;
+  letter-spacing: .5px; margin-bottom: 8px;
+}
+.ovsec .ov-h {
+  margin: 10px 0 6px; font-size: 12.5px;
+}
+.ovsec .ovgrid {
+  grid-template-columns: 1fr; gap: 8px;
+}
+.ovsec .ovgrid label { font-size: 12.5px; }
+.ovsec .ovgrid input[type="number"],
+.ovsec .ovgrid input[type="text"],
+.ovsec .ovgrid select { padding: 4px 8px; font-size: 13px; }
+.ovsec .ovgrid input[type="color"] { height: 26px; }
+
+/* 指标卡片固定高度，状态文字长短变化不再撑高 */
+.s5metrics > .metric {
+  min-height: 44px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255,255,255,.025);
+  border: 1px solid transparent;
+  transition: border-color .15s, background .15s;
+}
+.s5metrics > .metric .v {
+  font-size: 14px; line-height: 1.35;
+  display: flex; flex-direction: column; align-items: flex-end;
+}
+.s5metrics > .metric .v small {
+  font-size: 11.5px; color: var(--dim); font-weight: 400;
+}
+/* 状态色：正常绿 / 等待黄 / 异常红 */
+.s5metrics > .metric .v.ok { color: var(--ok); }
+.s5metrics > .metric .v.warn { color: #e8a33d; }
+.s5metrics > .metric .v.err { color: #e05a4f; }
+.s5metrics > .metric:has(.v.ok) {
+  border-color: rgba(59,196,123,.22); background: rgba(59,196,123,.05);
+}
+.s5metrics > .metric:has(.v.warn) {
+  border-color: rgba(232,163,61,.2); background: rgba(232,163,61,.045);
+}
+
+
+/* 直播状态那排格子也固定高度，状态文字变化不再让整块跳动 */
+.livegrid .metric {
+  min-height: 62px;
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255,255,255,.025);
+}
+.livegrid .metric .k {
+  font-size: 12px; color: var(--dim); margin-bottom: 4px;
+}
+.livegrid .metric .v {
+  font-size: 16px; font-weight: 600; line-height: 1.3;
+}
+
+
+/* 叠加配置改成两列，压缩高度；滑动条也跟着变短 */
+.ovsec .ovgrid {
+  grid-template-columns: 1fr 1fr !important;
+  gap: 6px 12px !important;
+}
+.ovsec input[type="range"] {
+  width: 100%; max-width: none;
+  height: 18px;
+}
+.ovsec .ovgrid label { gap: 3px !important; }
+.ovsec-h { margin-bottom: 6px; }
+.ovsec p.small { margin: 6px 0 8px !important; font-size: 12px; }
+
+/* 叠加区自身限高，超出在内部滚，不把整列拉长 */
+.ovsec {
+  max-height: 360px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.ovsec::-webkit-scrollbar { width: 6px; }
+.ovsec::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,.12); border-radius: 3px;
+}
+
+/* 直播状态：和上面两列对齐，四格均匀 */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+
+/* 叠加区高度锁死成和预览一样（340px 宽 16:9 ≈ 191px + 标题 30px） */
+.ovsec {
+  max-height: 224px !important;
+  overflow-y: auto !important;
+}
+.ovsec .ovgrid { gap: 4px 10px !important; }
+.ovsec .ovgrid label { font-size: 12px !important; }
+.ovsec .ovgrid input[type="text"],
+.ovsec .ovgrid input[type="number"],
+.ovsec .ovgrid select {
+  padding: 3px 7px !important; font-size: 12.5px !important;
+}
+.ovsec .ovgrid input[type="color"] { height: 22px !important; }
+.ovsec .ovgrid input[type="range"] { height: 14px; }
+.ovsec .ov-h { margin: 6px 0 3px !important; font-size: 12px !important; }
+.ovsec .ovsec-h { margin-bottom: 4px; font-size: 12.5px; }
+.ovsec .btn-row { margin-top: 8px !important; }
+
+
+/* 6 个链路状态横排均匀 */
+.stats-row.six {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+.stats-row.six .metric {
+  min-height: 60px;
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(255,255,255,.025);
+  border: 1px solid transparent;
+}
+.stats-row.six .metric .k {
+  font-size: 11.5px; color: var(--dim); margin-bottom: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.stats-row.six .metric .v { font-size: 14px; font-weight: 600; }
+.stats-row.six .metric .v small { font-size: 11px; color: var(--dim); font-weight: 400; }
+
+/* 左列现在只剩叠加区，按预览高度走 */
+.s5grid > .ovsec {
+  max-height: none !important;
+  overflow: visible !important;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+  border-top: none !important;
+}
+@media (max-width: 1400px) {
+  .stats-row.six { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* 预览框：视频 + 可拖动的文字层 */
+.miniprev-body {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  overflow: hidden;
+}
+.miniprev-body video {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  aspect-ratio: auto !important;
+  object-fit: contain;
+  background: #000;
+}
+.ov-layer {
+  position: absolute; inset: 0;
+  pointer-events: none;
+}
+.ov-text {
+  position: absolute;
+  pointer-events: auto;
+  cursor: move;
+  white-space: pre;
+  line-height: 1.25;
+  padding: 2px 6px;
+  border-radius: 4px;
+  outline: 1px dashed rgba(255,255,255,.35);
+  user-select: none;
+  max-width: 96%;
+}
+.ov-text:active { outline-color: rgba(74,125,255,.9); }
+
+/* 覆盖基础 stats-row 的 4 列，六格必须是 6 列（宽屏） */
+.stats-row.six { grid-template-columns: repeat(6, minmax(0, 1fr)) !important; }
+@media (max-width: 1500px) {
+  .stats-row.six { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+}
+
+/* 预览里的弹幕占位框：和真实弹幕同样的样式，可拖动调纵向位置 */
+.ov-dm {
+  position: absolute;
+  pointer-events: auto;
+  cursor: move;
+  white-space: nowrap;
+  padding: 2px 8px;
+  border-radius: 4px;
+  outline: 1px dashed rgba(255,255,255,.35);
+  user-select: none;
+  max-width: 94%;
+}
+.ov-dm:active { outline-color: rgba(74,125,255,.9); }
+
+
+/* ── 第 5 步整体压缩，目标 1~1.5 屏装下 ── */
+#step-5 h1 { margin-bottom: 8px; }
+#step-5 .lead { margin-bottom: 12px; }
+#step-5 .card-sub { margin-bottom: 10px; }
+#step-5 h3 {
+  margin: 14px 0 8px; font-size: 15px;
+}
+#step-5 .swrow { margin: 4px 0 8px; gap: 10px; }
+#step-5 .sw { padding: 8px 12px; }
+#step-5 .sw-t { font-size: 14px; }
+#step-5 .sw-d { font-size: 11.5px; }
+
+/* 左右两栏压到 300 / 自适应，整体更矮 */
+.s5grid {
+  grid-template-columns: 300px minmax(0, 1fr) !important;
+  gap: 12px !important;
+  margin-top: 6px !important;
+}
+.ovsec { max-height: 250px !important; }
+
+/* 状态格子统一压矮 */
+.stats-row { gap: 8px !important; margin-top: 10px !important; }
+.stats-row .metric { min-height: 52px !important; padding: 5px 8px !important; }
+.stats-row .metric .k { font-size: 11px !important; margin-bottom: 2px !important; }
+.stats-row .metric .v { font-size: 13.5px !important; }
+
+/* 最近弹幕压矮，别占太多 */
+.dmlist { max-height: 96px !important; }
+#step-5 .btn-row { margin-top: 10px !important; }
+#step-5 .accel-warn { margin-top: 14px; }
+
+/* 叠加配置输入框需要点宽度，左列加到 360 */
+.s5grid { grid-template-columns: 360px minmax(0, 1fr) !important; }
+.ovsec .ovgrid { grid-template-columns: 1fr 1fr !important; }
+.ovsec .ovgrid label { min-width: 0; }
+.ovsec .ovgrid input[type="text"],
+.ovsec .ovgrid input[type="number"] { width: 100%; }
+/* 提示改成折叠，默认收起，省一屏 */
+.accel-warn summary { cursor: pointer; font-weight: 600; }
+.accel-warn[open] { padding-bottom: 12px; }
+
+
+/* ── 预览窗口固定尺寸，不随浏览器缩放 ── */
+.miniprev {
+  width: 480px !important;
+  max-width: 100% !important;
+  flex: none;
+  align-self: start;
+}
+.miniprev-body {
+  width: 480px !important;
+  height: 270px !important;
+  max-width: 100%;
+  aspect-ratio: auto !important;
+}
+.miniprev-note {
+  padding: 6px 10px 8px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--dim);
+  background: rgba(255,255,255,.02);
+  border-top: 1px solid var(--line);
+}
+
+/* 右列不再拉伸，跟预览同宽，避免左下大片空白 */
+.s5grid {
+  grid-template-columns: 360px minmax(0, 1fr) !important;
+  align-items: start !important;
+}
+.s5grid > .miniprev {
+  justify-self: start;
+}
+@media (max-width: 1200px) {
+  .miniprev, .miniprev-body { width: 100% !important; }
+  .miniprev-body { height: auto !important; aspect-ratio: 16/9 !important; }
+}
+
+
+/* 叠加配置改三列：9 个弹幕项刚好 3 行，右列不留空 */
+.s5grid { grid-template-columns: 440px minmax(0, 1fr) !important; }
+.ovsec .ovgrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 5px 10px !important;
+}
+.ovsec .ovgrid label { font-size: 11.5px !important; }
+.ovsec .ovgrid input[type="text"],
+.ovsec .ovgrid input[type="number"],
+.ovsec .ovgrid select {
+  padding: 3px 6px !important; font-size: 12px !important;
+}
+.ovsec .ovgrid input[type="color"] { height: 20px !important; }
+.ovsec .ovgrid input[type="range"] { height: 12px !important; }
+/* checkbox 那两项比较短，不占满格 */
+.ovsec .ovgrid label.ov-check {
+  flex-direction: row !important; align-items: center !important;
+  gap: 5px !important; white-space: nowrap;
+}
+@media (max-width: 1500px) {
+  .s5grid { grid-template-columns: 400px minmax(0, 1fr) !important; }
+  .ovsec .ovgrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+}
+
+
+/* 回到两列：三列会把预览挤没，颜色选择器也太小 */
+.s5grid { grid-template-columns: 380px minmax(0, 1fr) !important; }
+.ovsec .ovgrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 5px 10px !important;
+}
+.ovsec .ovgrid input[type="color"] { height: 22px !important; min-width: 40px; }
+.ovsec .ovgrid input[type="range"] { height: 14px !important; }
+/* 最后那个"最多几条"单独一行时，左对齐就好，不用拉满 */
+.ovsec .ovgrid label:last-child:nth-child(odd) { grid-column: span 1; }
+
+
+/* 380px + 三列：比 440 窄，预览还能留出宽度，同时把弹幕项压成 3 行 */
+.s5grid { grid-template-columns: 380px minmax(0, 1fr) !important; }
+.ovsec .ovgrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 4px 8px !important;
+}
+.ovsec .ovgrid label { font-size: 11px !important; gap: 2px !important; }
+.ovsec .ovgrid input[type="text"],
+.ovsec .ovgrid input[type="number"],
+.ovsec .ovgrid select { padding: 2px 5px !important; font-size: 11.5px !important; }
+.ovsec .ovgrid input[type="color"] { height: 18px !important; }
+.ovsec .ovgrid label.ov-check {
+  flex-direction: row !important; align-items: center !important;
+  gap: 4px !important; font-size: 11px !important;
+}
+
+
+/* 三列下把可点面积救回来：颜色块加高、数字框给最小宽度 */
+.s5grid { grid-template-columns: 400px minmax(0, 1fr) !important; }
+.ovsec .ovgrid input[type="color"] {
+  height: 24px !important;
+  padding: 1px !important;
+  cursor: pointer;
+}
+.ovsec .ovgrid input[type="number"] { min-width: 46px; }
+.ovsec .ovgrid input[type="text"] { min-width: 0; }
+.ovsec .ovgrid label { font-size: 11px !important; letter-spacing: 0; }
+.ovsec .ovgrid input[type="range"] {
+  height: 16px !important;
+  margin-top: 2px;
+}
+
+
+/* ── 叠加配置里所有控件统一尺寸，三列对齐 ── */
+.ovsec .ovgrid input:not([type="checkbox"]):not([type="range"]),
+.ovsec .ovgrid select {
+  width: 100%;
+  height: 26px;
+  box-sizing: border-box;
+  padding: 2px 6px;
+  font-size: 12px;
+  line-height: 1.2;
+  border-radius: 6px;
+  border: 1px solid var(--line-2);
+  background: rgba(255,255,255,.05);
+  color: var(--text);
+}
+
+/* 滑动条：和输入框同高，滑块本身也放大到能点中 */
+.ovsec .ovgrid input[type="range"] {
+  width: 100%;
+  height: 26px;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.ovsec .ovgrid input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255,255,255,.14);
+}
+.ovsec .ovgrid input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: #4a7dff;
+  border: 2px solid #fff2;
+  cursor: grab;
+}
+
+/* 取色器：和输入框同高 */
+.ovsec .ovgrid input[type="color"] {
+  width: 100%;
+  height: 26px;
+  box-sizing: border-box;
+  padding: 2px;
+  border-radius: 6px;
+  border: 1px solid var(--line-2);
+  background: rgba(255,255,255,.05);
+  cursor: pointer;
+}
+
+/* 勾选项：占一格，但做成和输入框一样高的一条，视觉上齐 */
+.ovsec .ovgrid label.ov-check {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  box-sizing: border-box;
+  border-radius: 6px;
+  border: 1px solid var(--line-2);
+  background: rgba(255,255,255,.04);
+  font-size: 11.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.ovsec .ovgrid label.ov-check input[type="checkbox"] {
+  width: 13px; height: 13px;
+  margin: 0;
+  flex: none;
+  accent-color: #4a7dff;
+  cursor: pointer;
+}
+.ovsec .ovgrid label.ov-check:has(input:checked) {
+  border-color: rgba(74,125,255,.55);
+  background: rgba(74,125,255,.1);
+}
+
+
+/* 保存按钮别被 grid 拉伸，正常大小放一行 */
+.ovsec .btn-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  clear: both;
+}
+.ovsec .btn-row .btn {
+  flex: 0 0 auto;
+  width: auto;
+  height: 28px;
+  padding: 0 12px;
+  font-size: 12.5px;
+}
+/* 勾选盒别被压窄 */
+.ovsec .ovgrid label.ov-check {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+
+/* ── 叠加配置：按行排布，同类控件尺寸统一 ── */
+.ovrow {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+.ovf {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--dim);
+  min-width: 0;
+}
+.ovf > input, .ovf > select {
+  width: 100%;
+  height: 26px;
+  box-sizing: border-box;
+  padding: 2px 6px;
+  font-size: 12px;
+  line-height: 1.2;
+  border-radius: 6px;
+  border: 1px solid var(--line-2);
+  background: rgba(255,255,255,.05);
+  color: var(--text);
+}
+/* 宽度分配 */
+.ovf-grow { flex: 1 1 auto; }          /* 内容框，尽量长 */
+.ovf-sm { flex: 0 0 62px; }            /* 字号 */
+.ovf-square { flex: 0 0 34px; }        /* 色块 */
+.ovf-half { flex: 1 1 0; min-width: 0; }  /* 两个一行的 */
+
+/* 色块：正方形，只有颜色没有文字 */
+.ovf-square > input[type="color"] {
+  width: 34px;
+  height: 34px !important;
+  padding: 2px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+/* 滑动条：和输入框同高 */
+.ovf > input[type="range"] {
+  width: 100%;
+  height: 26px;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+.ovf > input[type="range"]::-webkit-slider-runnable-track {
+  height: 5px; border-radius: 3px; background: rgba(255,255,255,.15);
+}
+.ovf > input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 13px; height: 13px; margin-top: -4px;
+  border-radius: 50%; background: #4a7dff;
+  border: 2px solid rgba(255,255,255,.15);
+}
+
+/* 复选框：完整显示文字，和输入框同高 */
+.ov-check {
+  display: flex;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 8px;
+  box-sizing: border-box;
+  border-radius: 6px;
+  border: 1px solid var(--line-2);
+  background: rgba(255,255,255,.04);
+  font-size: 11.5px !important;
+  white-space: nowrap;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.ov-check input[type="checkbox"] {
+  width: 13px; height: 13px; margin: 0; flex: none;
+  accent-color: #4a7dff; cursor: pointer;
+}
+.ov-check:has(input:checked) {
+  border-color: rgba(74,125,255,.55);
+  background: rgba(74,125,255,.1);
+}
+
+
+/* 色块列要能放下"文字色"三个字，同时保持色块是正方形 */
+.ovf-square {
+  flex: 0 0 auto !important;
+  min-width: 40px;
+}
+.ovf-square > input[type="color"] {
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px;
+  align-self: flex-start;
+}
+/* 色块比别的控件高 8px，让它和文字框顶部对齐而不是底对齐 */
+.ovrow { align-items: flex-start !important; }
+.ovf > input, .ovf > select { margin-top: 0; }
+/* 内容框那行要把高度拉齐 */
+.ovrow > .ovf { justify-content: flex-start; }
+
+
+/* 一行塞 5 个控件：左列要够宽，滑动条和字号都得收窄 */
+.s5grid { grid-template-columns: 470px minmax(0, 1fr) !important; }
+.ovf-grow { flex: 1 1 auto !important; min-width: 80px; }
+.ovf-sm { flex: 0 0 48px !important; }
+.ovf-sm > input { padding: 2px 4px !important; }
+.ovf-square { min-width: 38px !important; flex: 0 0 38px !important; }
+.ovf-square > input[type="color"] { width: 32px !important; height: 32px !important; }
+.ovf-slider { flex: 0 0 86px !important; min-width: 0; }
+.ovf-slider > input[type="range"] { width: 100% !important; }
+.ovf-slider { font-size: 10.5px !important; }
+.ovf-xs { flex: 0 0 52px !important; }
+.ovf-xs > input { padding: 2px 4px !important; }
+.ovrow { gap: 6px !important; }
+
+/* 预览跟着缩，但保持 16:9 */
+.miniprev, .miniprev-body {
+  width: 100% !important;
+  max-width: 300px !important;
+}
+.miniprev-body { height: 169px !important; }
+
+
+/* 滑动条单独一行后，和上面的输入框横向对齐：宽度跟着上一行的控件走 */
+.ovrow > .ovf-slider { flex: 0 0 86px !important; }
+/* 上一行是 内容(flex:1) + 字号48 + 色38；滑动条行跟这两个同宽，靠左对齐 */
+.ovrow > .ovf-slider:first-child { margin-left: 0; }
+/* 弹幕滑动条那行同理，对齐到字号列 */
+.ovsec .ovrow { align-items: flex-start !important; }
+
+/* 停留秒数/最多几条 的标签要能一行放下 */
+.ovf-xs { flex: 0 0 66px !important; }
+.ovf-xs > .ovf-c, .ovf-xs > input { white-space: nowrap; }
+
+
+/* 内容框收短，和其他控件那一行对齐；剩余空间全给预览 */
+.ovf-grow { flex: 0 0 190px !important; min-width: 0 !important; }
+.s5grid { grid-template-columns: 470px minmax(0, 1fr) !important; }
+.miniprev, .miniprev-body {
+  max-width: none !important;
+  width: 100% !important;
+}
+.miniprev-body { height: auto !important; aspect-ratio: 16/9 !important; }
+
+
+/* 预览撑满右列：高度跟随左侧配置，宽度吃掉所有剩余 */
+.s5grid {
+  align-items: stretch !important;
+  gap: 10px !important;
+  grid-template-columns: 440px minmax(0, 1fr) !important;
+}
+.s5grid > .miniprev {
+  align-self: stretch !important;
+  display: flex !important;
+  flex-direction: column !important;
+  min-width: 0;
+}
+.miniprev-body {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: auto !important;
+  aspect-ratio: auto !important;
+}
+.miniprev-body video {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+}
+
+
+/* 预览必须是 16:9：宽度填满右列，高度按比例自动，不拉伸 */
+.s5grid { align-items: start !important; }
+.s5grid > .miniprev {
+  align-self: start !important;
+  width: 100% !important;
+  min-width: 0;
+}
+.miniprev-body {
+  width: 100% !important;
+  height: auto !important;
+  flex: none !important;
+  aspect-ratio: 16 / 9 !important;
+}
+.miniprev-body video {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+}
+
+
+/* 左列再收窄：预览向左扩展，16:9 高度也跟着变高（向下也变大） */
+.s5grid { grid-template-columns: 396px minmax(0, 1fr) !important; }
+.ovf-grow { flex: 0 0 150px !important; }
+.ovf-slider { flex: 0 0 74px !important; }
+.ovf-slider > input[type="range"] { width: 74px !important; }
+.ovf-sm { flex: 0 0 44px !important; }
+.ovf-square { flex: 0 0 36px !important; min-width: 36px !important; }
+.ovf-square > input[type="color"] { width: 30px !important; height: 30px !important; }
+.ovf-xs { flex: 0 0 60px !important; }
+.ovrow { gap: 5px !important; }
+
+
+/* ── 常见问题排查 ── */
+.faq { margin-top: 14px; }
+.faq details {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin-bottom: 8px;
+  background: rgba(255,255,255,.02);
+  overflow: hidden;
+}
+.faq summary {
+  padding: 11px 14px;
+  cursor: pointer;
+  font-size: 14px;
+  list-style: none;
+  user-select: none;
+  transition: background .12s;
+}
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::before {
+  content: "▸";
+  display: inline-block;
+  width: 16px;
+  color: var(--dim);
+  transition: transform .15s;
+}
+.faq details[open] summary::before { transform: rotate(90deg); }
+.faq summary:hover { background: rgba(255,255,255,.035); }
+.faq-body {
+  padding: 2px 16px 14px 30px;
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: var(--text);
+}
+.faq-body p { margin: 8px 0; }
+.faq-body b { color: #fff; }
+.faq-body ol {
+  margin: 6px 0 4px;
+  padding-left: 20px;
+}
+.faq-body li { margin: 5px 0; }
+.faq-body code {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255,255,255,.08);
+  font-size: 12.5px;
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+
+/* 左列再收窄 + 缩小间距：预览向左、向下同时变大（16:9 联动） */
+.s5grid {
+  grid-template-columns: 344px minmax(0, 1fr) !important;
+  gap: 2px !important;
+}
+.ovf-grow { flex: 0 0 118px !important; }
+.ovf-slider { flex: 0 0 64px !important; }
+.ovf-slider > input[type="range"] { width: 64px !important; }
+.ovf-slider { font-size: 9.5px !important; }
+.ovf-sm { flex: 0 0 38px !important; }
+.ovf-sm > input { padding: 2px 3px !important; font-size: 11px !important; }
+.ovf-square { flex: 0 0 32px !important; min-width: 32px !important; }
+.ovf-square > input[type="color"] { width: 28px !important; height: 28px !important; }
+.ovf-xs { flex: 0 0 54px !important; }
+.ovrow { gap: 4px !important; }
+.ovf > input, .ovf > select { font-size: 11px !important; padding: 2px 4px !important; }
+
+.faq-ul { margin: 6px 0 8px; padding-left: 20px; }
+.faq-ul li { margin: 5px 0; }
+.faq-tip {
+  margin-top: 10px !important;
+  padding: 8px 12px;
+  border-left: 3px solid rgba(232,163,61,.6);
+  background: rgba(232,163,61,.06);
+  border-radius: 0 6px 6px 0;
+  color: var(--dim);
+  font-size: 13px;
+}
+
+
+/* ── 支持作者 ── */
+.donate-card { max-width: 620px; }
+.donate-body {
+  text-align: center;
+  padding: 8px 20px 18px;
+}
+.donate-lead {
+  font-size: 15px; color: var(--dim); margin: 6px 0 18px;
+}
+.donate-line {
+  font-size: 15px; margin: 0 0 6px; color: var(--text);
+}
+.donate-slogan {
+  font-size: 22px; font-weight: 700; margin: 0 0 22px;
+  letter-spacing: .5px;
+  background: linear-gradient(90deg, #ff8a4c, #ff5f7e, #ff8a4c);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.donate-qr-wrap { margin: 0 0 18px; }
+.donate-qr {
+  width: 240px; height: 240px;
+  border-radius: 14px;
+  background: #fff;
+  padding: 10px;
+  box-shadow: 0 6px 24px rgba(0,0,0,.35);
+  display: inline-block;
+}
+.donate-qr-tip {
+  font-size: 12.5px; color: var(--dim); margin: 10px 0 0;
+}
+.donate-notes {
+  font-size: 13.5px; color: var(--dim); line-height: 1.85;
+  margin: 0 0 16px;
+}
+.donate-notes p { margin: 4px 0; }
+.donate-thanks {
+  font-size: 13.5px; color: var(--dim);
+  margin: 0; padding-top: 14px;
+  border-top: 1px dashed var(--line-2);
 }

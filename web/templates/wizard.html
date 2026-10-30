@@ -15,7 +15,6 @@
     <img class="brand-mark" src="/static/icon-256.png" alt="PS5 直播桥">
     <div>
       PS5 直播桥
-      <small>PS5 → B 站 <span class="ver-chip" id="ver-chip">v—</span></small>
     </div>
   </div>
 
@@ -69,53 +68,60 @@
 </div>
 
 <div class="shell">
-  <aside class="rail">
-    <h4>设置顺序</h4>
-    <nav class="stepnav" id="stepnav">
-      <a data-step="1" href="#"><span class="num">1</span><span>配路由器<small>把推流地址指到本机</small></span></a>
-      <a data-step="2" href="#"><span class="num">2</span><span>检测<small>看有没有生效</small></span></a>
-      <a data-step="3" href="#" id="nav-3"><span class="num">3</span><span id="nav-3-label">填 PS5<small>抄加速器的四个数</small></span></a>
-      <a data-step="4" href="#"><span class="num">4</span><span>登录 B 站<small>扫码</small></span></a>
-      <a data-step="5" href="#"><span class="num">5</span><span>开播<small>PS5 点开始直播</small></span></a>
-    </nav>
-
+  <aside class="rail rail-status">
     <div class="rail-foot">
-      <div class="rail-live-h">运行状态</div>
+      <div class="rail-live-h">版本</div>
+      <div class="rail-row">
+        <span class="rail-k">当前</span>
+        <span class="rail-v" id="rail-ver">—</span>
+      </div>
+      <div class="rail-row">
+        <span class="rail-k">最新</span>
+        <span class="rail-v" id="rail-ver-latest">查询中…</span>
+      </div>
+
+      <div class="rail-live-h">网络</div>
+      <div class="rail-row">
+        <span class="rail-k">代理</span>
+        <span class="rail-v" id="rail-proxy">—</span>
+      </div>
+      <div class="rail-row">
+        <span class="rail-k">Twitch</span>
+        <span class="rail-v" id="rail-twitch">—</span>
+      </div>
+      <div class="rail-row">
+        <span class="rail-k">GitHub</span>
+        <span class="rail-v" id="rail-github">—</span>
+      </div>
+
+      <div class="rail-live-h">直播</div>
       <div class="rail-row">
         <span class="rail-k">阶段</span>
         <span class="rail-v" id="rail-state">空闲</span>
       </div>
       <div class="rail-row">
-        <span class="rail-k">通道</span>
-        <span class="rail-v" id="rail-channel">—</span>
+        <span class="rail-k">PS5→本机</span>
+        <span class="rail-v" id="rail-ps5-link">未连</span>
+      </div>
+      <div class="rail-row">
+        <span class="rail-k">本机→B站</span>
+        <span class="rail-v" id="rail-bili-link">未推</span>
       </div>
       <div class="rail-row">
         <span class="rail-k">转发</span>
-        <span class="rail-v" id="rail-relay">停止</span>
+        <span class="rail-v" id="rail-relay">—</span>
       </div>
       <div class="rail-row">
-        <span class="rail-k">收流服务</span>
-        <span class="rail-v" id="rail-nginx">—</span>
-      </div>
-      <div class="rail-row">
-        <span class="rail-k">流确认</span>
-        <span class="rail-v" id="rail-stream">—</span>
-      </div>
-      <div class="rail-row">
-        <span class="rail-k">加速方案</span>
-        <span class="rail-v" id="rail-dns">—</span>
-      </div>
-      <div class="rail-row">
-        <span class="rail-k">弹幕</span>
-        <span class="rail-v" id="rail-dm">0 条</span>
+        <span class="rail-k">画质</span>
+        <span class="rail-v" id="rail-quality">—</span>
       </div>
       <div class="rail-row">
         <span class="rail-k">已播</span>
         <span class="rail-v" id="rail-uptime">—</span>
       </div>
       <div class="rail-row">
-        <span class="rail-k">画质</span>
-        <span class="rail-v" id="rail-quality">—</span>
+        <span class="rail-k">弹幕</span>
+        <span class="rail-v" id="rail-dm">0 条</span>
       </div>
 
       <div class="rail-live-h">直播间</div>
@@ -133,17 +139,34 @@
         <span class="rail-k">IP</span>
         <span class="rail-v" id="rail-ip">—</span>
       </div>
-      <div class="rail-row" id="rail-mode-row">
-        <span class="rail-k">接管</span>
-        <span class="rail-v" id="rail-mode">—</span>
+      <div class="rail-row">
+        <span class="rail-k">加速方案</span>
+        <span class="rail-v" id="rail-dns">—</span>
+      </div>
+      <div class="rail-row">
+        <span class="rail-k">收流服务</span>
+        <span class="rail-v" id="rail-nginx">—</span>
       </div>
       <div class="rail-row" id="rail-ps5seen-row" style="display:none">
         <span class="rail-k" title="PS5 有没有真的来查这台电脑的 DNS">PS5 查询</span>
         <span class="rail-v" id="rail-ps5seen">—</span>
       </div>
-
-
     </div>
+  </aside>
+
+  <aside class="rail rail-steps">
+    <h4>设置顺序</h4>
+    <nav class="stepnav" id="stepnav">
+      <a data-step="1" href="#"><span class="num">1</span><span>配路由器<small>把推流地址指到本机</small></span></a>
+      <a data-step="2" href="#"><span class="num">2</span><span>检测<small>看有没有生效</small></span></a>
+      <a data-step="3" href="#" id="nav-3"><span class="num">3</span><span id="nav-3-label">填 PS5<small>抄加速器的四个数</small></span></a>
+      <a data-step="4" href="#"><span class="num">4</span><span>填频道 + 登录<small>Twitch 频道名，再扫码</small></span></a>
+      <a data-step="5" href="#"><span class="num">5</span><span>开播<small>PS5 点开始直播</small></span></a>
+      <a data-step="diag" href="#" id="nav-diag"><span class="num">?</span><span>诊断<small>排查问题</small></span></a>
+      <a data-step="faq" href="#"><span class="num">!</span><span>常见问题<small>遇到问题看这里</small></span></a>
+      <a data-step="donate" href="#" id="nav-donate"><span class="num">♥</span><span>支持作者<small>请我喝瓶冰可乐</small></span></a>
+    </nav>
+
   </aside>
 
   <main class="content">
@@ -320,55 +343,7 @@
         <div id="s2-results"></div>
       </div>
 
-      <div class="card" id="diag-card">
-        <div class="card-h">
-          <h2>诊断</h2>
-          <div class="spacer"></div>
-          <button class="btn sm" onclick="loadDiag(1)">刷新</button>
-        </div>
-        <p class="card-sub">
-          出问题时先看这里。本机、PS5、Twitch 三侧状态摆在一起，
-          哪一环断了能直接看出来，不用靠猜。
-        </p>
-
-        <div class="diagbar" id="diag-verdict">还没采集</div>
-
-        <div class="diaggrid">
-          <div class="diagbox">
-            <div class="diagbox-h">本机</div>
-            <div id="diag-local"><div class="kvrow dim"><span>—</span></div></div>
-          </div>
-          <div class="diagbox">
-            <div class="diagbox-h">Twitch</div>
-            <div id="diag-twitch"><div class="kvrow dim"><span>未查询</span></div></div>
-          </div>
-        </div>
-
-        <div class="diagbox-h" style="margin-top:16px">发现的问题</div>
-        <ul class="diagissues" id="diag-issues"><li class="dim">—</li></ul>
-
-        <div id="sniff-block">
-        <div class="diagbox-h" style="margin-top:16px">PS5 连接嗅探</div>
-        <p class="small dim" style="margin:8px 0 10px">
-          抓 30 秒，看 PS5 到底往哪些端口发起连接。Twitch 推流除了 1935，
-          还有 <span class="mono">2805-2899</span> 一段备用端口 ——
-          它要是连了备用端口又没连本机，推流就进不来，而且界面上看不出来。
-        </p>
-        <div class="btn-row">
-          <button class="btn" id="sniff-btn" onclick="toggleSniff()">开始嗅探（30 秒）</button>
-          <span class="small" id="sniff-msg"></span>
-        </div>
-        <div id="sniff-result"></div>
-        </div>
-
-        <div class="btn-row" style="margin-top:16px">
-          <button class="btn" onclick="exportDiag()">导出诊断包</button>
-          <span class="small dim" id="diag-export-msg"></span>
-          <div class="spacer"></div>
-          <span class="small dim">问题没解决就把诊断包发到群 1092104797</span>
-        </div>
-      </div>
-    </section>
+      </section>
 
 
     <section class="stepc" id="step-3">
@@ -414,7 +389,7 @@
           <tr>
             <td><b>DNS</b></td>
             <td class="small dim" id="fill-dns">加速器的「DNS」</td>
-            <td><input id="in-dns" placeholder="6.6.6.6"></td>
+            <td><input id="in-dns" placeholder="本机 IP"></td>
           </tr>
         </table>
 
@@ -488,7 +463,7 @@
     <section class="stepc" id="step-4">
       <div class="card">
         <div class="card-h">
-          <h2>第 4 步 · 扫码登录 B 站</h2>
+          <h2>第 4 步 · 填 Twitch 频道 + 登录 B 站</h2>
           <span class="badge" id="s4-badge">未登录</span>
         </div>
         <p class="card-sub">
@@ -548,6 +523,22 @@
 
 
     <section class="stepc" id="step-5">
+      <details class="note warn accel-warn" id="accel-warn" style="display:none">
+        <summary>开播前必须按这个顺序操作（点开看步骤）</summary>
+        <ol class="accel-steps">
+          <li><b>关掉路由器上的加速器</b>——它接管 DNS，会把推流地址解析成公网 IP，
+              这个软件就收不到 PS5 的画面了</li>
+          <li>在 <b>PS5 → 设置 → 网络</b> 里<b>断开网络连接</b></li>
+          <li>确认 PS5 的网络设置符合<b>第 3 步</b>的要求
+              （IP / 子网掩码 / 网关 / DNS 四个数）</li>
+          <li>改完设置之后<b>重新连接一次网络</b>——PS5 不会自动重连，
+              不重连的话新 DNS 不生效</li>
+          <li>打开游戏，<b>开始直播</b></li>
+          <li>确认这边画面通了之后，<b>再把路由器的加速器打开</b></li>
+        </ol>
+        <div class="accel-tip">加速器最后再开——它只负责游戏联机的加速，不影响已经建好的推流。</div>
+      </details>
+
       <div class="card">
         <div class="card-h">
           <h2>第 5 步 · 在 PS5 上开始直播</h2>
@@ -558,38 +549,90 @@
         </p>
 
         <h3>画面怎么用</h3>
-        <div class="pickrow">
-          <button class="pick" id="pick-direct" onclick="setOutputMode('direct')">
-            <b>直接推流到 B 站</b>
-            <span>软件收流后自动开播并转发，直播间直接看到画面</span>
-          </button>
-          <button class="pick" id="pick-local" onclick="setOutputMode('local')">
-            <b>本地取流</b>
-            <span>只把画面接住，给你一个地址，用 OBS 等软件自己拉</span>
-          </button>
-        </div>
-        <div id="s5-local"></div>
 
-        <div class="livegrid">
-          <div class="metric"><div class="k">PS5 推流</div><div class="v" id="m-ps5">等待</div></div>
-          <div class="metric"><div class="k">B 站开播</div><div class="v" id="m-bili">—</div></div>
-          <div class="metric"><div class="k">转发</div><div class="v" id="m-relay">—</div></div>
-          <div class="metric"><div class="k">画质 / 码率</div><div class="v" id="m-quality">—</div></div>
+<div class="swcol">
+          <label class="sw">
+            <input type="checkbox" id="sw-push" onchange="setOutputs()">
+            <span class="sw-t">推流到 B 站</span>
+            <span class="sw-d">收流后自动开播并转发，直播间直接看到画面</span>
+          </label>
+          <label class="sw">
+            <input type="checkbox" id="sw-local" onchange="setOutputs()">
+            <span class="sw-t">本地取流</span>
+            <span class="sw-d">给一个拉流地址，OBS 这类软件可以自己接</span>
+          </label>
         </div>
+
+        <div class="s5grid">
+              <div class="ovsec">
+                <div class="ovsec-h">画面叠加会增加资源占用</div>
+              <div class="ovrow" style="margin-top:8px">
+                <label class="ov-check"><input type="checkbox" id="ov-tobili" onchange="ovDirty()">推到 B 站的画面</label>
+                <label class="ov-check"><input type="checkbox" id="ov-tolocal" onchange="ovDirty()">本地取流的画面</label>
+              </div>
+
+
+              <h4 class="ov-h">悬浮文字</h4>
+            <div class="ovrow">
+              <label class="ovf ovf-grow">内容
+                <input type="text" id="ov-text" placeholder="留空则不显示" oninput="ovDirty()">
+              </label>
+              <label class="ovf ovf-sm">字号
+                <input type="number" id="ov-size" min="12" max="160" step="2" oninput="ovDirty()">
+              </label>
+              <label class="ovf ovf-square">颜色
+                <input type="color" id="ov-color" oninput="ovDirty()">
+              </label>
+            </div>
+            <div class="ovrow">
+              <label class="ovf ovf-slider">文字不透明度
+                <input type="range" id="ov-alpha" min="0" max="100" oninput="ovDirty()">
+              </label>
+              <label class="ovf ovf-slider">背景不透明度
+                <input type="range" id="ov-bgalpha" min="0" max="100" oninput="ovDirty()">
+              </label>
+            </div>
+
+            <div class="btn-row" style="margin-top:12px">
+                <button class="btn sm" onclick="ovSave()">保存叠加设置</button>
+                <span class="small dim" id="ov-msg"></span>
+              </div>
+              </div>
+
+          <div class="miniprev" id="miniprev">
+            <div class="miniprev-h">
+              <span>本地画面</span>
+              <span class="preview-hint" id="miniprev-msg">等 PS5 推流…</span>
+            </div>
+            <div class="miniprev-body">
+              <video id="minivideo" muted playsinline autoplay></video>
+              <div class="ov-layer" id="ov-layer">
+                <div class="ov-text" id="ov-drag" style="display:none"></div>
+              </div>
+            </div>
+            <div class="miniprev-note">
+              该画面为预览画面，画质低，卡顿正常，不影响最终呈现效果。
+            </div>
+        </div>
+          </div>
+
+          
+
+        <div id="s5-local"></div>
 
         <div id="s5-msg"></div>
 
-        <div class="btn-row">
-          <button class="btn" onclick="goStep(4)">← 上一步</button>
-          <button class="btn" onclick="manualStart()">手动开播</button>
-          <button class="btn danger" onclick="stopLive()">停止直播</button>
+        <h3>直播状态</h3>
+        <div class="stats-row six">
+          <div class="metric"><div class="k">PS5 → 本机</div><div class="v" id="m-ps5">—</div></div>
+          <div class="metric"><div class="k">本机 → B 站</div><div class="v" id="m-bili">—</div></div>
+          <div class="metric"><div class="k">转发链路</div><div class="v" id="m-relay">—</div></div>
+          <div class="metric"><div class="k">画质 / 码率</div><div class="v" id="m-quality">—</div></div>
+          <div class="metric"><div class="k">本机 → 弹幕服务器</div><div class="v" id="m-dm-link">—</div></div>
+          <div class="metric"><div class="k">本机 → PS5 弹幕</div><div class="v" id="m-irc-link">—</div></div>
         </div>
-      </div>
 
-      <div class="card">
-        <div class="card-h"><h2>直播状态</h2>
-          <span class="badge" id="s6-badge">—</span></div>
-        <div class="livegrid">
+        <div class="stats-row">
           <div class="metric"><div class="k">已播</div><div class="v" id="m-uptime">—</div></div>
           <div class="metric"><div class="k">弹幕</div><div class="v" id="m-dmcount">0</div></div>
           <div class="metric"><div class="k">PS5 弹幕通道</div><div class="v" id="m-irc">未连</div></div>
@@ -601,12 +644,446 @@
           <button class="btn sm" onclick="testInject()">往 PS5 画面发测试弹幕</button>
           <a class="btn sm" id="link-room" target="_blank" href="#" style="display:none">打开直播间</a>
         </div>
+
+
+        <div class="btn-row">
+          <button class="btn" onclick="goStep(4)">← 上一步</button>
+          <button class="btn" onclick="manualStart()">手动开播</button>
+          <button class="btn danger" onclick="stopLive()">停止直播</button>
+        </div>
+      </div>
+
+
+    </section>
+
+    <section class="stepc" id="step-faq">
+      <div class="card">
+        <div class="card-h">
+          <h2>常见问题排查</h2>
+          <span class="badge">遇到问题先看这里</span>
+        </div>
+        <p class="card-sub">
+          下面按「你会看到什么 → 为什么 → 怎么办」写的，不用懂技术也能照着做。
+          如果这里没有你的问题，去<b>诊断</b>页把结论发出来。
+        </p>
+
+        <div class="faq">
+          <details open>
+            <summary><b>① 提示「内置 DNS 应开未开」</b></summary>
+            <div class="faq-body">
+              <p><b>你会看到：</b>诊断页写着「内置 DNS 应开未开」，PS5 也连不上。</p>
+              <p><b>为什么：</b>53 端口被别的软件占了。最常见的是 <b>UU 远程 / 网易 UU</b>，
+                 它有个网络优化功能会抢这个端口。</p>
+              <p><b>怎么办：</b></p>
+              <ol>
+                <li>打开诊断页，看「端口与防火墙」里 <code>53</code> 那一行后面写的是谁</li>
+                <li>如果是 <code>GameViewerService</code>（UU 远程），去 UU 设置里关掉
+                    「智能 DNS / 网络优化 / DNS 加速」这类选项</li>
+                <li>或者直接退出 UU，再回本程序点「启动内置 DNS」</li>
+              </ol>
+            </div>
+          </details>
+
+          <details>
+            <summary><b>② 开播失败，提示「检测到有异常的客户端行为」（60031）</b></summary>
+            <div class="faq-body">
+              <p><b>你会看到：</b>点开播后立刻失败，提示要等几分钟。</p>
+              <p><b>为什么：</b>B 站的风控。短时间内反复开播/停播，它会以为在刷。</p>
+              <p><b>怎么办：</b></p>
+              <ol>
+                <li><b>停手等 5 分钟</b>，期间别点开播</li>
+                <li>注意：每点一次失败，等待时间会重新计时</li>
+                <li>以后一次开成，别反复试</li>
+              </ol>
+            </div>
+          </details>
+
+          <details>
+            <summary><b>③ 直播间画面断了 / 忽有忽无</b></summary>
+            <div class="faq-body">
+              <p><b>你会看到：</b>画面卡住、黑屏，或者中间转圈，过一会儿又好了。</p>
+              <p><b>为什么：</b>两个可能：电脑忙不过来（CPU 吃满），或者网络抖动。</p>
+              <p><b>怎么办：</b></p>
+              <ol>
+                <li>关掉浏览器里其他标签页，尤其是别的视频页面</li>
+                <li>本程序的界面别一直开着大窗口，缩到一边就行</li>
+                <li>叠加（文字/弹幕）会额外吃资源，卡的时候先关掉试试</li>
+                <li>看诊断页的 CPU 数字，长期超过 90% 就是太满了</li>
+              </ol>
+            </div>
+          </details>
+
+          <details>
+            <summary><b>④ 弹幕不显示在画面上</b></summary>
+            <div class="faq-body">
+              <p><b>你会看到：</b>B 站直播间有人发弹幕，但画面里看不到。</p>
+              <p><b>为什么：</b>弹幕叠加没打开，或者弹幕太少还没轮到显示。</p>
+              <p><b>怎么办：</b></p>
+              <ol>
+                <li>第 5 步「画面叠加」里确认 <b>开弹幕</b> 打了勾</li>
+                <li>点「保存叠加设置」，如果正在直播，画面会闪一下（正常）</li>
+                <li>自己发一条弹幕测试，大约 1 秒内出现</li>
+                <li>如果还不显示，去诊断页看「叠加」相关的报错</li>
+              </ol>
+            </div>
+          </details>
+
+          <details>
+            <summary><b>⑤ 本地画面预览一直是黑的</b></summary>
+            <div class="faq-body">
+              <p><b>你会看到：</b>左边预览框纯黑，没有画面。</p>
+              <p><b>为什么：</b>PS5 还没开始推流。预览看的是 PS5 推过来的画面。</p>
+              <p><b>怎么办：</b></p>
+              <ol>
+                <li>在 PS5 上打开游戏，点「开始直播」</li>
+                <li>等 5~10 秒，预览会自动出现画面</li>
+                <li>注意：预览里的文字和弹幕是<b>模拟效果</b>，卡顿发糊都正常，不影响推给 B 站的画面</li>
+              </ol>
+            </div>
+          </details>
+
+          <details>
+            <summary><b>⑥ PS5 连不上 / 开不了播</b></summary>
+            <div class="faq-body">
+              <p><b>你会看到：</b>PS5 点开始直播失败，或者一直转圈。</p>
+              <p><b>为什么：</b>PS5 的 DNS 没指向这台电脑，或者加速器把 DNS 抢走了。</p>
+              <p><b>怎么办：</b></p>
+              <ol>
+                <li>按第 3 步的要求检查 PS5 的网络设置（IP / 子网掩码 / 网关 / DNS 四个数）</li>
+                <li>改完设置后 <b>重新连接一次网络</b>（PS5 不会自动重连）</li>
+                <li>开播前先<b>关掉路由器上的加速器</b>，画面通了之后再开</li>
+              </ol>
+            </div>
+          </details>
+
+          <details>
+            <summary><b>⑦ 开了加速器之后画面没了</b></summary>
+            <div class="faq-body">
+              <p><b>你会看到：</b>本来好好的，一开游戏加速器直播就断了。</p>
+              <p><b>为什么：</b>加速器会改 DNS，把推流地址指向公网，这台电脑就收不到 PS5 的画面了。</p>
+              <p><b>怎么办：</b></p>
+              <ol>
+                <li><b>顺序很重要：</b>先关加速器 → PS5 断网重连 → 开播 → 画面通了 → 再开加速器</li>
+                <li>加速器只负责游戏联机加速，最后开不影响已经建好的推流</li>
+              </ol>
+            </div>
+          </details>
+
+          <details>
+            <summary><b>⑧ 画质模糊 / 马赛克</b></summary>
+            <div class="faq-body">
+              <p><b>你会看到：</b>B 站直播间画面比 PS5 上糊。</p>
+              <p><b>为什么：</b>PS5 推流的码率不够，或者网络不好自动降了码率。</p>
+              <p><b>怎么办：</b></p>
+              <ol>
+                <li>PS5 设置 → 直播 → 把画质调到最高（码率调大）</li>
+                <li>看第 5 步「画质 / 码率」，正常应该是 1080p60 + 6000kbps 以上</li>
+                <li>低于这个数说明上行带宽不够，或者网络在丢包</li>
+              </ol>
+            </div>
+          </details>
+
+          <details>
+            <summary><b>⑨ PS5 连不上，但电脑上网正常</b></summary>
+            <div class="faq-body">
+              <p><b>你会看到：</b>电脑能上网，PS5 却连不上本程序。</p>
+              <p><b>为什么：</b>Windows 防火墙拦住了。第一次运行时会弹提示，如果点了「取消」就会被挡。</p>
+              <p><b>怎么办：</b></p>
+              <ol>
+                <li>打开诊断页，看「防火墙」那一行是不是 5/5 已放行</li>
+                <li>不是的话，重新运行一次程序，<b>这次一定要点「允许访问」</b></li>
+                <li>或者手动在 Windows 防火墙里给本程序放行</li>
+              </ol>
+            </div>
+          </details>
+
+          <details>
+            <summary><b>⑩ 文字位置不对 / 拖了没反应</b></summary>
+            <div class="faq-body">
+              <p><b>你会看到：</b>在预览里把文字拖到某处，B 站画面上位置不一样。</p>
+              <p><b>为什么：</b>位置是实时生效的，但需要 1~2 秒。如果正在直播，改完会短暂闪一下。</p>
+              <p><b>怎么办：</b></p>
+              <ol>
+                <li>拖完松手，等 2 秒再看 B 站画面</li>
+                <li>拖的时候如果 B 站画面闪了一下，说明在按新位置重新渲染，正常</li>
+                <li>预览框里的位置是等比例模拟的，和实际画面对应</li>
+              </ol>
+            </div>
+          </details>
+
+          <details>
+            <summary><b>⑪ 程序启动后没反应 / 界面打不开</b></summary>
+            <div class="faq-body">
+              <p><b>你会看到：</b>双击程序后没窗口，浏览器也打不开。</p>
+              <p><b>为什么：</b>端口被占用，或者杀毒软件拦了。</p>
+              <p><b>怎么办：</b></p>
+              <ol>
+                <li>看任务管理器里有没有 <code>PS5LiveBridge.exe</code> 在跑，有就先结束</li>
+                <li>重新双击程序，第一次会弹 UAC（管理员权限），必须点「是」</li>
+                <li>还是不行就重启电脑再试</li>
+              </ol>
+            </div>
+          </details>
+          <details>
+            <summary><b>⑫ PS5 显示直播成功了，但软件没反应，B 站也没开播</b></summary>
+            <div class="faq-body">
+              <p><b>你会看到：</b>PS5 上提示「开始直播」成功，但这台电脑的界面一点变化都没有，
+                 B 站也没开播。</p>
+              <p><b>为什么：</b><b>画面播到 Twitch 去了，没到这台电脑。</b>
+                 PS5 开播时会把画面推给 Twitch，正常情况这个推流应该先到本机。
+                 如果 PS5 的 DNS 没指到本机，或者加速器临时改了 DNS，
+                 推流就会直接走上公网，本机什么都收不到。</p>
+              <p><b>怎么办：</b></p>
+              <ol>
+                <li>看左侧「PS5 查询」这一行，如果是「未接入」，说明 PS5 的 DNS 根本没指过来</li>
+                <li>确认本机的「内置 DNS」是运行中（不是应开未开）</li>
+                <li>去 PS5 上检查网络设置里的 DNS，必须是本案电脑的 IP（第 3 步会让你抄的那四个数）</li>
+                <li>改完 <b>在 PS5 上重新连接一次网络</b>，再点开始直播</li>
+                <li>如果开了游戏加速器，先关掉它再试</li>
+                <li>还不行就重启 PS5 的网络，让它重新走一次 DNS 解析</li>
+              </ol>
+            </div>
+          </details>
+
+          <details>
+            <summary><b>⑬ 改了设置但画面上没变化</b></summary>
+            <div class="faq-body">
+              <p><b>你会看到：</b>改了字号、颜色或者拖动位置，B 站画面还是老样子。</p>
+              <p><b>为什么：</b>改文字内容会立刻变；但改字号/颜色/位置这类，
+                 程序需要重启转码才能生效，中间会断 1~2 秒。</p>
+              <p><b>怎么办：</b></p>
+              <ol>
+                <li>点「保存叠加设置」后等 2~3 秒，画面会闪一下，那就是在生效</li>
+                <li>如果没闪，看诊断页「转码与推流」里的转码进程是不是还在运行</li>
+                <li>没开播的时候改，要等下次开播才生效</li>
+              </ol>
+            </div>
+          </details>
+
+          <details>
+            <summary><b>⑭ 弹幕字太大 / 太小 / 挡住画面</b></summary>
+            <div class="faq-body">
+              <p><b>你会看到：</b>弹幕把游戏画面挡住了，或者小到看不清。</p>
+              <p><b>为什么：</b>弹幕字号是按 1080p 画面算的，预览框是缩小的，
+                 所以预览里看着小是正常的。</p>
+              <p><b>怎么办：</b></p>
+              <ol>
+                <li>在第 5 步「画面叠加」里调「字号」，一般 32~40 比较合适</li>
+                <li>嫌挡画面就把「背景不透明度」调低，或者把弹幕拖到画面边缘</li>
+                <li>还可以减少「最多几条」，避免一次堆太多行</li>
+              </ol>
+            </div>
+          </details>
+
+          <details>
+            <summary><b>⑮ 直播一会儿就自动停了</b></summary>
+            <div class="faq-body">
+              <p><b>你会看到：</b>播了几分钟突然停，界面显示已停止。</p>
+              <p><b>为什么：</b>PS5 那边断了（掉游戏、休眠、切后台），
+                 或者电脑这边的转码进程崩了。</p>
+              <p><b>怎么办：</b></p>
+              <ol>
+                <li>看诊断页「转码与推流」的「重启次数」，次数多说明一直在崩</li>
+                <li>PS5 设置里关掉「待机时暂停直播」这类省电选项</li>
+                <li>如果是转码崩，多半是叠加太复杂，先关掉弹幕叠加试试</li>
+                <li>重新开播就行，B 站那边会重新开一场</li>
+              </ol>
+            </div>
+          </details>
+
+          <details>
+            <summary><b>⑯ 提示「有另一台设备正在向这个频道播放」</b></summary>
+            <div class="faq-body">
+              <p><b>你会看到：</b>开播时 B 站报错，说这个直播间已经有别的设备在推流。</p>
+
+              <p class="faq-tip" style="margin-top:10px">
+                <b>先说最重要的一点：这句提示不能按字面理解。</b>
+                PS5 那边只要推流建立不起来，多数情况都会回这一句，
+                <b>不代表真的有一台别的设备在推</b>。所以不要一上来就去翻别处的设备。
+              </p>
+
+              <p style="margin-top:12px"><b>可能的原因（从最常见的往下排）：</b></p>
+              <ul class="faq-ul">
+                <li><b>上一场直播没断干净</b>——最常见。上次异常退出、断网、直接关机，
+                    B 站那边还以为你在播</li>
+                <li><b>PS5 自己重连了一次</b>——网络抖动导致它建立了第二路推流，
+                    两路打架，B 站就回这句</li>
+                <li><b>加速器或代理插了一脚</b>——把推流地址解析到别处，看着像另一个来源</li>
+                <li><b>本程序上次异常退出</b>，推流进程还挂在后台没退</li>
+                <li><b>真的另一台设备</b>在用同一个账号推流（OBS、手机、另一台电脑）</li>
+                <li><b>账号在别处登录着</b>，那边正在直播</li>
+              </ul>
+
+              <p style="margin-top:12px"><b>怎么办（按顺序试，前面几步能解决大部分）：</b></p>
+              <ol>
+                <li>在本程序里点一次「停止直播」，等 10 秒，再点「手动开播」</li>
+                <li>如果还报，<b>等 3~5 分钟</b>，让 B 站自然释放上一路推流，再开</li>
+                <li>去 B 站网页版「直播中心」看一眼，如果显示「直播中」但你没在播，
+                    手动点「结束直播」</li>
+                <li>在 PS5 上退出直播，<b>重新连接一次网络</b>，再重新开播</li>
+                <li>关掉路由器上的游戏加速器再试（它会改 DNS 和推流路径）</li>
+                <li>任务管理器里看有没有残留的 <code>ffmpeg.exe</code>，有就结束掉</li>
+                <li>以上都不行，才去排查别的设备：检查 OBS、手机、其他电脑是否在推这个直播间</li>
+                <li>最后手段：把 B 站账号在其他设备上退出登录</li>
+              </ol>
+
+              <p class="faq-tip">
+                遇到这条提示，<b>优先怀疑「上一场没断干净」和「PS5 重连」</b>，
+                而不是急着去找第二台设备。
+              </p>
+            </div>
+          </details>
+
+          <details>
+            <summary><b>⑰ 开播正常，但 PS5 画面里看不到弹幕</b></summary>
+            <div class="faq-body">
+              <p><b>你会看到：</b>B 站直播间有人发弹幕，但游戏画面上没有。</p>
+              <p>弹幕要走两段路才到 PS5，断在哪一段，处理方法不一样。
+                 <b>先看网页界面能不能看到弹幕</b>，这一步就能定位：</p>
+
+              <p style="margin-top:12px"><b>情况 A：网页界面上也看不到弹幕</b></p>
+              <p>说明<b>本程序和 B 站服务器之间没通</b>，弹幕压根没收到，跟 PS5 无关。</p>
+              <ol>
+                <li>看左侧「本机 → 弹幕服务器」这一行是不是「已连」</li>
+                <li>不是的话，先确认第 4 步扫码登录 B 站成功了</li>
+                <li>B 站登录过期很常见，重新扫一次码再试</li>
+                <li>登录好了之后，自己在 B 站发一条弹幕，网页界面的「最近弹幕」里应该能看到</li>
+              </ol>
+
+              <p style="margin-top:12px"><b>情况 B：网页上能看到弹幕，但 PS5 上没有</b></p>
+              <p>说明弹幕收到了，但<b>本程序和 PS5 之间没通</b>——弹幕没送到 PS5 那边。</p>
+              <ol>
+                <li>看左侧「本机 → PS5 弹幕」这一行。显示「等待」说明 PS5 还没连上来</li>
+                <li>去诊断页看「弹幕 6667」是不是「监听中」。这一条断了就直接重开本程序</li>
+                <li>确认 PS5 和这台电脑在同一个局域网里，中间没被防火墙挡</li>
+                <li>在 PS5 上把直播停掉，重新开一次——弹幕通道是在开播时建立的</li>
+                <li>如果一直连不上，重启一次 PS5 的网络连接</li>
+              </ol>
+              <p class="faq-tip">
+                判断口诀：<b>网页也没有 → 和 B 站没通</b>；
+                <b>网页有、PS5 没有 → 和 PS5 没通</b>。
+              </p>
+            </div>
+          </details>
+
+        </div>
       </div>
     </section>
 
+    <section class="stepc" id="step-donate">
+      <div class="card donate-card">
+        <div class="card-h">
+          <h2>支持并投喂作者</h2>
+          <span class="badge">♥ 随意就好</span>
+        </div>
+
+        <div class="donate-body">
+          <p class="donate-lead">这软件不收钱，也没广告，用着顺手就好。</p>
+
+          <p class="donate-line">要是它帮你省了点事 —— </p>
+          <p class="donate-slogan">一毛两毛不嫌少，一块两块不嫌多。</p>
+
+          <div class="donate-qr-wrap">
+            <img class="donate-qr" src="/static/donate-qr.png" alt="微信收款码">
+          </div>
+
+          <p class="donate-thanks">不投也没关系 —— 用得开心，就是最好的支持。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="stepc" id="step-diag">
+<div class="card" id="diag-card">
+        <div class="card-h">
+          <h2>诊断</h2>
+          <div class="spacer"></div>
+          <button class="btn sm" onclick="loadDiag(1)">刷新</button>
+        </div>
+        <p class="card-sub">
+          出问题时先看这里。本机、PS5、Twitch 三侧状态摆在一起，
+          哪一环断了能直接看出来，不用靠猜。
+        </p>
+
+        <div class="diagbar" id="diag-verdict">还没采集</div>
+
+        <div class="impl-row">
+          <span class="impl-label">收流实现</span>
+          <select id="rtmp-impl" onchange="setRtmpImpl(this.value)">
+            <option value="rtmpf">rtmp-forwarder</option>
+            <option value="nginx">nginx + ffmpeg</option>
+          </select>
+          <span class="preview-hint" id="impl-hint"></span>
+        </div>
+
+        <div class="preview-row">
+          <button class="btn sm ghost" id="preview-btn" onclick="togglePreview()">本地看画面</button>
+          <span class="preview-hint">直接看收流端收到的画面，不用开 B 站</span>
+        </div>
+        <div class="preview-box" id="preview-box">
+          <video id="preview-video" controls muted playsinline></video>
+        </div>
+
+        <div class="diaggrid">
+          <div class="diagbox">
+            <div class="diagbox-h">本机</div>
+            <div id="diag-local"><div class="kvrow dim"><span>—</span></div></div>
+          </div>
+          <div class="diagbox">
+            <div class="diagbox-h">Twitch</div>
+            <div id="diag-twitch"><div class="kvrow dim"><span>未查询</span></div></div>
+          </div>
+        </div>
+
+        <div class="diagbox-h" style="margin-top:16px">画面叠加</div>
+        <div class="diagbox" style="margin-top:8px">
+          <div id="diag-overlay"><div class="kvrow dim"><span>—</span></div></div>
+        </div>
+
+        <div class="diagbox-h" style="margin-top:16px">转码与推流</div>
+        <div class="diagbox" style="margin-top:8px">
+          <div id="diag-relay"><div class="kvrow dim"><span>—</span></div></div>
+        </div>
+
+        <div class="diagbox-h" style="margin-top:16px">端口与防火墙</div>
+        <div class="diagbox" style="margin-top:8px">
+          <div id="diag-ports"><div class="kvrow dim"><span>—</span></div></div>
+        </div>
+        <div class="diagbox" style="margin-top:8px">
+          <div id="diag-fw"><div class="kvrow dim"><span>—</span></div></div>
+        </div>
+
+        <div class="diagbox-h" style="margin-top:16px">发现的问题</div>
+        <ul class="diagissues" id="diag-issues"><li class="dim">—</li></ul>
+
+        <div id="sniff-block">
+        <div class="diagbox-h" style="margin-top:16px">PS5 连接嗅探</div>
+        <p class="small dim" style="margin:8px 0 10px">
+          抓 30 秒，看 PS5 到底往哪些端口发起连接。Twitch 推流除了 1935，
+          还有 <span class="mono">2805-2899</span> 一段备用端口 ——
+          它要是连了备用端口又没连本机，推流就进不来，而且界面上看不出来。
+        </p>
+        <div class="btn-row">
+          <button class="btn" id="sniff-btn" onclick="toggleSniff()">开始嗅探（30 秒）</button>
+          <span class="small" id="sniff-msg"></span>
+        </div>
+        <div id="sniff-result"></div>
+        </div>
+
+        <div class="btn-row" style="margin-top:16px">
+          <button class="btn" onclick="exportDiag()">导出诊断包</button>
+          <span class="small dim" id="diag-export-msg"></span>
+          <div class="spacer"></div>
+          <span class="small dim">问题没解决就把诊断包发到群 1092104797</span>
+        </div>
+      </div>
+    </section>
+
+
   </main>
 
-    <aside class="logpanel" id="logpanel">
+  
+
+  <aside class="logpanel" id="logpanel">
       <div class="logpanel-h">
         <span class="logpanel-title" id="loghint">运行日志</span>
         <span class="grow"></span>
@@ -632,6 +1109,7 @@
 </div>
 
 
+<script src="/static/vendor/flv.min.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

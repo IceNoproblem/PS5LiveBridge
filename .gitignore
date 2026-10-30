@@ -17,6 +17,7 @@ bili_credential.json
 
 # ── 二进制：不入库（自行放入 tools/ffmpeg.exe 与 nginx-rtmp/nginx.exe）──
 tools/ffmpeg.exe
+tools/rtmf.exe
 nginx-rtmp/nginx.exe
 nginx-rtmp/logs/*
 nginx-rtmp/temp/*
@@ -32,6 +33,7 @@ desktop.ini
 progress.json
 data/
 rtmp_progress.txt
+ov_title.txt
 
 # 调试笔记
 启动轨迹.txt
