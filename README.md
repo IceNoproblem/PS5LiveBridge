@@ -226,4 +226,5 @@ MIT。
 
 ---
 
-鸣谢**PSLinkB**
+鸣谢 **PSLinkB**  dns相关灵感
+鸣谢 **rtmp-forwarder**  收流服务
