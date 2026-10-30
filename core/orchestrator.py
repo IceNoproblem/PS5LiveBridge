@@ -1694,7 +1694,15 @@ class Orchestrator(object):
                 # 这里补一次，起来后它会顺手把 443 中继拉起。
                 threading.Thread(target=self.enable_builtin_dns,
                                  daemon=True).start()
-            elif not _hr_ok:
+            elif (self.cfg.get("DNS_MODE") == "builtin"
+                  and paths.PLATFORM != "docker"
+                  and not _hr_ok):
+                # 只有「内置 DNS」方案才需要 443 中继 —— 它的作用是把被劫持
+                # 域名的 HTTPS 转回真服务器。
+                #
+                # 原来的条件是 `elif not _hr_ok`：只要中继没跑就无条件拉起来，
+                # 于是方案一（路由器改 hosts）和容器版也会去抢 443，抢不到就
+                # 天天报「Address already in use」。容器版只支持方案一，更不该起。
                 threading.Thread(target=self._auto_start_https_relay,
                                  kwargs={"upstreams": None}, daemon=True).start()
 
