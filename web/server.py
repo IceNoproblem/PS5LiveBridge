@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
 import threading
+import time
 
 from flask import (Flask, Response, jsonify, render_template, request,
                      send_from_directory, stream_with_context)
@@ -39,6 +41,41 @@ def create_app(orch, on_exit=None) -> Flask:
         except Exception as e:
             logbus.error("状态快照失败：%s" % e)
             return jsonify({"error": str(e)}), 500
+
+    @app.get("/api/events")
+    def api_events():
+        """
+        SSE：一条连接持续推状态，替代前端每 1.5 秒的轮询。
+
+        以前每个 tick 都新建一条 TCP，一台机器能攒几百条 TIME_WAIT，
+        既吃端口，也让 netstat 输出膨胀到几百行，排查时全是噪声。
+        """
+        def gen():
+            last = ""
+            try:
+                while True:
+                    try:
+                        payload = json.dumps(orch.snapshot(), ensure_ascii=False)
+                    except Exception as e:
+                        payload = json.dumps({"error": str(e)}, ensure_ascii=False)
+                    if payload != last:
+                        last = payload
+                        yield "data: " + payload + "\n\n"
+                    else:
+                        yield ": ping\n\n"     # 保活，避免代理超时断开
+                    time.sleep(1.5)
+            except GeneratorExit:
+                return
+            except Exception:
+                return
+
+        return Response(
+            stream_with_context(gen()),
+            mimetype="text/event-stream",
+            headers={"Cache-Control": "no-cache",
+                     "Connection": "keep-alive",
+                     "X-Accel-Buffering": "no"},
+        )
 
     @app.get("/api/env")
     def api_env():
@@ -408,8 +445,11 @@ def create_app(orch, on_exit=None) -> Flask:
     @app.get("/api/diag")
     def api_diag():
         from core import diag
+        # plan 是用户在第 1 步选的方案（hosts / dns / divert）。
+        # 后端光看运行状态分不出来：方案一和方案三的 HIJACK_MODE 都是 router。
+        plan = (request.args.get("plan") or "").strip().lower()
         try:
-            return jsonify(diag.collect(orch))
+            return jsonify(diag.collect(orch, plan=plan))
         except Exception as e:
             logbus.error("诊断采集失败：%s" % e)
             return jsonify({"error": str(e), "issues": [], "local": {}}), 500

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import threading
 import time
+
+from . import paths
 
 try:
     import pydivert
@@ -193,8 +196,16 @@ class PortInterceptor(object):
             st["orig_dests"].add(orig_dst)
 
     def _log(self, msg):
-        if self.verbose:
-            print("  [DIVERT] " + msg, flush=True)
+        if not self.verbose:
+            return
+        line = "%s %s\n" % (time.strftime("%H:%M:%S"), msg)
+        try:
+            with open(os.path.join(paths.LOGS_DIR, "divert.log"),
+                      "a", encoding="utf-8") as f:
+                f.write(line)
+        except Exception:
+            pass
+        print("  [DIVERT] " + msg, flush=True)
 
     def set_exclude(self, ips, replace: bool = False) -> list:
         """

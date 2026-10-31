@@ -413,20 +413,23 @@ class Updater(object):
                     pass
                 raise RuntimeError("下载的文件校验不通过（sha256 不符），请重试")
 
-        new_dir = os.path.join(UPDATE_DIR, "new")
-        if os.path.isdir(new_dir):
-            shutil.rmtree(new_dir, ignore_errors=True)
+        # 解压到**同级**目录：同盘 move 是元数据操作，毫秒级完成。
+        # 不再逐个覆盖正在运行的文件 —— 那才是被杀软拦、被文件锁卡住的根源。
+        base = os.path.abspath(paths.BASE_DIR).rstrip("\\/")
+        staging = base + ".next"
+        if os.path.isdir(staging):
+            shutil.rmtree(staging, ignore_errors=True)
         with zipfile.ZipFile(zip_path) as z:
-            z.extractall(new_dir)
-        root = new_dir
-        sub = os.path.join(new_dir, "PS5LiveBridge")
+            z.extractall(staging)
+        root = staging
+        sub = os.path.join(staging, "PS5LiveBridge")
         if os.path.isdir(sub):
             root = sub
         if not os.path.exists(os.path.join(root, "PS5LiveBridge.exe")):
             raise RuntimeError("更新包里没有 PS5LiveBridge.exe，包不对")
 
         self._set(state="ready", percent=100)
-        script = self._write_update_script(root, tag)
+        script = self._write_update_script(root, tag, base)
         logbus.warn("更新已就绪，正在重启以完成安装…", tag="更新")
 
         if on_before_exit:
@@ -437,10 +440,9 @@ class Updater(object):
 
         self._set(state="installing")
         kwargs = {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0)}
-        subprocess.Popen(
-            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
-             "-File", script],
-            **kwargs)
+        # 用 cmd 跑 bat。不再用 powershell -ExecutionPolicy Bypass，
+        # 那个组合是杀软最敏感的特征。
+        subprocess.Popen(["cmd", "/c", script], **kwargs)
         time.sleep(1.0)
         os._exit(0)
 
@@ -493,100 +495,109 @@ class Updater(object):
                     if total:
                         self._set(percent=min(99, int(done * 100 / total)))
 
-    def _write_update_script(self, new_dir: str, tag: str) -> str:
+    def _write_update_script(self, new_dir: str, tag: str, base: str = "") -> str:
         """
-        生成 update.ps1：等本进程退出 → 备份 → 换文件（不动用户数据）→ 重启 → 自删。
-        用 PowerShell 而不是 bat：中文路径和异常处理都稳。
+        生成 update.bat：等旧进程退出 -> 整个目录改名备份 -> 新版整目录就位
+        -> 用户数据搬回来 -> 启动 -> 校验 -> 失败回滚 -> 自删。
+
+        为什么不再用 PowerShell 逐文件替换：
+          1. powershell -ExecutionPolicy Bypass 是杀软最敏感的特征；
+          2. 逐个覆盖正在运行的 exe/dll 本来就不可靠。
+        现在只做两次目录 move，同盘元数据操作，毫秒级，杀软也不管。
         """
-        app_dir = paths.BASE_DIR
-        backup_dir = os.path.join(paths.DATA_DIR, "backup-v%s-%s" % (
-            self.app_version, time.strftime("%Y%m%d-%H%M%S")))
-        os.makedirs(UPDATE_DIR, exist_ok=True)
-        script = os.path.join(UPDATE_DIR, "update.ps1")
-        keep = ", ".join("'%s'" % k for k in sorted(KEEP))
-        text = """$ErrorActionPreference = 'Continue'
-$AppDir   = '{app}'
-$NewDir   = '{new}'
-$Backup   = '{backup}'
-$PidWait  = {pid}
-$Keep     = @({keep})
-$Log      = Join-Path $AppDir 'logs\\update.log'
-$FailTxt  = Join-Path ([Environment]::GetFolderPath('Desktop')) '更新失败.txt'
+        import tempfile
+        base = (base or os.path.abspath(paths.BASE_DIR)).rstrip("\\/")
+        bak = base + ".old"
+        log = os.path.join(tempfile.gettempdir(), "ps5lb_update.log")
+        script = os.path.join(tempfile.gettempdir(), "ps5lb_update.bat")
+        keep = " ".join('"%s"' % k for k in
+                        ("config.json", "bili_credential.json", "rtmpf.json",
+                         "ov_title.txt"))
 
-function Say($m) {{
-    $line = (Get-Date -Format 'HH:mm:ss') + ' ' + $m
-    try {{ Add-Content -Path $Log -Value $line -Encoding UTF8 }} catch {{}}
-}}
+        tpl = r'''@echo off
+setlocal
+set BASE=__BASE__
+set NEW=__NEW__
+set BAK=__BAK__
+set LOG=__LOG__
+set PIDW=__PID__
 
-function Restore {{
-    if (-not (Test-Path $Backup)) {{ return $false }}
-    Get-ChildItem -Path $AppDir -Force | Where-Object {{ $Keep -notcontains $_.Name }} | ForEach-Object {{
-        Remove-Item -Path $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
-    }}
-    Get-ChildItem -Path $Backup -Force | ForEach-Object {{
-        Copy-Item -Path $_.FullName -Destination (Join-Path $AppDir $_.Name) -Recurse -Force -ErrorAction SilentlyContinue
-    }}
-    return $true
-}}
+echo [%date% %time%] update start (__TAG__) >> "%LOG%"
+call :wait_exit
+echo [%date% %time%] old process gone >> "%LOG%"
 
-Say '更新开始'
-try {{
-    for ($i = 0; $i -lt 60; $i++) {{
-        if (-not (Get-Process -Id $PidWait -ErrorAction SilentlyContinue)) {{ break }}
-        Start-Sleep -Milliseconds 500
-    }}
-    Say '旧进程已退出'
+if not exist "%NEW%\PS5LiveBridge.exe" goto :fail
+if exist "%BAK%" rd /s /q "%BAK%" >nul 2>&1
 
-    New-Item -ItemType Directory -Force -Path $Backup | Out-Null
-    Get-ChildItem -Path $AppDir -Force | Where-Object {{ $Keep -notcontains $_.Name }} | ForEach-Object {{
-        Copy-Item -Path $_.FullName -Destination (Join-Path $Backup $_.Name) -Recurse -Force -ErrorAction SilentlyContinue
-    }}
-    Say '备份完成'
+rem 1) old dir renamed as a whole (nothing being written inside it)
+move /y "%BASE%" "%BAK%" >nul 2>&1
+if errorlevel 1 (
+  echo [%date% %time%] rename old failed >> "%LOG%"
+  goto :fail
+)
+echo [%date% %time%] old renamed >> "%LOG%"
 
-    Get-ChildItem -Path $AppDir -Force | Where-Object {{ $Keep -notcontains $_.Name }} | ForEach-Object {{
-        Remove-Item -Path $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
-    }}
-    Get-ChildItem -Path $NewDir -Force | ForEach-Object {{
-        if ($Keep -notcontains $_.Name) {{
-            Copy-Item -Path $_.FullName -Destination (Join-Path $AppDir $_.Name) -Recurse -Force -ErrorAction Stop
-        }}
-    }}
-    if (-not (Test-Path (Join-Path $AppDir 'PS5LiveBridge.exe'))) {{
-        throw '复制完成后找不到 PS5LiveBridge.exe'
-    }}
-    Say '文件替换完成'
+rem 2) new build takes its place
+move /y "%NEW%" "%BASE%" >nul 2>&1
+if errorlevel 1 (
+  echo [%date% %time%] move new failed >> "%LOG%"
+  goto :rollback
+)
+echo [%date% %time%] new in place >> "%LOG%"
 
-    $proc = Start-Process -FilePath (Join-Path $AppDir 'PS5LiveBridge.exe') -PassThru -ErrorAction Stop
-    Start-Sleep -Seconds 5
-    if (-not (Get-Process -Id $proc.Id -ErrorAction SilentlyContinue)) {{
-        throw '新版本启动后 5 秒内退出'
-    }}
-    Say '新版本已启动'
-}} catch {{
-    $msg = $_.Exception.Message
-    Say ('失败：' + $msg)
-    $ok = Restore
-    if ($ok) {{
-        Say '已回滚到旧版本'
-        $txt = "更新失败：$msg`r`n`r`n已自动回滚到上一个版本，程序还能正常打开。`r`n多半是更新包没下完整，重开程序再试一次即可。`r`n反复失败的话，到 GitHub Releases 手动下载压缩包覆盖（config.json 保留）。`r`n`r`n日志：$Log"
-    }} else {{
-        Say '回滚失败'
-        $txt = "更新失败：$msg`r`n`r`n自动回滚也没成功。`r`n请到 https://github.com/IceNoproblem/PS5LiveBridge/releases 手动下载压缩包，解压后覆盖程序目录（config.json 别删）。`r`n`r`n日志：$Log"
-    }}
-    try {{ Set-Content -Path $FailTxt -Value $txt -Encoding UTF8 }} catch {{}}
-    try {{ Start-Process -FilePath (Join-Path $AppDir 'PS5LiveBridge.exe') }} catch {{}}
-}} finally {{
-    Remove-Item -Path $NewDir -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item -Path $PSCommandPath -Force -ErrorAction SilentlyContinue
-}}
-""".format(app=app_dir.replace("'", "''"),
-           new=new_dir.replace("'", "''"),
-           backup=backup_dir.replace("'", "''"),
-           pid=os.getpid(), keep=keep)
-        with open(script, "w", encoding="utf-8-sig") as f:
-            f.write(text)
+rem 3) bring user data back
+for %%F in (__KEEP__) do (
+  if exist "%BAK%\%%~F" copy /y "%BAK%\%%~F" "%BASE%\%%~F" >nul 2>&1
+)
+if exist "%BAK%\logs"  xcopy /e /i /y /q "%BAK%\logs"  "%BASE%\logs"  >nul 2>&1
+if exist "%BAK%\state" xcopy /e /i /y /q "%BAK%\state" "%BASE%\state" >nul 2>&1
+
+rem 4) start it and verify it survives
+start "" "%BASE%\PS5LiveBridge.exe"
+timeout /t 7 /nobreak >nul
+tasklist /fi "IMAGENAME eq PS5LiveBridge.exe" 2>nul | find /i "PS5LiveBridge.exe" >nul
+if errorlevel 1 (
+  echo [%date% %time%] new build did not start >> "%LOG%"
+  goto :rollback
+)
+echo [%date% %time%] ok, new build running >> "%LOG%"
+rd /s /q "%BAK%" >nul 2>&1
+rd /s /q "%NEW%" >nul 2>&1
+del "%~f0" >nul 2>&1
+exit /b 0
+
+:rollback
+echo [%date% %time%] rolling back >> "%LOG%"
+if exist "%BASE%" rd /s /q "%BASE%" >nul 2>&1
+move /y "%BAK%" "%BASE%" >nul 2>&1
+start "" "%BASE%\PS5LiveBridge.exe"
+del "%~f0" >nul 2>&1
+exit /b 1
+
+:fail
+echo [%date% %time%] aborted, old version untouched >> "%LOG%"
+if exist "%BASE%\PS5LiveBridge.exe" start "" "%BASE%\PS5LiveBridge.exe"
+del "%~f0" >nul 2>&1
+exit /b 1
+
+:wait_exit
+for /l %%i in (1,1,60) do (
+  tasklist /fi "PID eq %PIDW%" 2>nul | find "%PIDW%" >nul
+  if errorlevel 1 goto :eof
+  timeout /t 1 /nobreak >nul
+)
+goto :eof
+'''
+        text = (tpl.replace("__BASE__", base)
+                   .replace("__NEW__", new_dir.rstrip("\\/"))
+                   .replace("__BAK__", bak)
+                   .replace("__LOG__", log)
+                   .replace("__PID__", str(os.getpid()))
+                   .replace("__KEEP__", keep)
+                   .replace("__TAG__", tag))
+        with open(script, "w", encoding="mbcs", errors="replace") as f:
+            f.write(text.replace("\n", "\r\n"))
         return script
-
 
 _UPDATER: Updater = None
 _UP_LOCK = threading.Lock()

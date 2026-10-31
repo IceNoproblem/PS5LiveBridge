@@ -644,10 +644,76 @@ def port_free(port: int, proto: str = "tcp", host: str = "0.0.0.0") -> bool:
             pass
 
 
+def _win_tcp_listeners():
+    """
+    用 IP Helper API 直接读内核的 TCP 监听表，返回 {端口: PID}。
+
+    为什么要绕开 netstat：实测有机器（装了 360 之类）上 netstat 的输出被
+    过滤，`0.0.0.0:1935 LISTENING` 整行消失，只剩几条状态错乱的残行，
+    于是程序误判「端口没监听」，把排查方向带偏。
+
+    返回 None 表示 API 不可用（非 Windows / 调用失败），交给调用方兜底。
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+    except Exception:
+        return None
+
+    class MIB_TCPROW_OWNER_PID(ctypes.Structure):
+        _fields_ = [
+            ("dwState", wintypes.DWORD),
+            ("dwLocalAddr", wintypes.DWORD),
+            ("dwLocalPort", wintypes.DWORD),
+            ("dwRemoteAddr", wintypes.DWORD),
+            ("dwRemotePort", wintypes.DWORD),
+            ("dwOwningPid", wintypes.DWORD),
+        ]
+
+    AF_INET = 2
+    TCP_TABLE_OWNER_PID_LISTENER = 3
+    NO_ERROR = 0
+    ERROR_INSUFFICIENT_BUFFER = 122
+
+    try:
+        iphlpapi = ctypes.windll.iphlpapi
+        get = iphlpapi.GetExtendedTcpTable
+    except Exception:
+        return None
+
+    size = wintypes.DWORD(0)
+    ret = get(None, ctypes.byref(size), False, AF_INET,
+              TCP_TABLE_OWNER_PID_LISTENER, 0)
+    if ret not in (NO_ERROR, ERROR_INSUFFICIENT_BUFFER) or not size.value:
+        return None
+
+    buf = ctypes.create_string_buffer(size.value)
+    ret = get(buf, ctypes.byref(size), False, AF_INET,
+              TCP_TABLE_OWNER_PID_LISTENER, 0)
+    if ret != NO_ERROR:
+        return None
+
+    count = ctypes.cast(buf, ctypes.POINTER(wintypes.DWORD)).contents.value
+    offset = ctypes.sizeof(wintypes.DWORD)
+    rows = ctypes.cast(ctypes.addressof(buf) + offset,
+                       ctypes.POINTER(MIB_TCPROW_OWNER_PID))
+    out = {}
+    for i in range(count):
+        row = rows[i]
+        raw = int(row.dwLocalPort) & 0xFFFF
+        port = ((raw & 0xFF) << 8) | ((raw >> 8) & 0xFF)   # 网络序转主机序
+        out[port] = int(row.dwOwningPid)
+    return out
+
+
 def port_listening(port: int, proto: str = "tcp") -> bool:
     """只看 LISTENING，不发起连接（避免污染 PS5 连接日志）。"""
     if IS_WINDOWS:
-        rc, out = run(["netstat", "-ano", "-p", proto.upper()], timeout=8)
+        if proto.lower() == "tcp":
+            m = _win_tcp_listeners()
+            if m is not None:
+                return int(port) in m
+        rc, out = run(["netstat", "-ano", "-p", proto.upper()], timeout=20)
         needle = ":%d" % port
         for line in out.splitlines():
             if needle in line and "LISTENING" in line.upper():
@@ -685,9 +751,85 @@ def _proc_net_listening(port: int):
     return False if seen else None
 
 
+def _pid_of_socket_inode(inode: str) -> int:
+    """Linux：按 socket inode 反查持有它的 pid。只扫得动本 PID 命名空间。"""
+    import os as _os
+    try:
+        pids = _os.listdir("/proc")
+    except OSError:
+        return 0
+    needle = "socket:[%s]" % inode
+    for d in pids:
+        if not d.isdigit():
+            continue
+        fd_dir = "/proc/%s/fd" % d
+        try:
+            fds = _os.listdir(fd_dir)
+        except OSError:
+            continue
+        for fd in fds:
+            try:
+                if _os.readlink(_os.path.join(fd_dir, fd)) == needle:
+                    return int(d)
+            except OSError:
+                continue
+    return 0
+
+
+def _proc_net_owner(port: int, proto: str = "tcp"):
+    """
+    Linux 下拿端口占用者：/proc/net/tcp 查 inode → /proc/*/fd 反查 pid → /proc/<pid>/comm 拿进程名。
+
+    为什么要自己解析而不用 lsof：python:3.11-slim 这类精简镜像里根本没装 lsof
+    （容器版实测），一调就报「命令不存在」，端口在听也只会显示「未识别到」。
+    读不到 /proc 时返回 None，交给调用方换别的办法。
+    """
+    if not sys.platform.startswith("linux") or proto.lower() != "tcp":
+        return None
+    for path in ("/proc/net/tcp", "/proc/net/tcp6"):
+        try:
+            fh = open(path, "r")
+        except OSError:
+            continue
+        try:
+            next(fh, None)
+            for line in fh:
+                parts = line.split()
+                # 列：sl local rem st tx:rx tr:tm retrnsmt uid timeout inode
+                if len(parts) < 10 or parts[3] != "0A":
+                    continue
+                try:
+                    if int(parts[1].rsplit(":", 1)[1], 16) != int(port):
+                        continue
+                except (IndexError, ValueError):
+                    continue
+                inode = parts[9]
+                pid = _pid_of_socket_inode(inode)
+                if not pid:
+                    return 0, ""
+                name = ""
+                try:
+                    with open("/proc/%d/comm" % pid, "r") as cf:
+                        name = cf.read().strip()
+                except OSError:
+                    pass
+                return pid, name
+        except Exception:
+            continue
+        finally:
+            try:
+                fh.close()
+            except Exception:
+                pass
+    return None
+
+
 def port_owner(port: int, proto: str = "tcp"):
     """返回 (pid, 进程名)，拿不到给 (0, '')。"""
     if not IS_WINDOWS:
+        mine = _proc_net_owner(port, proto)
+        if mine:
+            return mine
         rc, out = run(["lsof", "-nP", "-i%s:%d" % (proto.upper(), port)], timeout=8)
         for line in out.splitlines()[1:]:
             parts = line.split()
@@ -695,16 +837,20 @@ def port_owner(port: int, proto: str = "tcp"):
                 return int(parts[1]), parts[0]
         return 0, ""
 
-    rc, out = run(["netstat", "-ano", "-p", proto.upper()], timeout=8)
     pid = 0
-    needle = ":%d" % port
-    for line in out.splitlines():
-        if needle not in line:
-            continue
-        tail = line.split()[-1]
-        if tail.isdigit() and tail != "0":
-            pid = int(tail)
-            break
+    m = _win_tcp_listeners()
+    if m is not None:
+        pid = int(m.get(int(port)) or 0)
+    if not pid:
+        rc, out = run(["netstat", "-ano", "-p", proto.upper()], timeout=20)
+        needle = ":%d" % port
+        for line in out.splitlines():
+            if needle not in line:
+                continue
+            tail = line.split()[-1]
+            if tail.isdigit() and tail != "0":
+                pid = int(tail)
+                break
     if not pid:
         return 0, ""
     rc2, out2 = run(["tasklist", "/FI", "PID eq %d" % pid, "/FO", "CSV", "/NH"])

@@ -61,7 +61,7 @@ function applyCaps(st) {
   const setHtml = (id, html) => { const el = $(id); if (el) el.innerHTML = html; };
   const show = (id, on) => { const el = $(id); if (el) el.style.display = on ? '' : 'none'; };
 
-  setHtml('s1-title', '第 1 步 · 把推流地址指到这台机器');
+  setHtml('s1-title', '方案选择');
   setHtml('s1-sub', 'PS5 开播时把画面推给 Twitch 的服务器。让下面这几个域名答成这台机器'
     + '（<span class="mono" id="s1-ip">—</span>），画面就先进来，再转去 B 站。');
   if ($('s1-ip')) $('s1-ip').textContent = st.lan_ip || '—';
@@ -82,7 +82,7 @@ function applyCaps(st) {
   show('s3-docker', true);
   show('btn-quit', false);
   if ($('s3-docker-ip')) $('s3-docker-ip').textContent = st.lan_ip || '—';
-  setHtml('nav-3-label', 'PS5<small>保持自动就行</small>');
+  setHtml('nav-3-label', '网络配置<small>PS5 保持自动</small>');
 }
 
 
@@ -106,7 +106,7 @@ function goStep(n, silent) {
   if (n === 4) renderLogin();
   if (n === 5) { renderLive(); loadOverlay(); }
   else if (typeof stopMiniPreview === 'function') stopMiniPreview();
-  if (key === 'diag') loadDiag(1);
+  if (key === 'info') loadDiag(1);
 }
 
 document.querySelectorAll('#stepnav a').forEach((a) => {
@@ -129,11 +129,20 @@ function setLight(id, on, text, warn) {
 async function tick() {
   const st = await api('/api/state');
   if (!st || st.error) return;
+  applyState(st);
+}
+
+// SSE 推过来的状态直接进这里。以前每 1.5 秒新建一条 TCP，
+// 一台机器能攒几百条 TIME_WAIT，还会把 netstat 输出撑到几百行干扰排查。
+let _applyN = 0;
+function applyState(st) {
+  if (!st || st.error) return;
   S.state = st;
-  try {
-    const dbg = await api('/api/logs/debug');
-    applyDebugBtn(dbg && dbg.on);
-  } catch (e) {}
+  _applyN += 1;
+  if (_applyN % 8 === 1) {
+    // 调试开关不用每次都问，隔几次查一遍就够
+    api('/api/logs/debug').then((dbg) => applyDebugBtn(dbg && dbg.on)).catch(() => {});
+  }
   loadRtmpImpl();
   loadNetcheck();
 
@@ -266,7 +275,10 @@ async function tick() {
   const dnsMode = st.dns_mode || 'router';
   {
     const w = $('accel-warn');
-    if (w) w.style.display = (dnsMode === 'builtin') ? '' : 'none';
+    // 只有方案三（流量接管）要留着电脑上的加速器；方案一/二都得关掉路由器上的加速器
+    const _dvOn = !!(st.hijack && st.hijack.divert && st.hijack.divert.running);
+    const _dnsOn2 = (st.dns_mode || 'router') === 'builtin';
+    if (w) w.style.display = (_dnsOn2 || !_dvOn) ? '' : 'none';
   }
   // 加速方案：三种走法的真实状态
   //
@@ -347,15 +359,15 @@ async function tick() {
         : ((dv.running) ? 'divert' : 'hosts'));
   if ($('s3-title')) {
     if (pick3 === 'hosts') {
-      $('s3-title').textContent = '第 3 步 · PS5 什么都不用改';
+      $('s3-title').textContent = '网络配置';
     } else if (pick3 === 'dns') {
-      $('s3-title').textContent = '第 3 步 · 把 PS5 的 DNS 指到这台电脑';
+      $('s3-title').textContent = '网络配置';
     } else if (pick3 === 'divert') {
-      $('s3-title').textContent = '第 3 步 · 把加速器的四个数填进 PS5';
+      $('s3-title').textContent = '网络配置';
     } else {
       $('s3-title').textContent = (dv.running || hj.dns_running)
-        ? '第 3 步 · 把加速器的四个数填进 PS5'
-        : '第 3 步 · 确认 PS5 网络设置';
+        ? '网络配置'
+        : '网络配置';
     }
   }
 
@@ -392,6 +404,11 @@ async function tick() {
     }
 
 
+    // 加速器建议：只有方案三依赖加速器，方案一/二不需要
+    if ($('s3-accel-tip')) {
+      $('s3-accel-tip').style.display = (pk === 'divert') ? '' : 'none';
+    }
+
     if ($('s3-sub')) {
       $('s3-sub').textContent = (pk === 'hosts')
         ? '你走的是改路由器方案，PS5 这一页不用填，保持自动获取就行。'
@@ -411,18 +428,16 @@ async function tick() {
       } else {
         $('s3-notfill').innerHTML =
           '这台电脑的 IP（<span class="mono">' + esc(lanip) + '</span>）'
-          + '不要填进 PS5，四个数照加速器给的抄。';
+          + '<b>一栏都不要填进 PS5</b>，四个数全部照加速器给的抄。';
       }
     }
 
 
     if ($('nav-3-label')) {
-      const label = (pk === 'hosts')
-        ? 'PS5<small>什么都不用改</small>'
-        : (pk === 'dns'
-          ? 'PS5<small>只改 DNS</small>'
-          : 'PS5<small>抄加速器的四个数</small>');
-      $('nav-3-label').innerHTML = label;
+      const sub = (pk === 'hosts')
+        ? 'PS5 什么都不用改'
+        : (pk === 'dns' ? 'PS5 只改 DNS' : 'PS5 抄加速器的四个数');
+      $('nav-3-label').innerHTML = '网络配置<small>' + sub + '</small>';
     }
 
 
@@ -436,9 +451,10 @@ async function tick() {
       if (!el) return;
       el.textContent = isHosts ? 'PS5 保持自动' : (isDns ? dnsText : normal);
     };
-    setFill('fill-ip', '加速器的「IP 地址」', 'PS5 原来的 IP');
-    setFill('fill-mask', '加速器的「子网掩码」', 'PS5 原来的掩码');
-    setFill('fill-gw', '加速器的「网关」', 'PS5 原来的网关');
+    // 「填什么」列只写来源，不能重复左边的项名
+    setFill('fill-ip', '加速器里的 IP 地址', 'PS5 原来的 IP');
+    setFill('fill-mask', '加速器里的子网掩码', 'PS5 原来的掩码');
+    setFill('fill-gw', '加速器里的默认网关', 'PS5 原来的网关');
     const dnsEl = $('fill-dns');
     if (dnsEl) {
       if (isHosts) {
@@ -447,7 +463,7 @@ async function tick() {
         const ip = (S.state && S.state.lan_ip) || '本机 IP';
         dnsEl.innerHTML = '<b class="hl">这台电脑的 IP：' + esc(ip) + '</b>';
       } else {
-        dnsEl.textContent = '加速器的「DNS」';
+        dnsEl.textContent = '加速器里的 DNS';
       }
     }
   }
@@ -647,9 +663,13 @@ function fmtTs(ts) {
 }
 
 function kvRows(rows) {
-  return rows.map((r) =>
-    '<div class="kvrow"><span>' + esc(r[0]) + '</span><b class="' + (r[2] || '') + '">'
-    + esc(r[1]) + '</b></div>').join('');
+  return rows.map((r) => {
+    if (r[0] === '__group__') {
+      return '<div class="kvgroup">' + esc(r[1]) + '</div>';
+    }
+    return '<div class="kvrow"><span>' + esc(r[0]) + '</span><b class="' + (r[2] || '') + '">'
+      + esc(r[1]) + '</b></div>';
+  }).join('');
 }
 
 async function loadDiag(force) {
@@ -658,7 +678,16 @@ async function loadDiag(force) {
   S.diagAt = Date.now();
 
   let d = null;
-  try { d = await api('/api/diag'); } catch (e) {}
+  const _plan = S.modePick || (() => {
+    // 兜底：S.modePick 还没恢复时直接读本地存储，别让结论退回「按运行状态猜」
+    try {
+      let v = localStorage.getItem('ps5lb_mode') || '';
+      if (v === 'pc') v = 'divert';
+      if (v === 'router') v = 'hosts';
+      return v;
+    } catch (e) { return ''; }
+  })();
+  try { d = await api('/api/diag' + (_plan ? ('?plan=' + encodeURIComponent(_plan)) : '')); } catch (e) {}
   if (!d || d.error) {
     if (bar) {
       bar.className = 'diagbar err';
@@ -766,9 +795,14 @@ async function loadDiag(force) {
     }
   }
 
-  // 防火墙明细
+  // 防火墙明细（容器里没有 Windows 防火墙这回事，整块不显示）
   const fbox = $('diag-fw');
-  if (fbox) {
+  if (fbox && isDocker()) {
+    const wrap = fbox.closest('.diagbox') || fbox.parentElement;
+    if (wrap) wrap.style.display = 'none';
+    const t = $('diag-ports-title');
+    if (t) t.textContent = '端口';
+  } else if (fbox) {
     const keys = Object.keys(fw);
     if (!keys.length) {
       fbox.innerHTML = '<div class="kvrow dim"><span>没有数据</span></div>';
@@ -793,8 +827,69 @@ async function loadDiag(force) {
     rows.push(['推流会话', '无', '']);
   }
 
+  // ── 系统自检：通用项在前，三个方案各自的条件在后 ──
+  const env = L.env || {};
+  const sec = L.security || {};
+  const ck = L.checks || {};
+  const accel = L.accel || [];
+  const portOn = (p) => {
+    const it = ((L.ports || {}).items || []).find((x) => Number(x.port) === Number(p));
+    return !!(it && it.listening);
+  };
+  const ps5row = ['PS5 流量', L.ps5_seen ? '已到达' : '还没收到',
+    L.ps5_seen ? 'ok' : ''];
+
+  rows.push(['__group__', '通用 · 三种方案都要看']);
+  rows.push(['网络环境', env.detail || '未判定', env.level === 'ok' ? 'ok' : (env.level || '')]);
+  const rt = L.router || {};
+  const capTxt = { yes: '（能改 hosts）', hard: '（有 hosts 但很麻烦）',
+                   no: '（没有 hosts）', oem: '（光猫，改不了）' }[rt.hosts] || '';
+  rows.push(['路由器',
+    rt.brand ? (rt.brand + (rt.model ? ' ' + rt.model : '') + capTxt)
+             : (rt.reachable ? '后台能打开，型号没认出来' : '没连上后台页面'),
+    rt.hosts === 'yes' ? 'ok' : (rt.brand ? 'warn' : '')]);
+  rows.push(['本机 IP', d.lan_ip || '—', '']);
+  rows.push(['网关', d.gateway || (env.gateway || '—'), '']);
+  // 管理员权限和安全软件都是 Windows 那套才有的东西。容器里 is_admin 看的是
+  // euid，跟“要不要点右键以管理员运行”完全没关系，拿来当检查项只会误导。
+  const isWin = CAPS.platform === 'windows';
+  if (isWin) {
+    rows.push(['管理员权限', ck.admin ? '是' : '否', ck.admin ? 'ok' : 'err']);
+    rows.push(['安全软件', (sec.found || []).length ? sec.found.join('、') : '未发现',
+      sec.level === 'warn' ? 'warn' : 'ok']);
+  }
+  rows.push(['1935 收流', portOn(1935) ? '在听' : '没在听', portOn(1935) ? 'ok' : 'err']);
+  rows.push(['6667 弹幕', portOn(6667) ? '在听' : '没在听', portOn(6667) ? 'ok' : 'err']);
+  rows.push(['收流进程', ck.rtmp_proc || '未识别到', ck.rtmp_proc ? 'ok' : 'err']);
+  rows.push(['编码进程', ck.ffmpeg ? '在跑' : '未启动（开播后才有）', ck.ffmpeg ? 'ok' : '']);
   rows.push(['直播阶段', L.live_state || 'idle', '']);
   if (d.version) rows.push(['版本', 'v' + d.version + ' · ' + (d.platform || ''), '']);
+  rows.push(ps5row);
+
+  rows.push(['__group__', '方案一 · 路由器 hosts']);
+  // 443 中继只在方案二（内置 DNS）启动，容器里更是压根没有，别列出来吓人
+  if (!isDocker()) {
+    rows.push(['443 中继', L.relay_443 ? '运行中' : '未开', L.relay_443 ? 'ok' : '']);
+    rows.push(['Twitch 代理', L.proxy_set ? '已配置' : '未配置',
+      L.proxy_set ? 'ok' : 'warn']);
+  }
+  rows.push(['PS5 设置', '保持「自动获取」', '']);
+
+  if (CAPS.builtin_dns) {
+    rows.push(['__group__', '方案二 · 内置 DNS']);
+    rows.push(['DNS 服务', (L.dns || {}).running ? '运行中' : '未开',
+      (L.dns || {}).running ? 'ok' : '']);
+    rows.push(['53 端口', portOn(53) ? '在听' : '未开或被别的程序占用',
+      portOn(53) ? 'ok' : 'warn']);
+  }
+
+  if (CAPS.divert) {
+    rows.push(['__group__', '方案三 · 流量接管']);
+    rows.push(['加速器', accel.length ? accel.join('、') : '没检测到进程',
+      accel.length ? 'ok' : 'warn']);
+    rows.push(['WinDivert', (L.divert || {}).running ? '已加载' : '未加载',
+      (L.divert || {}).running ? 'ok' : '']);
+  }
 
   if ($('diag-local')) $('diag-local').innerHTML = kvRows(rows);
 
@@ -1375,7 +1470,8 @@ async function renderNet() {
   const routerDone = (_pk3 === 'hosts')
     || (!S.modePick && !(dv.running) && !(S.state && S.state.hijack && S.state.hijack.dns_running)
         && !!(S.state && S.state.progress_dns_ok));
-  if (accel.length) {
+  if (accel.length && _pk3 !== 'hosts') {
+    // 方案一走路由器 hosts，本机装没装加速器跟它没关系，别在这里误导
     $('s3-badge').textContent = '加速器在跑';
     $('s3-badge').className = 'badge ok';
     $('s3-accel').innerHTML = `<div class="verdict ok"><div class="icon">✓</div><div>
@@ -1392,13 +1488,27 @@ async function renderNet() {
         跟加速器没有关系，本机装没装加速器都一样。</p>
         <p>这页不用填，直接去第 4 步。</p>
         </div></div>`;
+  } else if (_pk3 === 'divert'
+             || (!_pk3 && (S.state && S.state.hijack || {}).mode === 'divert')) {
+    // 方案三：加速器必须在**这台电脑**上，不可能在路由器上
+    $('s3-badge').textContent = '没找到加速器';
+    $('s3-badge').className = 'badge warn';
+    $('s3-accel').innerHTML = `<div class="verdict warn"><div class="icon">!</div><div>
+        <h4>没检测到本机加速器进程</h4>
+        <p>你选的是<b>流量接管</b>（方案三），它要求加速器装在<b>这台电脑</b>上，
+        由它把 PS5 的流量引到电脑来。加速器装在路由器上是不成立的做法。</p>
+        <p>请先打开电脑上的加速器、确认它正在加速 PS5，然后点下面的
+        「检测加速器」刷新。四个数照它显示的抄。</p>
+        </div></div>`;
   } else if (routerDone) {
-    $('s3-badge').textContent = '加速器在路由器上';
+    // 方案一靠路由器 hosts，跟本机有没有加速器无关，别假设人家装了加速器
+    $('s3-badge').textContent = '方案一 · 不用填';
     $('s3-badge').className = 'badge ok';
     $('s3-accel').innerHTML = `<div class="verdict ok"><div class="icon">✓</div><div>
-        <h4>本机没有加速器，这页不用填</h4>
-        <p>你的加速器装在<b>路由器</b>上（推流域名已经指到这台电脑了），
-        PS5 保持自动获取就行，下面这几个数一个都不用填。</p>
+        <h4>方案一：PS5 什么都不用改</h4>
+        <p>这个方案靠<b>路由器的 hosts</b> 把推流域名指到这台电脑，
+        跟电脑上装没装加速器没有关系。</p>
+        <p>PS5 保持「自动获取」就行，下面这几个数一个都不用填。</p>
         </div></div>`;
   } else {
     $('s3-badge').textContent = '没找到加速器';
@@ -2055,12 +2165,30 @@ async function doUpdate() {
   const _qs = new URLSearchParams(location.search).get('step');
   if (_qs) {
     goStep(isNaN(Number(_qs)) ? _qs : Number(_qs), true);
+  } else if (isDocker()) {
+    // 容器版没有「启动时用浏览器打开」这步，用户是直接访问根路径的，
+    // 所以在这里也落到系统自检页，行为跟桌面版对齐：先看这台机器行不行。
+    goStep('info', true);
   } else {
     goStep(step, true);
   }
 
   tick();
-  setInterval(tick, 1500);
+  // 优先用 SSE 长连接：一条连接持续推状态，不再每 1.5 秒新建 TCP
+  if (window.EventSource) {
+    try {
+      const es = new EventSource('/api/events');
+      es.onmessage = (ev) => {
+        try { applyState(JSON.parse(ev.data)); } catch (e) {}
+      };
+      es.onerror = () => {};   // 断了浏览器会自动重连，不用管
+      S._es = es;
+    } catch (e) {
+      setInterval(tick, 1500);
+    }
+  } else {
+    setInterval(tick, 1500);
+  }
 
 
   setTimeout(() => checkUpdate(false), 30000);

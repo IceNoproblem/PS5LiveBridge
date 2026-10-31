@@ -360,6 +360,8 @@ def _main() -> int:
     port = args.port or int(cfg.get("WEB_PORT", 5000))
     host = str(cfg.get("WEB_HOST") or ("0.0.0.0" if headless else "127.0.0.1"))
     url = "http://127.0.0.1:%d/" % port
+    # 启动默认落在「基础信息」页：先让人看到本机到底行不行，再谈后面几步
+    start_url = url + "?step=info"
 
     r = orch.ensure_nginx()
     if not r["ok"]:
@@ -437,24 +439,24 @@ def _main() -> int:
         orch.shutdown()
         return 0
 
-    from ui import window
+    try:
+        from ui import window          # noqa: F401  只为让打包工具带上 ui 包
+    except Exception:
+        window = None
 
-    if args.no_window:
-        import webbrowser
-        webbrowser.open(url)
-        _trace("浏览器模式已打开")
-        logbus.info("已在浏览器打开 %s（关闭请点界面右上角「退出」或按 Ctrl+C）" % url)
-        try:
-            while not stop_event.wait(1):
-                pass
-        except KeyboardInterrupt:
+    # 统一用默认浏览器打开。以前还会起一个 Edge --app 独立窗口，但它在
+    # 管理员权限 + 杀软环境下经常秒退，程序跟着一起退出，坑太多，不再用。
+    import webbrowser
+    webbrowser.open(start_url)
+    _trace("浏览器模式已打开")
+    logbus.info("已在浏览器打开 %s" % start_url)
+    logbus.warn("关掉浏览器标签不会退出程序；要退出请点界面右上角「退出」")
+    try:
+        while not stop_event.wait(1):
             pass
-        orch.shutdown()
-    else:
-        _trace("打开软件窗口（此后若再闪退，多半是杀软拦截，见崩溃日志）")
-        window.open_app_window(url, "PS5 直播桥",
-                               on_close=request_exit, stop_event=stop_event)
-        orch.shutdown()
+    except KeyboardInterrupt:
+        pass
+    orch.shutdown()
 
     _trace("正常退出")
     logbus.info("退出完成")

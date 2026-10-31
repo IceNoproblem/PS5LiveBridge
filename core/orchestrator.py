@@ -486,7 +486,7 @@ class Orchestrator(object):
             return {"ok": False, "detail": detail}
 
         ports = tuple(int(p) for p in (self.cfg.get("DIVERT_PORTS") or [1935, 6667]))
-        ic = divert.PortInterceptor(ports=ports, target_ip=target, verbose=False)
+        ic = divert.PortInterceptor(ports=ports, target_ip=target, verbose=True)
         ok, err = ic.start()
         if not ok:
             self.hijack_error = err
@@ -534,6 +534,16 @@ class Orchestrator(object):
             if self.dns and self.dns.running:
                 local = {self.lan_ip, netutil.socket_lan_ip(), "127.0.0.1", "::1"}
                 ps5_seen = self.dns.stats.client_hit_from_other(local)
+            else:
+                # 方案三：看 1935 / 6667 的劫持记录（不看源 IP，加速器会 SNAT）
+                _ports = (d or {}).get("ports") or {}
+                ps5_seen = any(
+                    int((_ports.get(str(_p)) or {}).get("redirected") or 0) > 0
+                    for _p in (1935, 6667)
+                )
+            if not ps5_seen:
+                # 兜底：收流端真的接到推流了，说明 PS5 肯定来过（方案一也适用）
+                ps5_seen = bool((self.live.get("ps5") or {}).get("publishing"))
         except Exception:
             ps5_seen = False
 
@@ -1575,7 +1585,11 @@ class Orchestrator(object):
             if since:
                 pub["uptime"] = max(0, int(time.time() - since))
             else:
-                pub["uptime"] = 0
+                # 没记到开始时间就退回 nginx 的累计值 —— 它是毫秒，要换成秒
+                try:
+                    pub["uptime"] = max(0, int(int(pub.get("uptime") or 0) / 1000))
+                except Exception:
+                    pub["uptime"] = 0
         return pub
 
     def netcheck(self, force: bool = False) -> dict:
@@ -1714,14 +1728,12 @@ class Orchestrator(object):
             if not live["bili"].get("channel"):
                 live["bili"]["channel"] = getattr(self.bili, "last_channel", "")
         dns_state = self.dns_status()
-        if hasattr(self.nginx, "forwarding"):
-            relay_running = self.nginx.forwarding
-            relay_uptime = self.nginx.uptime
-            relay_error = self.nginx.last_error
-        else:
-            relay_running = self.relay.running
-            relay_uptime = self.relay.uptime
-            relay_error = self.relay.last_error or self.nginx.last_error
+        # running 以前是 nginx.forwarding（rtmpf 的转发标志），跟 ffmpeg 没关系，
+        # 拿它判断推流死活会完全看错。现在统一成 ffmpeg 编码进程的状态，
+        # forwarding 单独暴露，老前端读 running 也拿到对的语义。
+        relay_running = self.relay.running
+        relay_uptime = self.relay.uptime
+        relay_error = self.relay.last_error or self.nginx.last_error
         return {
             "caps": paths.caps(),
             "platform": paths.PLATFORM,
@@ -1774,7 +1786,7 @@ class Orchestrator(object):
                 "error": live.get("error", ""),
                 "since": live.get("since", 0),
                 "bili": live.get("bili", {}),
-                "ps5": live.get("ps5", {}),
+                "ps5": self._publisher_view(live),
                 "face_url": live.get("face_url", ""),
                 "output_mode": self.output_mode(),
                 "local_url": self.local_play_url(),

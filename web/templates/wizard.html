@@ -157,12 +157,12 @@
   <aside class="rail rail-steps">
     <h4>设置顺序</h4>
     <nav class="stepnav" id="stepnav">
-      <a data-step="1" href="#"><span class="num">1</span><span>配路由器<small>把推流地址指到本机</small></span></a>
-      <a data-step="2" href="#"><span class="num">2</span><span>检测<small>看有没有生效</small></span></a>
-      <a data-step="3" href="#" id="nav-3"><span class="num">3</span><span id="nav-3-label">填 PS5<small>抄加速器的四个数</small></span></a>
-      <a data-step="4" href="#"><span class="num">4</span><span>填频道 + 登录<small>Twitch 频道名，再扫码</small></span></a>
-      <a data-step="5" href="#"><span class="num">5</span><span>开播<small>PS5 点开始直播</small></span></a>
-      <a data-step="diag" href="#" id="nav-diag"><span class="num">?</span><span>诊断<small>排查问题</small></span></a>
+      <a data-step="info" href="#" id="nav-info"><span class="num">i</span><span>系统自检<small>先看这台机器行不行</small></span></a>
+      <a data-step="1" href="#"><span class="num">1</span><span>方案选择<small>三条路选一条</small></span></a>
+      <a data-step="2" href="#"><span class="num">2</span><span>DNS 检测<small>看有没有生效</small></span></a>
+      <a data-step="3" href="#" id="nav-3"><span class="num">3</span><span id="nav-3-label">网络配置<small>PS5 上怎么填</small></span></a>
+      <a data-step="4" href="#"><span class="num">4</span><span>直播信息<small>频道 + 登录 B 站</small></span></a>
+      <a data-step="5" href="#"><span class="num">5</span><span>开播设置<small>画面与推流</small></span></a>
       <a data-step="faq" href="#"><span class="num">!</span><span>常见问题<small>遇到问题看这里</small></span></a>
       <a data-step="donate" href="#" id="nav-donate"><span class="num">♥</span><span>支持作者<small>请我喝瓶冰可乐</small></span></a>
     </nav>
@@ -175,7 +175,7 @@
     <section class="stepc" id="step-1">
       <div class="card">
         <div class="card-h">
-          <h2 id="s1-title">第 1 步 · 把推流地址指到这台电脑</h2>
+          <h2 id="s1-title">方案选择</h2>
           <span class="badge" id="s1-badge">未配置</span>
         </div>
         <p class="card-sub" id="s1-sub">
@@ -328,7 +328,7 @@
     <section class="stepc" id="step-2">
       <div class="card">
         <div class="card-h">
-          <h2>第 2 步 · 看看有没有生效</h2>
+          <h2>DNS 检测</h2>
           <span class="badge" id="s2-badge">没检测</span>
         </div>
         <p class="card-sub" id="s2-sub">
@@ -349,7 +349,7 @@
     <section class="stepc" id="step-3">
       <div class="card" id="s3-desktop">
         <div class="card-h">
-          <h2 id="s3-title">第 3 步 · 把加速器的四个数填进 PS5</h2>
+          <h2 id="s3-title">网络配置</h2>
           <span class="badge" id="s3-badge">—</span>
         </div>
         <p class="card-sub" id="s3-sub">
@@ -361,8 +361,26 @@
 
         <div id="s3-accel"></div>
 
+        <div class="note" id="s3-accel-tip" style="display:none;margin-top:8px">
+          <b>本方案建议使用 UU 加速器</b>，其他加速器不确保成功率和效果。
+          <details style="margin-top:6px">
+            <summary style="cursor:pointer">为什么只推荐 UU？</summary>
+            <div style="margin-top:6px;line-height:1.75">
+              本程序靠 WinDivert 在网络层接管 PS5 的推流连接，前提是「包能进到 Windows 网络栈」。
+              UU 用的是 <b>Wintun 虚拟网卡</b>，PS5 的流量会正常经过系统网络栈，程序看得见、也能改写；
+              迅游这类用的是更底层的 <b>NDIS 过滤驱动</b>，包在进入系统网络栈之前就被它送进隧道了，
+              WinDivert 一条都抓不到。<br><br>
+              实测：同一台机器、同一份程序、同样的设置，迅游下「劫持次数」恒为 0（PS5 直接播到 Twitch），
+              换成 UU 后 1935 和 6667 各劫持成功，一次就通了。<br><br>
+              顺带说一句：UU 电脑端在加速 PS5 的《燕云十六声》国际版时是<b>免费</b>的，
+              可以白嫖这条线路来跑直播桥。
+            </div>
+          </details>
+        </div>
+
         <div class="note warn" id="s3-notfill">
-          这台电脑的 IP（<span class="mono" id="s3-lanip">—</span>）不要填进 PS5，哪一栏都不填。
+          这台电脑的 IP（<span class="mono" id="s3-lanip">—</span>）不要填进 PS5，
+          四个数照加速器给的抄。
         </div>
 
         <table class="kvtable">
@@ -421,7 +439,7 @@
 
       <div class="card" id="s3-docker" style="display:none">
         <div class="card-h">
-          <h2>第 3 步 · PS5 不用改设置</h2>
+          <h2>网络配置</h2>
           <span class="badge ok">保持自动</span>
         </div>
         <p class="card-sub">
@@ -463,7 +481,7 @@
     <section class="stepc" id="step-4">
       <div class="card">
         <div class="card-h">
-          <h2>第 4 步 · 填 Twitch 频道 + 登录 B 站</h2>
+          <h2>直播信息</h2>
           <span class="badge" id="s4-badge">未登录</span>
         </div>
         <p class="card-sub">
@@ -526,8 +544,8 @@
       <details class="note warn accel-warn" id="accel-warn" style="display:none">
         <summary>开播前必须按这个顺序操作（点开看步骤）</summary>
         <ol class="accel-steps">
-          <li><b>关掉路由器上的加速器</b>——它接管 DNS，会把推流地址解析成公网 IP，
-              这个软件就收不到 PS5 的画面了</li>
+          <li><b>关掉路由器上的加速器</b>（路由器上没装加速器就跳过这一步）——
+              它会接管 DNS，把推流地址解析成公网 IP，这个软件就收不到 PS5 的画面了</li>
           <li>在 <b>PS5 → 设置 → 网络</b> 里<b>断开网络连接</b></li>
           <li>确认 PS5 的网络设置符合<b>第 3 步</b>的要求
               （IP / 子网掩码 / 网关 / DNS 四个数）</li>
@@ -541,12 +559,32 @@
 
       <div class="card">
         <div class="card-h">
-          <h2>第 5 步 · 在 PS5 上开始直播</h2>
+          <h2>开播设置</h2>
           <span class="badge" id="s5-badge">等 PS5</span>
         </div>
         <p class="card-sub">
           PS5 点「开始直播」，选 Twitch。推流起来后这边自动开 B 站并转发，电脑上不用点按钮。
         </p>
+
+        <h3>收流实现</h3>
+        <div class="impl-row">
+          <span class="impl-label">用哪个</span>
+          <select id="rtmp-impl" onchange="setRtmpImpl(this.value)">
+            <option value="rtmpf">rtmp-forwarder</option>
+            <option value="nginx">nginx + ffmpeg</option>
+          </select>
+          <span class="preview-hint" id="impl-hint"></span>
+        </div>
+        <p class="small dim" style="margin:2px 0 10px">
+          默认选中的那个就行，<b>不用动</b>。只有收流反复失败（诊断页提示换一种）时才需要切。
+        </p>
+        <div class="preview-row">
+          <button class="btn sm ghost" id="preview-btn" onclick="togglePreview()">本地看画面</button>
+          <span class="preview-hint">直接看收流端收到的画面，不用开 B 站</span>
+        </div>
+        <div class="preview-box" id="preview-box">
+          <video id="preview-video" controls muted playsinline></video>
+        </div>
 
         <h3>画面怎么用</h3>
 
@@ -664,19 +702,19 @@
         </div>
         <p class="card-sub">
           下面按「你会看到什么 → 为什么 → 怎么办」写的，不用懂技术也能照着做。
-          如果这里没有你的问题，去<b>诊断</b>页把结论发出来。
+          如果这里没有你的问题，去<b>基础信息</b>页把结论发出来。
         </p>
 
         <div class="faq">
           <details open>
             <summary><b>① 提示「内置 DNS 应开未开」</b></summary>
             <div class="faq-body">
-              <p><b>你会看到：</b>诊断页写着「内置 DNS 应开未开」，PS5 也连不上。</p>
+              <p><b>你会看到：</b>基础信息页写着「内置 DNS 应开未开」，PS5 也连不上。</p>
               <p><b>为什么：</b>53 端口被别的软件占了。最常见的是 <b>UU 远程 / 网易 UU</b>，
                  它有个网络优化功能会抢这个端口。</p>
               <p><b>怎么办：</b></p>
               <ol>
-                <li>打开诊断页，看「端口与防火墙」里 <code>53</code> 那一行后面写的是谁</li>
+                <li>打开基础信息页，看「端口与防火墙」里 <code>53</code> 那一行后面写的是谁</li>
                 <li>如果是 <code>GameViewerService</code>（UU 远程），去 UU 设置里关掉
                     「智能 DNS / 网络优化 / DNS 加速」这类选项</li>
                 <li>或者直接退出 UU，再回本程序点「启动内置 DNS」</li>
@@ -708,7 +746,7 @@
                 <li>关掉浏览器里其他标签页，尤其是别的视频页面</li>
                 <li>本程序的界面别一直开着大窗口，缩到一边就行</li>
                 <li>叠加（文字/弹幕）会额外吃资源，卡的时候先关掉试试</li>
-                <li>看诊断页的 CPU 数字，长期超过 90% 就是太满了</li>
+                <li>看基础信息页的 CPU 数字，长期超过 90% 就是太满了</li>
               </ol>
             </div>
           </details>
@@ -723,7 +761,7 @@
                 <li>第 5 步「画面叠加」里确认 <b>开弹幕</b> 打了勾</li>
                 <li>点「保存叠加设置」，如果正在直播，画面会闪一下（正常）</li>
                 <li>自己发一条弹幕测试，大约 1 秒内出现</li>
-                <li>如果还不显示，去诊断页看「叠加」相关的报错</li>
+                <li>如果还不显示，去基础信息页看「叠加」相关的报错</li>
               </ol>
             </div>
           </details>
@@ -790,7 +828,7 @@
               <p><b>为什么：</b>Windows 防火墙拦住了。第一次运行时会弹提示，如果点了「取消」就会被挡。</p>
               <p><b>怎么办：</b></p>
               <ol>
-                <li>打开诊断页，看「防火墙」那一行是不是 5/5 已放行</li>
+                <li>打开基础信息页，看「防火墙」那一行是不是 5/5 已放行</li>
                 <li>不是的话，重新运行一次程序，<b>这次一定要点「允许访问」</b></li>
                 <li>或者手动在 Windows 防火墙里给本程序放行</li>
               </ol>
@@ -854,7 +892,7 @@
               <p><b>怎么办：</b></p>
               <ol>
                 <li>点「保存叠加设置」后等 2~3 秒，画面会闪一下，那就是在生效</li>
-                <li>如果没闪，看诊断页「转码与推流」里的转码进程是不是还在运行</li>
+                <li>如果没闪，看基础信息页「转码与推流」里的转码进程是不是还在运行</li>
                 <li>没开播的时候改，要等下次开播才生效</li>
               </ol>
             </div>
@@ -883,7 +921,7 @@
                  或者电脑这边的转码进程崩了。</p>
               <p><b>怎么办：</b></p>
               <ol>
-                <li>看诊断页「转码与推流」的「重启次数」，次数多说明一直在崩</li>
+                <li>看基础信息页「转码与推流」的「重启次数」，次数多说明一直在崩</li>
                 <li>PS5 设置里关掉「待机时暂停直播」这类省电选项</li>
                 <li>如果是转码崩，多半是叠加太复杂，先关掉弹幕叠加试试</li>
                 <li>重新开播就行，B 站那边会重新开一场</li>
@@ -954,7 +992,7 @@
               <p>说明弹幕收到了，但<b>本程序和 PS5 之间没通</b>——弹幕没送到 PS5 那边。</p>
               <ol>
                 <li>看左侧「本机 → PS5 弹幕」这一行。显示「等待」说明 PS5 还没连上来</li>
-                <li>去诊断页看「弹幕 6667」是不是「监听中」。这一条断了就直接重开本程序</li>
+                <li>去基础信息页看「弹幕 6667」是不是「监听中」。这一条断了就直接重开本程序</li>
                 <li>确认 PS5 和这台电脑在同一个局域网里，中间没被防火墙挡</li>
                 <li>在 PS5 上把直播停掉，重新开一次——弹幕通道是在开播时建立的</li>
                 <li>如果一直连不上，重启一次 PS5 的网络连接</li>
@@ -992,40 +1030,22 @@
       </div>
     </section>
 
-    <section class="stepc" id="step-diag">
+    <section class="stepc" id="step-info">
 <div class="card" id="diag-card">
         <div class="card-h">
-          <h2>诊断</h2>
+          <h2>系统自检</h2>
           <div class="spacer"></div>
-          <button class="btn sm" onclick="loadDiag(1)">刷新</button>
+          <button class="btn sm" onclick="loadDiag(1)">重新自检</button>
         </div>
         <p class="card-sub">
-          出问题时先看这里。本机、PS5、Twitch 三侧状态摆在一起，
-          哪一环断了能直接看出来，不用靠猜。
+          先看这台机器够不够格跑。下面是系统自检结果，左边是检查项，右边是当前状态。
         </p>
 
         <div class="diagbar" id="diag-verdict">还没采集</div>
 
-        <div class="impl-row">
-          <span class="impl-label">收流实现</span>
-          <select id="rtmp-impl" onchange="setRtmpImpl(this.value)">
-            <option value="rtmpf">rtmp-forwarder</option>
-            <option value="nginx">nginx + ffmpeg</option>
-          </select>
-          <span class="preview-hint" id="impl-hint"></span>
-        </div>
-
-        <div class="preview-row">
-          <button class="btn sm ghost" id="preview-btn" onclick="togglePreview()">本地看画面</button>
-          <span class="preview-hint">直接看收流端收到的画面，不用开 B 站</span>
-        </div>
-        <div class="preview-box" id="preview-box">
-          <video id="preview-video" controls muted playsinline></video>
-        </div>
-
-        <div class="diaggrid">
+        <div class="diaggrid" style="grid-template-columns:1fr">
           <div class="diagbox">
-            <div class="diagbox-h">本机</div>
+            <div class="diagbox-h">系统自检</div>
             <div id="diag-local"><div class="kvrow dim"><span>—</span></div></div>
           </div>
           <div class="diagbox">
@@ -1044,7 +1064,7 @@
           <div id="diag-relay"><div class="kvrow dim"><span>—</span></div></div>
         </div>
 
-        <div class="diagbox-h" style="margin-top:16px">端口与防火墙</div>
+        <div class="diagbox-h" style="margin-top:16px" id="diag-ports-title">端口与防火墙</div>
         <div class="diagbox" style="margin-top:8px">
           <div id="diag-ports"><div class="kvrow dim"><span>—</span></div></div>
         </div>
@@ -1057,11 +1077,19 @@
 
         <div id="sniff-block">
         <div class="diagbox-h" style="margin-top:16px">PS5 连接嗅探</div>
-        <p class="small dim" style="margin:8px 0 10px">
-          抓 30 秒，看 PS5 到底往哪些端口发起连接。Twitch 推流除了 1935，
-          还有 <span class="mono">2805-2899</span> 一段备用端口 ——
-          它要是连了备用端口又没连本机，推流就进不来，而且界面上看不出来。
+        <p class="small dim" style="margin:8px 0 6px">
+          <b>什么时候用：</b>走方案三时，PS5 已经点了开播，上面「PS5 流量」却一直是「还没收到」，
+          就点这个。它抓 30 秒，把这期间所有进出的连接列出来，看 PS5 到底连去了哪里。
         </p>
+        <p class="small dim" style="margin:0 0 4px"><b>结果怎么读：</b></p>
+        <ul class="small dim" style="margin:0 0 10px 18px;padding:0;line-height:1.7">
+          <li>看到 <span class="mono">→ 本机IP:1935</span>：通了，推流确实进了这台电脑</li>
+          <li>看到 <span class="mono">→ 35.x.x.x:1935</span>：PS5 直接连了 Twitch，
+              说明加速器没把它引到电脑上（这是方案三失败最常见的原因）</li>
+          <li>看到 <span class="mono">:2805-2899</span>：Twitch 走了备用端口，
+              这一段通常连不通，推流会失败</li>
+          <li>什么都没有：PS5 压根没开播，或者两台设备不在同一个网络</li>
+        </ul>
         <div class="btn-row">
           <button class="btn" id="sniff-btn" onclick="toggleSniff()">开始嗅探（30 秒）</button>
           <span class="small" id="sniff-msg"></span>

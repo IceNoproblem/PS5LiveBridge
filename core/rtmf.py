@@ -121,6 +121,7 @@ class RtmpForwarderManager(object):
         self.cfg_path = os.path.join(paths.DATA_DIR, "rtmpf.json")
 
         self.proc = None
+        self._logfh = None
         self.last_error = ""
         self._lock = threading.RLock()
         self._snap = {}
@@ -165,9 +166,17 @@ class RtmpForwarderManager(object):
             flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | \
                 getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
         try:
+            log_path = os.path.join(paths.LOGS_DIR, "rtmf-stderr.log")
+            try:
+                os.makedirs(paths.LOGS_DIR, exist_ok=True)
+                self._logfh = open(log_path, "ab", buffering=0)
+                self._logfh.write(("\n===== %s start =====\n"
+                                   % time.strftime("%Y-%m-%d %H:%M:%S")).encode("utf-8"))
+            except Exception:
+                self._logfh = None
             self.proc = subprocess.Popen(args, cwd=paths.BASE_DIR,
-                                         stdout=subprocess.DEVNULL,
-                                         stderr=subprocess.DEVNULL,
+                                         stdout=self._logfh or subprocess.DEVNULL,
+                                         stderr=subprocess.STDOUT,
                                          creationflags=flags)
         except Exception as e:
             self.last_error = "启动失败：%s" % e
@@ -214,6 +223,13 @@ class RtmpForwarderManager(object):
                 p.kill()
             except Exception:
                 pass
+        fh = getattr(self, "_logfh", None)
+        if fh:
+            try:
+                fh.close()
+            except Exception:
+                pass
+            self._logfh = None
 
     # ── 配置与转发 ──
 
