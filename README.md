@@ -22,7 +22,7 @@
 | **容器版** | 有 NAS / 常年开机的 Linux 机器 | 必须装在路由器上 |
 
 桌面版成品在 [Releases](https://github.com/IceNoproblem/PS5LiveBridge/releases) 下载，解压即用。
-容器版用本仓库的 `Dockerfile` 自己构建，见[容器版部署](#容器版)。
+容器版有现成镜像 `icenoproblem/ps5livebridge`（[Docker Hub](https://hub.docker.com/r/icenoproblem/ps5livebridge) / GHCR 同步发布），也可以自己构建，见[容器版部署](#容器版)。
 
 | 第 1 步 · 选你的情况 | 第 2 步 · 检测 |
 |---|---|
@@ -208,15 +208,32 @@ dnsmasq 那套（OpenWrt / 梅林）支持后缀匹配，所以那种写法保�
 
 ## 容器版
 
+现成镜像在两个地方都有，内容一样，挑一个拉得动的：
+
+| 来源 | 地址 |
+|---|---|
+| Docker Hub | `icenoproblem/ps5livebridge` |
+| GHCR | `ghcr.io/icenoproblem/ps5livebridge` |
+
 ```bash
-git clone https://github.com/IceNoproblem/PS5LiveBridge.git
-cd PS5LiveBridge
-docker build -t ps5livebridge .
+docker pull icenoproblem/ps5livebridge:latest
+
 docker run -d --name ps5-live-bridge \
   --network host \
   -v /your/data:/data \
   -e PS5LB_DATA_DIR=/data \
-  ps5livebridge
+  --restart unless-stopped \
+  icenoproblem/ps5livebridge:latest
+```
+
+`latest` 跟着主分支走，`5.1.2` 这种固定版本号不会变。镜像约 300MB（压缩后）。
+
+想自己构建（改代码调试时）：
+
+```bash
+git clone https://github.com/IceNoproblem/PS5LiveBridge.git
+cd PS5LiveBridge
+docker build -t ps5livebridge .
 ```
 
 `--network host` 是必须的：它要直接占 1935 / 6667 / 53，走 bridge 网络这些端口出不去。
