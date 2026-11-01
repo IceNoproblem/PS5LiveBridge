@@ -80,6 +80,8 @@ function applyCaps(st) {
   show('rail-mode-row', false);
   show('s3-desktop', false);
   show('s3-docker', true);
+  // 容器里只有 nginx，没有 rtmf.exe。这个下拉选了 rtmf 收流就起不来，干脆不给选。
+  show('impl-block', false);
   show('btn-quit', false);
   if ($('s3-docker-ip')) $('s3-docker-ip').textContent = st.lan_ip || '—';
   setHtml('nav-3-label', '网络配置<small>PS5 保持自动</small>');
@@ -271,10 +273,13 @@ function applyState(st) {
   const dnsMode = st.dns_mode || 'router';
   {
     const w = $('accel-warn');
-    // 只有方案三（流量接管）要留着电脑上的加速器；方案一/二都得关掉路由器上的加速器
+    // 容器版压根不显示这段：第 3 步已经写明 PS5 保持自动、加速器照常给 PS5 加速。
+    // 那段「关加速器 + 填四个数 + 断网重连」是 Windows 上走加速器拿参数的流程，对容器版反过来。
+    // 其余情况：只有方案三（流量接管）要留着电脑上的加速器，方案一/二都得关掉路由器上的加速器
     const _dvOn = !!(st.hijack && st.hijack.divert && st.hijack.divert.running);
     const _dnsOn2 = (st.dns_mode || 'router') === 'builtin';
-    if (w) w.style.display = (_dnsOn2 || !_dvOn) ? '' : 'none';
+    const _showAccelTip = !isDocker() && (_dnsOn2 || !_dvOn);
+    if (w) w.style.display = _showAccelTip ? '' : 'none';
   }
   // 加速方案：三种走法的真实状态
   //

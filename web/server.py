@@ -342,6 +342,9 @@ def create_app(orch, on_exit=None) -> Flask:
         impl = (body.get("impl") or "").strip().lower()
         if impl not in ("nginx", "rtmpf"):
             return jsonify({"ok": False, "error": "只能是 nginx 或 rtmpf"}), 400
+        # 容器版没有 rtmf 二进制（镜像里只装了 nginx + libnginx-mod-rtmp），选了收流必失败
+        if impl == "rtmpf" and paths.PLATFORM == "docker":
+            return jsonify({"ok": False, "error": "容器版只能用 nginx"}), 400
         orch.cfg = paths.save_config({"RTMP_IMPL": impl})
         active = "rtmpf" if getattr(orch, "native_relay", False) else "nginx"
         logbus.info("收流实现已设为 %s（%s）"
