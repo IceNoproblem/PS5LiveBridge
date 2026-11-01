@@ -159,7 +159,10 @@ class RtmpForwarderManager(object):
         self._write_config([])
         args = [self.exe,
                 "-l", "0.0.0.0:%d" % self.rtmp_port,
-                "-w", "127.0.0.1:%d" % self.web_port,
+                # HTTP-FLV 口也要给局域网：本地取流是给 OBS 用的，
+                # OBS 经常在另一台机器上。原来绑 127.0.0.1，导致
+                # http://<本机局域网IP>:8098/... 连不上（2026-11-01 实测）。
+                "-w", "0.0.0.0:%d" % self.web_port,
                 "-c", self.cfg_path]
         flags = 0
         if os.name == "nt":

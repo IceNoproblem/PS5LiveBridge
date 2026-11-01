@@ -578,14 +578,6 @@
         <p class="small dim" style="margin:2px 0 10px">
           默认选中的那个就行，<b>不用动</b>。只有收流反复失败（诊断页提示换一种）时才需要切。
         </p>
-        <div class="preview-row">
-          <button class="btn sm ghost" id="preview-btn" onclick="togglePreview()">本地看画面</button>
-          <span class="preview-hint">直接看收流端收到的画面，不用开 B 站</span>
-        </div>
-        <div class="preview-box" id="preview-box">
-          <video id="preview-video" controls muted playsinline></video>
-        </div>
-
         <h3>画面怎么用</h3>
 
 <div class="swcol">
@@ -600,61 +592,6 @@
             <span class="sw-d">给一个拉流地址，OBS 这类软件可以自己接</span>
           </label>
         </div>
-
-        <div class="s5grid">
-              <div class="ovsec">
-                <div class="ovsec-h">画面叠加会增加资源占用</div>
-              <div class="ovrow" style="margin-top:8px">
-                <label class="ov-check"><input type="checkbox" id="ov-tobili" onchange="ovDirty()">推到 B 站的画面</label>
-                <label class="ov-check"><input type="checkbox" id="ov-tolocal" onchange="ovDirty()">本地取流的画面</label>
-              </div>
-
-
-              <h4 class="ov-h">悬浮文字</h4>
-            <div class="ovrow">
-              <label class="ovf ovf-grow">内容
-                <input type="text" id="ov-text" placeholder="留空则不显示" oninput="ovDirty()">
-              </label>
-              <label class="ovf ovf-sm">字号
-                <input type="number" id="ov-size" min="12" max="160" step="2" oninput="ovDirty()">
-              </label>
-              <label class="ovf ovf-square">颜色
-                <input type="color" id="ov-color" oninput="ovDirty()">
-              </label>
-            </div>
-            <div class="ovrow">
-              <label class="ovf ovf-slider">文字不透明度
-                <input type="range" id="ov-alpha" min="0" max="100" oninput="ovDirty()">
-              </label>
-              <label class="ovf ovf-slider">背景不透明度
-                <input type="range" id="ov-bgalpha" min="0" max="100" oninput="ovDirty()">
-              </label>
-            </div>
-
-            <div class="btn-row" style="margin-top:12px">
-                <button class="btn sm" onclick="ovSave()">保存叠加设置</button>
-                <span class="small dim" id="ov-msg"></span>
-              </div>
-              </div>
-
-          <div class="miniprev" id="miniprev">
-            <div class="miniprev-h">
-              <span>本地画面</span>
-              <span class="preview-hint" id="miniprev-msg">等 PS5 推流…</span>
-            </div>
-            <div class="miniprev-body">
-              <video id="minivideo" muted playsinline autoplay></video>
-              <div class="ov-layer" id="ov-layer">
-                <div class="ov-text" id="ov-drag" style="display:none"></div>
-              </div>
-            </div>
-            <div class="miniprev-note">
-              该画面为预览画面，画质低，卡顿正常，不影响最终呈现效果。
-            </div>
-        </div>
-          </div>
-
-          
 
         <div id="s5-local"></div>
 
@@ -745,43 +682,14 @@
               <ol>
                 <li>关掉浏览器里其他标签页，尤其是别的视频页面</li>
                 <li>本程序的界面别一直开着大窗口，缩到一边就行</li>
-                <li>叠加（文字/弹幕）会额外吃资源，卡的时候先关掉试试</li>
+                <li>本程序只做转发不转码，理论上不占多少 CPU；如果 CPU 仍高，先看是不是别的程序在跑</li>
                 <li>看基础信息页的 CPU 数字，长期超过 90% 就是太满了</li>
               </ol>
             </div>
           </details>
 
-          <details>
-            <summary><b>④ 弹幕不显示在画面上</b></summary>
-            <div class="faq-body">
-              <p><b>你会看到：</b>B 站直播间有人发弹幕，但画面里看不到。</p>
-              <p><b>为什么：</b>弹幕叠加没打开，或者弹幕太少还没轮到显示。</p>
-              <p><b>怎么办：</b></p>
-              <ol>
-                <li>第 5 步「画面叠加」里确认 <b>开弹幕</b> 打了勾</li>
-                <li>点「保存叠加设置」，如果正在直播，画面会闪一下（正常）</li>
-                <li>自己发一条弹幕测试，大约 1 秒内出现</li>
-                <li>如果还不显示，去基础信息页看「叠加」相关的报错</li>
-              </ol>
-            </div>
-          </details>
-
-          <details>
-            <summary><b>⑤ 本地画面预览一直是黑的</b></summary>
-            <div class="faq-body">
-              <p><b>你会看到：</b>左边预览框纯黑，没有画面。</p>
-              <p><b>为什么：</b>PS5 还没开始推流。预览看的是 PS5 推过来的画面。</p>
-              <p><b>怎么办：</b></p>
-              <ol>
-                <li>在 PS5 上打开游戏，点「开始直播」</li>
-                <li>等 5~10 秒，预览会自动出现画面</li>
-                <li>注意：预览里的文字和弹幕是<b>模拟效果</b>，卡顿发糊都正常，不影响推给 B 站的画面</li>
-              </ol>
-            </div>
-          </details>
-
-          <details>
-            <summary><b>⑥ PS5 连不上 / 开不了播</b></summary>
+                              <details>
+            <summary><b>④ PS5 连不上 / 开不了播</b></summary>
             <div class="faq-body">
               <p><b>你会看到：</b>PS5 点开始直播失败，或者一直转圈。</p>
               <p><b>为什么：</b>PS5 的 DNS 没指向这台电脑，或者加速器把 DNS 抢走了。</p>
@@ -795,7 +703,7 @@
           </details>
 
           <details>
-            <summary><b>⑦ 开了加速器之后画面没了</b></summary>
+            <summary><b>⑤ 开了加速器之后画面没了</b></summary>
             <div class="faq-body">
               <p><b>你会看到：</b>本来好好的，一开游戏加速器直播就断了。</p>
               <p><b>为什么：</b>加速器会改 DNS，把推流地址指向公网，这台电脑就收不到 PS5 的画面了。</p>
@@ -808,7 +716,7 @@
           </details>
 
           <details>
-            <summary><b>⑧ 画质模糊 / 马赛克</b></summary>
+            <summary><b>⑥ 画质模糊 / 马赛克</b></summary>
             <div class="faq-body">
               <p><b>你会看到：</b>B 站直播间画面比 PS5 上糊。</p>
               <p><b>为什么：</b>PS5 推流的码率不够，或者网络不好自动降了码率。</p>
@@ -822,7 +730,7 @@
           </details>
 
           <details>
-            <summary><b>⑨ PS5 连不上，但电脑上网正常</b></summary>
+            <summary><b>⑦ PS5 连不上，但电脑上网正常</b></summary>
             <div class="faq-body">
               <p><b>你会看到：</b>电脑能上网，PS5 却连不上本程序。</p>
               <p><b>为什么：</b>Windows 防火墙拦住了。第一次运行时会弹提示，如果点了「取消」就会被挡。</p>
@@ -835,22 +743,8 @@
             </div>
           </details>
 
-          <details>
-            <summary><b>⑩ 文字位置不对 / 拖了没反应</b></summary>
-            <div class="faq-body">
-              <p><b>你会看到：</b>在预览里把文字拖到某处，B 站画面上位置不一样。</p>
-              <p><b>为什么：</b>位置是实时生效的，但需要 1~2 秒。如果正在直播，改完会短暂闪一下。</p>
-              <p><b>怎么办：</b></p>
-              <ol>
-                <li>拖完松手，等 2 秒再看 B 站画面</li>
-                <li>拖的时候如果 B 站画面闪了一下，说明在按新位置重新渲染，正常</li>
-                <li>预览框里的位置是等比例模拟的，和实际画面对应</li>
-              </ol>
-            </div>
-          </details>
-
-          <details>
-            <summary><b>⑪ 程序启动后没反应 / 界面打不开</b></summary>
+                    <details>
+            <summary><b>⑧ 程序启动后没反应 / 界面打不开</b></summary>
             <div class="faq-body">
               <p><b>你会看到：</b>双击程序后没窗口，浏览器也打不开。</p>
               <p><b>为什么：</b>端口被占用，或者杀毒软件拦了。</p>
@@ -863,7 +757,7 @@
             </div>
           </details>
           <details>
-            <summary><b>⑫ PS5 显示直播成功了，但软件没反应，B 站也没开播</b></summary>
+            <summary><b>⑨ PS5 显示直播成功了，但软件没反应，B 站也没开播</b></summary>
             <div class="faq-body">
               <p><b>你会看到：</b>PS5 上提示「开始直播」成功，但这台电脑的界面一点变化都没有，
                  B 站也没开播。</p>
@@ -883,54 +777,23 @@
             </div>
           </details>
 
-          <details>
-            <summary><b>⑬ 改了设置但画面上没变化</b></summary>
-            <div class="faq-body">
-              <p><b>你会看到：</b>改了字号、颜色或者拖动位置，B 站画面还是老样子。</p>
-              <p><b>为什么：</b>改文字内容会立刻变；但改字号/颜色/位置这类，
-                 程序需要重启转码才能生效，中间会断 1~2 秒。</p>
-              <p><b>怎么办：</b></p>
-              <ol>
-                <li>点「保存叠加设置」后等 2~3 秒，画面会闪一下，那就是在生效</li>
-                <li>如果没闪，看基础信息页「转码与推流」里的转码进程是不是还在运行</li>
-                <li>没开播的时候改，要等下次开播才生效</li>
-              </ol>
-            </div>
-          </details>
-
-          <details>
-            <summary><b>⑭ 弹幕字太大 / 太小 / 挡住画面</b></summary>
-            <div class="faq-body">
-              <p><b>你会看到：</b>弹幕把游戏画面挡住了，或者小到看不清。</p>
-              <p><b>为什么：</b>弹幕字号是按 1080p 画面算的，预览框是缩小的，
-                 所以预览里看着小是正常的。</p>
-              <p><b>怎么办：</b></p>
-              <ol>
-                <li>在第 5 步「画面叠加」里调「字号」，一般 32~40 比较合适</li>
-                <li>嫌挡画面就把「背景不透明度」调低，或者把弹幕拖到画面边缘</li>
-                <li>还可以减少「最多几条」，避免一次堆太多行</li>
-              </ol>
-            </div>
-          </details>
-
-          <details>
-            <summary><b>⑮ 直播一会儿就自动停了</b></summary>
+                              <details>
+            <summary><b>⑩ 直播一会儿就自动停了</b></summary>
             <div class="faq-body">
               <p><b>你会看到：</b>播了几分钟突然停，界面显示已停止。</p>
               <p><b>为什么：</b>PS5 那边断了（掉游戏、休眠、切后台），
-                 或者电脑这边的转码进程崩了。</p>
+                 或者电脑这边的转发链路断了。</p>
               <p><b>怎么办：</b></p>
               <ol>
-                <li>看基础信息页「转码与推流」的「重启次数」，次数多说明一直在崩</li>
+                <li>看基础信息页「推流链路」的「重启次数」，次数多说明一直在崩</li>
                 <li>PS5 设置里关掉「待机时暂停直播」这类省电选项</li>
-                <li>如果是转码崩，多半是叠加太复杂，先关掉弹幕叠加试试</li>
                 <li>重新开播就行，B 站那边会重新开一场</li>
               </ol>
             </div>
           </details>
 
           <details>
-            <summary><b>⑯ 提示「有另一台设备正在向这个频道播放」</b></summary>
+            <summary><b>⑪ 提示「有另一台设备正在向这个频道播放」</b></summary>
             <div class="faq-body">
               <p><b>你会看到：</b>开播时 B 站报错，说这个直播间已经有别的设备在推流。</p>
 
@@ -973,7 +836,7 @@
           </details>
 
           <details>
-            <summary><b>⑰ 开播正常，但 PS5 画面里看不到弹幕</b></summary>
+            <summary><b>⑫ 开播正常，但 PS5 画面里看不到弹幕</b></summary>
             <div class="faq-body">
               <p><b>你会看到：</b>B 站直播间有人发弹幕，但游戏画面上没有。</p>
               <p>弹幕要走两段路才到 PS5，断在哪一段，处理方法不一样。
@@ -1054,12 +917,7 @@
           </div>
         </div>
 
-        <div class="diagbox-h" style="margin-top:16px">画面叠加</div>
-        <div class="diagbox" style="margin-top:8px">
-          <div id="diag-overlay"><div class="kvrow dim"><span>—</span></div></div>
-        </div>
-
-        <div class="diagbox-h" style="margin-top:16px">转码与推流</div>
+        <div class="diagbox-h" style="margin-top:16px">推流链路</div>
         <div class="diagbox" style="margin-top:8px">
           <div id="diag-relay"><div class="kvrow dim"><span>—</span></div></div>
         </div>
@@ -1137,7 +995,6 @@
 </div>
 
 
-<script src="/static/vendor/flv.min.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

@@ -7,7 +7,7 @@ import time
 from collections import deque
 
 from . import bili as bilimod
-from . import overlay, rtmf
+from . import rtmf
 from . import (config_store, danmaku_history, danmaku_throttle, divert,
                dnscheck, dnsserver, eventbus, ffmpeg_mgr, logbus, netutil,
                netwatch, nginxmgr, paths, relay, routercfg, services,
@@ -42,10 +42,6 @@ class Orchestrator(object):
             )
             self.native_relay = False
         self.relay = relay.Relay()
-        self.overlay = overlay.Overlay()
-        # 叠加模式下用来接住 ffmpeg 的第二路输出，供本地预览
-        self.preview_srv = rtmf.RtmpForwarderManager(
-            rtmp_port=19350, web_port=8097)
         self.dns = None
         self.divert = None
         self.hijack_error = ""
@@ -960,96 +956,21 @@ class Orchestrator(object):
 
         self._start_push(addr, code)
 
-    def has_overlay(self) -> bool:
-        """
-        要不要烧字幕。只看悬浮文字。
-
-        弹幕叠加已经下线：drawtext 的 reload 在 Windows 上会让 ffmpeg
-        反复崩（0xC0000005 / 0xC0000374），画面断断续续没法用。
-        B 站观众在播放器里本来就能看弹幕，不烧进画面不影响观看。
-        """
-        return bool((self.cfg.get("OVERLAY_TEXT") or "").strip())
-
     def _start_push(self, addr: str, code: str) -> bool:
         """
-        统一的推流入口。
+        统一的推流入口：只转发，不转码。
 
-        两条路：
-          · 没有叠加 → 用收流端自己的转发器，零转码，最轻
-          · 有叠加   → ffmpeg 拉本机的流，把 ASS 字幕烧进画面再推 B 站
-                       （必须重编码，走 QSV 硬编）
+        · 收流端支持 set_destination（rtmf）→ 直通转发，连封装都不拆
+        · 不支持（nginx）→ ffmpeg 从本机 1935 拉流，做一次 remux 再推
         """
         out_url = addr.rstrip("/") + "/" + code.lstrip("/")
         self._protect_relay_target(out_url, addr)
 
-        # 缓存推流地址：改叠加参数要重启转码时直接复用，
+        # 缓存推流地址：转发中断要重启时直接复用，
         # 不要重走 B 站开播接口（会触发 60031 风控）
         self._last_out_url = out_url
         self._last_addr = addr
         self._last_code = code
-
-        _to_bili = bool(self.cfg.get("OVERLAY_TO_BILI", True))
-        _to_local = bool(self.cfg.get("OVERLAY_TO_LOCAL", True))
-
-        # 两个都不勾 = 等同没开叠加，走零转码那条路
-        if self.has_overlay() and (_to_bili or _to_local):
-            pub = self.live.get("ps5") or {}
-            w = int(pub.get("width") or 1920)
-            h = int(pub.get("height") or 1080)
-            try:
-                self.overlay.write(self.cfg)
-            except Exception as e:
-                logbus.warn("生成叠加文本失败：%s" % e, tag="叠加")
-            # 用 drawtext 烧字（不用 reload：reload 在 Windows 上会让 ffmpeg 崩）
-            vf = self.overlay.filter_chain(self.cfg)
-            if not vf:
-                logbus.warn("叠加滤镜为空（可能缺中文字体），本次不叠加", tag="叠加")
-
-            # rtmp-forwarder 只收推流、不提供 RTMP 播放（拉它会报 Already publishing），
-            # 只能从它的 HTTP-FLV 接口拿流喂给 ffmpeg。
-            _web = int(getattr(self.nginx, "web_port", 0) or 0)
-            if _web:
-                in_url = "http://127.0.0.1:%d/live/stream.flv" % _web
-            else:
-                in_url = "rtmp://127.0.0.1:%d/%s/%s" % (
-                    int(self.cfg.get("RTMP_PORT", 1935)),
-                    pub.get("app", "app"), pub.get("name", ""))
-            br = int(pub.get("bw_in") or 0) or 6000
-            bitrate = "%dk" % br
-
-            # 「叠加到本地」才额外输出一路给 OBS 拉；
-            # 本地画面预览不从这里取 —— 预览看的是 PS5 原始画面，
-            # 叠加效果由前端覆盖层实时呈现，这样省掉一路编码。
-            preview_url = ""
-            if _to_local:
-                try:
-                    if not self.preview_srv.running():
-                        self.preview_srv.start()
-                    if self.preview_srv.running():
-                        preview_url = "rtmp://127.0.0.1:19350/preview/ov"
-                except Exception as e:
-                    logbus.warn("本地叠加输出起不来：%s" % e, tag="叠加")
-
-            target = out_url if _to_bili else (preview_url or out_url)
-
-            # 推 B 站的时候不传 preview_url，强制单路输出。
-            #
-            # 原因：i3-8100T 的核显扛不住两个 h264_qsv session（会 0xC0000005 崩），
-            # CPU 编码又跟不上实时（speed<1 直接卡死）。
-            # 而本地预览本来就不需要烧字——它拉的是 PS5 原始流，叠加效果由
-            # 前端覆盖层实时画。所以推 B 站时那一路没有存在的必要。
-            _pv = "" if _to_bili else preview_url
-            if not self.relay.start(in_url, target, vf=vf, bitrate=bitrate,
-                                    preview_url=_pv):
-                self._fail_live(self.relay.last_error or "叠加转发启动失败")
-                return False
-            self.relay.start_watchdog(
-                on_drop=lambda reason: self._fail_live("转发中断：%s" % reason))
-            logbus.ok("画面叠加已启用（%s + %s 重编码）"
-                      % ("推 B 站" if _to_bili else "仅本地",
-                         bitrate), tag="叠加")
-            self.services.notify_ps5("B 站已开播，画面正在同步")
-            return True
 
         if hasattr(self.nginx, "set_destination"):
             try:
@@ -1370,19 +1291,55 @@ class Orchestrator(object):
             upd["LOCAL_STREAM"] = bool(local_stream)
         if not upd:
             return {"ok": False, "msg": "没有要改的"}
+        before_push = self.push_bili()
         self.cfg = paths.save_config(upd)
         logbus.info("输出方式：推 B 站 %s / 本地流 %s"
                     % ("开" if self.push_bili() else "关",
                        "开" if self.local_stream() else "关"), tag="推流")
+
+        # 「推 B 站」这个开关在推流过程中被改动时，必须立刻按新配置接管。
+        # 只写配置的话，PS5 正在推流、用户点开「推 B 站」→ 界面上什么都不会发生，
+        # 状态一直停在 local（2026-11-01 实测复现）。
+        if push_bili is not None and bool(push_bili) != before_push:
+            threading.Thread(target=self._apply_output_switch,
+                             args=(bool(push_bili),), daemon=True).start()
         return {"ok": True, "push_bili": self.push_bili(),
                 "local_stream": self.local_stream()}
+
+    def _apply_output_switch(self, on: bool) -> None:
+        """把「推 B 站」开关的变化落到正在进行的推流上。"""
+        try:
+            pub = self.nginx.publisher() if self.nginx.running() else {"publishing": False}
+            if not pub.get("publishing"):
+                return   # 没在推流，等 PS5 下次推流时自然会按新配置走
+            state = self.live.get("state") or ""
+            if on:
+                if state in ("relaying", "live", "starting", "face_verify"):
+                    return   # 已经在推了，不重复开播
+                self._on_ps5_publish(pub)
+            else:
+                if state in ("relaying", "live", "starting", "face_verify"):
+                    self.cleanup(was_live=True, reason="关闭推流到 B 站")
+                # 关掉之后按本地模式接住这条正在进行的推流
+                self._on_ps5_publish(pub)
+        except Exception as e:
+            logbus.warn("切换输出方式后接管失败：%s" % e, tag="推流")
 
     def local_play_url(self, app: str = "", name: str = "") -> str:
         """
         给 OBS 之类软件拉的地址。
 
-        优先用局域网 IP：OBS 和本程序不在同一台机器上时也能拉。
         传空则取当前正在推的流。
+
+        ⚠️ 两种收流实现的「拉」完全不是一回事：
+          · rtmf（Windows 默认）只收不播，用 RTMP 去拉会报
+            `Server error: Already publishing`（2026-11-01 实测），
+            只能拉它的 HTTP-FLV 接口
+          · nginx-rtmp 支持 RTMP play，给 rtmp:// 才对
+
+        地址里的主机名：桌面版直接给 127.0.0.1（冰哥定的：拉流的就是本机，
+        给局域网 IP 反而可能被防火墙或 IP 变动拖累）；容器版必须给局域网 IP，
+        因为浏览器和 OBS 都在另一台机器上。
         """
         cur = self.live.get("local") or {}
         app = app or cur.get("app") or "app"
@@ -1391,15 +1348,17 @@ class Orchestrator(object):
             ps5 = self.live.get("ps5") or {}
             app = ps5.get("app") or app
             name = ps5.get("name") or ""
-        host = self.lan_ip or "127.0.0.1"
-        # 「叠加到本地」开着且预览端在跑，就给烧过字的那一路
-        try:
-            if (self.cfg.get("OVERLAY_TO_LOCAL", True)
-                    and self.has_overlay()
-                    and self.preview_srv.running()):
-                return "rtmp://%s:19350/preview/ov" % host
-        except Exception:
-            pass
+        if paths.PLATFORM == "docker":
+            host = self.lan_ip or "127.0.0.1"
+        else:
+            host = "127.0.0.1"
+
+        # rtmf：给 HTTP-FLV。端口直接用管理器自己报的 web_port，
+        # 别写死 8098 —— 被占用时会换端口。
+        if getattr(self, "native_relay", False):
+            web = int(getattr(self.nginx, "web_port", 0) or 0)
+            if web:
+                return "http://%s:%d/live/stream.flv" % (host, web)
         port = int(self.cfg.get("RTMP_PORT", 1935))
         return "rtmp://%s:%d/%s/%s" % (host, port, app, name)
 
@@ -1748,8 +1707,7 @@ class Orchestrator(object):
             "dns_answer": self.dns_answer_hint(),
             "hijack": self.hijack_state(),
             "outputs": {"push_bili": self.push_bili(),
-                        "local_stream": self.local_stream(),
-                        "overlay": self.has_overlay()},
+                        "local_stream": self.local_stream()},
             "rtmp_impl": "rtmpf" if getattr(self, "native_relay", False) else "nginx",
             "services": {
                 "dns": dns_state,

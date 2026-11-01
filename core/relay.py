@@ -69,20 +69,13 @@ class Relay(object):
             if len(self._tail) > 200:
                 del self._tail[:100]
 
-    def start(self, input_url: str, output_url: str,
-              vf: str = "", bitrate: str = "", preview_url: str = "") -> bool:
-        """
-        vf 不为空时走「滤镜 + 重编码」：字幕要烧进画面，就不能 -c copy。
-        bitrate 只在重编码时用得上。
-        """
+    def start(self, input_url: str, output_url: str) -> bool:
+        """只做 remux（-c copy），不转码。"""
         with self._lock:
             self.stop(_internal=True)
             self._stopping = False
             self.input_url = input_url
             self.output_url = output_url
-            self.vf = (vf or "").strip()
-            self.bitrate = (bitrate or "6000k").strip()
-            self.preview_url = (preview_url or "").strip()
             self.started_at = time.time()
             return self._spawn()
 
@@ -127,50 +120,11 @@ class Relay(object):
         if self.input_url.startswith("rtmp"):
             args += ["-rtmp_live", "live"]
         args += ["-i", self.input_url]
-        # 关键：ffmpeg 的输出参数只作用于紧跟它的那一个输出。
-        # 多路输出时每一路都得重新声明编码参数，否则后面几路会用默认编码器推不出去。
-        vf = getattr(self, "vf", "")
-        br = getattr(self, "bitrate", "6000k")
-
-        def _codec_opts():
-            if vf:
-                return ["-vf", vf,
-                        "-c:v", "h264_qsv", "-b:v", br,
-                        "-maxrate", br, "-bufsize", "12000k",
-                        "-preset", "veryfast", "-c:a", "copy"]
-            return ["-c", "copy"]
-
-        outputs = []
-        pv = getattr(self, "preview_url", "")
-        if pv:
-            outputs.append(pv)
-        outputs.append(self.output_url)
-
-        for idx, url in enumerate(outputs):
-            is_preview = bool(pv) and idx == 0
-            if is_preview:
-                # 预览这一路必须用 CPU 编码（libx264），不能用 QSV。
-                #
-                # 实测：两路都用 h264_qsv 时，Intel 核显同时开两个编码 session
-                # 撑不住，ffmpeg 直接 0xC0000005 崩，而且 stderr 一句话都不打
-                # （这就是之前"有弹幕就断"、"播几分钟就断"的真正原因）。
-                # 预览只有 720p30，CPU 编码负担很小。
-                # 降到 480p15：i3-8100T 只有 4 核，
-                # 720p30 的 libx264 实测 speed=0.87（跟不上实时），
-                # 480p15 负担只有它的四分之一，够用来看位置。
-                args += ["-vf", vf,
-                         "-c:v", "libx264", "-preset", "ultrafast",
-                         "-b:v", "800k", "-maxrate", "800k",
-                         "-bufsize", "1600k", "-c:a", "copy",
-                         "-s", "854x480", "-r", "15"]
-            else:
-                args += _codec_opts()
-            args += ["-f", "flv", "-flvflags", "no_duration_filesize"]
-            if idx == len(outputs) - 1:
-                args += ["-reconnect", "1", "-reconnect_streamed", "1",
-                         "-reconnect_delay_max", "5"]
-            args += [url]
-
+        args += ["-c", "copy",
+                 "-f", "flv", "-flvflags", "no_duration_filesize",
+                 "-reconnect", "1", "-reconnect_streamed", "1",
+                 "-reconnect_delay_max", "5",
+                 self.output_url]
         startup = {}
         if os.name == "nt":
             startup["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)

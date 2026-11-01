@@ -104,8 +104,7 @@ function goStep(n, silent) {
   if (n === 1) loadGuides();
   if (n === 3) renderNet();
   if (n === 4) renderLogin();
-  if (n === 5) { renderLive(); loadOverlay(); }
-  else if (typeof stopMiniPreview === 'function') stopMiniPreview();
+  if (n === 5) { renderLive(); }
   if (key === 'info') loadDiag(1);
 }
 
@@ -154,7 +153,6 @@ function applyState(st) {
   const hj = st.hijack || {};
   const dv = hj.divert || {};
   const outs = st.outputs || {};
-  const overlayOn = !!outs.overlay;
   const channel = (live.bili && live.bili.channel) || '';
 
 
@@ -268,8 +266,6 @@ function applyState(st) {
         ? '等待<br><small>PS5 还没进直播间</small>' : '未连');
   }
 
-  // 第 5 步的小预览：有流自动播，流停自动关
-  if (S.step === 5) syncMiniPreview(_ps5On);
 
 
   const dnsMode = st.dns_mode || 'router';
@@ -539,7 +535,7 @@ function applyState(st) {
     const engine = st.rtmp_impl === 'rtmpf' ? 'rtmp-forwarder' : 'nginx + ffmpeg';
     $('m-relay').className = 'v ' + (pushing ? 'ok' : '');
     $('m-relay').innerHTML = pushing
-      ? `${engine}<br><small>${overlayOn ? '叠加 + 重编码' : '原样转发'}</small>`
+      ? `${engine}<br><small>原样转发</small>`
       : '空闲';
     $('m-quality').innerHTML = ps5.publishing
       ? `${ps5.width || 0}×${ps5.height || 0}<br><small>${ps5.bw_in || 0} kbps</small>`
@@ -738,26 +734,6 @@ async function loadDiag(force) {
   rows.push(['防火墙', fwOk + '/' + fwAll.length + ' 条已放行',
     fwOk === fwAll.length ? 'ok' : 'warn']);
 
-  // 画面叠加状态
-  const ovd = L.overlay || {};
-  const ovbox = $('diag-overlay');
-  if (ovbox) {
-    const rows2 = [];
-    rows2.push(['叠加', ovd.active ? '已开启' : '未开启',
-      ovd.active ? 'ok' : '']);
-    if (ovd.active) {
-      rows2.push(['悬浮文字', ovd.text_len ? (ovd.text_len + ' 个字') : '空',
-        ovd.text_len ? 'ok' : 'warn']);
-      rows2.push(['弹幕队列', (ovd.dm_count || 0) + ' 条', '']);
-      rows2.push(['字体', ovd.font ? ovd.font.split(/[\\/]/).pop() : '未找到',
-        ovd.font ? 'ok' : 'err']);
-      const bad = (ovd.files || []).filter((f) => f.size !== 512);
-      rows2.push(['文本文件',
-        (ovd.files || []).length + ' 个' + (bad.length ? '，' + bad.length + ' 个大小异常' : '，全部 512 字节'),
-        bad.length ? 'warn' : 'ok']);
-    }
-    ovbox.innerHTML = kvRows(rows2);
-  }
 
   // 转码与推流
   const rly = L.relay_info || {};
@@ -1037,54 +1013,6 @@ async function exportDiag() {
   } catch (e) {
     if (msg) msg.textContent = '导出失败：' + e;
   }
-}
-
-let _flvPlayer = null;
-
-function togglePreview() {
-  const box = $('preview-box');
-  const btn = $('preview-btn');
-  if (!box) return;
-
-  if (box.style.display === 'block') {
-    if (_flvPlayer) {
-      try {
-        _flvPlayer.pause();
-        _flvPlayer.unload();
-        _flvPlayer.detachMediaElement();
-        _flvPlayer.destroy();
-      } catch (e) {}
-      _flvPlayer = null;
-    }
-    box.style.display = 'none';
-    if (btn) btn.textContent = '本地看画面';
-    return;
-  }
-
-  if (typeof flvjs === 'undefined') {
-    alert('播放组件没加载，刷新页面再试');
-    return;
-  }
-  if (!flvjs.isSupported()) {
-    alert('这个浏览器不支持 FLV 播放，换 Edge 或 Chrome');
-    return;
-  }
-
-  box.style.display = 'block';
-  if (btn) btn.textContent = '停止预览';
-  _flvPlayer = flvjs.createPlayer({
-    type: 'flv',
-    url: '/api/preview.flv',
-    isLive: true,
-    hasAudio: false,
-  });
-  _flvPlayer.attachMediaElement($('preview-video'));
-  _flvPlayer.on(flvjs.Events.ERROR, () => {
-    if (btn) btn.textContent = '本地看画面';
-    box.style.display = 'none';
-  });
-  _flvPlayer.load();
-  _flvPlayer.play().catch(() => {});
 }
 
 function applyDebugBtn(on) {
@@ -1724,159 +1652,6 @@ async function loadNetcheck(force) {
   }
 }
 
-let _ovLoaded = false;
-let _ovPos = { x: 0.04, y: 0.04 };
-let _dmX = 0.5;
-let _dmY = 0.86;
-let _ovSaveTimer = null;
-let _ovDrag = null;
-
-// 把当前叠加设置画到预览框上——没直播也能看到文字长什么样
-function renderOvPreview() {
-  const el = $('ov-drag');
-  const layer = $('ov-layer');
-  if (!el || !layer) return;
-
-
-  const txt = ($('ov-text') && $('ov-text').value) || '';
-  if (!txt.trim()) { el.style.display = 'none'; return; }
-
-  const size = Number($('ov-size') && $('ov-size').value) || 42;
-  const color = ($('ov-color') && $('ov-color').value) || '#ffffff';
-  const alpha = (Number($('ov-alpha') && $('ov-alpha').value) || 90) / 100;
-  const bgAlpha = (Number($('ov-bgalpha') && $('ov-bgalpha').value) || 0) / 100;
-
-  // 按预览宽度等比缩放字号（预览是按 1920 宽模拟的）
-  const w = layer.getBoundingClientRect().width || 340;
-  const scale = w / 1920;
-
-  el.style.display = '';
-  el.textContent = txt;
-  el.style.fontSize = Math.max(9, size * scale) + 'px';
-  el.style.color = color;
-  el.style.opacity = alpha;
-  el.style.background = bgAlpha > 0.02
-    ? 'rgba(0,0,0,' + bgAlpha + ')' : 'transparent';
-  applyOvPos();
-
-  if (!_ovDrag) bindOvDrag();
-}
-
-// 拖动时别每像素都发请求，节流 400ms
-function ovSaveThrottled() {
-  if (_ovSaveTimer) return;
-  _ovSaveTimer = setTimeout(() => {
-    _ovSaveTimer = null;
-    ovSave(true);
-  }, 400);
-}
-
-function applyOvPos() {
-  const el = $('ov-drag');
-  if (!el) return;
-  el.style.left = (_ovPos.x * 100) + '%';
-  el.style.top = (_ovPos.y * 100) + '%';
-}
-
-function bindOvDrag() {
-  const el = $('ov-drag');
-  const layer = $('ov-layer');
-  if (!el || !layer || _ovDrag) return;
-  _ovDrag = {};
-
-  el.addEventListener('mousedown', (e) => {
-    e.preventDefault();
-    const r = layer.getBoundingClientRect();
-    _ovDrag.moving = true;
-    _ovDrag.sx = e.clientX;
-    _ovDrag.sy = e.clientY;
-    _ovDrag.ox = _ovPos.x;
-    _ovDrag.oy = _ovPos.y;
-    _ovDrag.w = r.width || 1;
-    _ovDrag.h = r.height || 1;
-  });
-
-  document.addEventListener('mousemove', (e) => {
-    if (!_ovDrag.moving) return;
-    const nx = _ovDrag.ox + (e.clientX - _ovDrag.sx) / _ovDrag.w;
-    const ny = _ovDrag.oy + (e.clientY - _ovDrag.sy) / _ovDrag.h;
-    _ovPos.x = Math.min(0.95, Math.max(0, nx));
-    _ovPos.y = Math.min(0.95, Math.max(0, ny));
-    applyOvPos();
-    ovSaveThrottled();
-  });
-
-  document.addEventListener('mouseup', () => {
-    if (!_ovDrag.moving) return;
-    _ovDrag.moving = false;
-    ovSave();          // 松手就存坐标
-  });
-}
-
-
-async function loadOverlay(force) {
-  if (_ovLoaded && !force) return;
-  let d = null;
-  try { d = await api('/api/overlay'); } catch (e) {}
-  if (!d) return;
-  _ovLoaded = true;
-
-  const set = (id, v) => { const el = $(id); if (el && v !== undefined && v !== null) el.value = v; };
-  const chk = (id, v) => { const el = $(id); if (el) el.checked = !!v; };
-  const pct = (id, v) => { const el = $(id); if (el) el.value = Math.round((Number(v) || 0) * 100); };
-
-  set('ov-text', d.OVERLAY_TEXT || '');
-  _ovPos.x = (typeof d.OVERLAY_X === 'number') ? d.OVERLAY_X : 0.04;
-  _ovPos.y = (typeof d.OVERLAY_Y === 'number') ? d.OVERLAY_Y : 0.04;
-  set('ov-size', d.OVERLAY_FONT_SIZE || 42);
-  set('ov-color', d.OVERLAY_COLOR || '#ffffff');
-  pct('ov-alpha', d.OVERLAY_ALPHA);
-  pct('ov-bgalpha', d.OVERLAY_BG_ALPHA);
-
-  chk('ov-tobili', d.OVERLAY_TO_BILI !== false);
-  chk('ov-tolocal', d.OVERLAY_TO_LOCAL !== false);
-  renderOvPreview();
-}
-
-function ovDirty() {
-  const m = $('ov-msg');
-  if (m) m.textContent = '有改动，点保存生效';
-  renderOvPreview();
-}
-
-async function ovSave(silent) {
-  const num = (id, dflt) => {
-    const el = $(id);
-    const v = el ? Number(el.value) : NaN;
-    return isNaN(v) ? dflt : v;
-  };
-  const val = (id) => { const el = $(id); return el ? el.value : ''; };
-  const on = (id) => { const el = $(id); return !!(el && el.checked); };
-
-  const body = {
-    OVERLAY_TEXT: val('ov-text'),
-    OVERLAY_FONT_SIZE: num('ov-size', 42),
-    OVERLAY_COLOR: val('ov-color'),
-    OVERLAY_ALPHA: num('ov-alpha', 90) / 100,
-    OVERLAY_BG_ALPHA: num('ov-bgalpha', 0) / 100,
-    OVERLAY_X: _ovPos.x,
-    OVERLAY_Y: _ovPos.y,
-
-    OVERLAY_TO_BILI: on('ov-tobili'),
-    OVERLAY_TO_LOCAL: on('ov-tolocal'),
-  };
-
-  const r = await api('/api/overlay', body);
-  const m = $('ov-msg');
-  if (!r || !r.ok) {
-    if (m) m.textContent = (r && r.msg) || '保存失败';
-    return;
-  }
-  if (m && !silent) {
-    m.textContent = r.active ? '已实时生效' : '已保存（当前不叠加）';
-  }
-}
-
 function renderOutputMode() {
   const st = S.state || {};
   const live = st.live || {};
@@ -1907,7 +1682,6 @@ function copyUrl() {
   });
 }
 
-let _miniPlayer = null;
 
 async function setOutputs() {
   const push = $('sw-push') && $('sw-push').checked;
@@ -1922,63 +1696,6 @@ function renderOutputs(o) {
   const a = $('sw-push'), b = $('sw-local');
   if (a) a.checked = !!o.push_bili;
   if (b) b.checked = !!o.local_stream;
-}
-
-let _miniOn = false;
-
-function startMiniPreview() {
-  const box = $('miniprev');
-  const msg = $('miniprev-msg');
-  if (!box || typeof flvjs === 'undefined' || !flvjs.isSupported()) return;
-  if (_miniOn) return;
-
-  const v = $('minivideo');
-  if (!v) return;
-  try {
-    _miniPlayer = flvjs.createPlayer({
-      type: 'flv', url: '/api/preview.flv', isLive: true, hasAudio: false,
-      // 低延迟：默认缓冲 3~5 秒，会把"本地预览比 B 站快"这个差别吃掉，
-      // 看起来两边同步。开启追帧后本地预览能压到 1 秒内。
-      liveBufferLatencyChasing: true,
-      liveBufferLatencyMaxLatency: 1.2,
-      liveBufferLatencyMinRemain: 0.3,
-      lazyLoad: false,
-      enableStashBuffer: false,
-      stashInitialSize: 128,
-    });
-    _miniPlayer.attachMediaElement(v);
-    _miniPlayer.on(flvjs.Events.ERROR, () => {
-      stopMiniPreview();
-      if (msg) msg.textContent = '等 PS5 推流…';
-    });
-    _miniPlayer.load();
-    _miniPlayer.play().catch(() => {});
-    _miniOn = true;
-    if (msg) msg.textContent = '直播中';
-  } catch (e) {
-    _miniOn = false;
-  }
-}
-
-function stopMiniPreview() {
-  if (_miniPlayer) {
-    try {
-      _miniPlayer.pause();
-      _miniPlayer.unload();
-      _miniPlayer.detachMediaElement();
-      _miniPlayer.destroy();
-    } catch (e) {}
-    _miniPlayer = null;
-  }
-  _miniOn = false;
-}
-
-// 有 PS5 流就自动播，断了就停
-function syncMiniPreview(publishing) {
-  if (publishing) startMiniPreview();
-  else if (_miniOn) stopMiniPreview();
-  // 每轮同步都重画覆盖层，保证预览里的设计稿和弹幕占位一直在
-  renderOvPreview();
 }
 
 function renderDanmaku(list) {
