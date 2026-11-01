@@ -8,6 +8,7 @@ import time
 
 from flask import (Flask, Response, jsonify, render_template, request,
                      send_from_directory, stream_with_context)
+from werkzeug.exceptions import HTTPException
 
 from core import logbus, netutil, paths
 
@@ -497,6 +498,12 @@ def create_app(orch, on_exit=None) -> Flask:
 
     @app.errorhandler(Exception)
     def on_error(e):
+        # werkzeug 的 HTTPException（404 / 405 之类）是正常返回，不是程序出错。
+        # 以前一律按 500 记 ERROR，浏览器来要个 apple-touch-icon 就刷一条「接口异常」，
+        # 日志全是噪音，状态码也被改错了，排查时反而看不出真问题。
+        if isinstance(e, HTTPException):
+            logbus.debug("HTTP %s %s %s" % (e.code, request.method, request.path))
+            return jsonify({"error": e.description}), e.code
         logbus.error("接口异常：%s" % e)
         return jsonify({"error": str(e)}), 500
 
