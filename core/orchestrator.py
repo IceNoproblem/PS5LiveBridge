@@ -837,7 +837,7 @@ class Orchestrator(object):
         从 Twitch 查 PS5 的直播标题。
 
         照搬 PSLinkB 的思路：Twitch 推流密钥长这样
-            live_1348515979_DGbH2bro...
+            live_1234567890_AbCdEfGh...
         `live_` 后面那段数字就是 broadcaster_id，拿它去问 GQL
         user(id){ lastBroadcast { title } } 就能拿到 PS5 上填的标题
         —— 不需要用户填频道名。

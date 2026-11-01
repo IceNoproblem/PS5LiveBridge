@@ -423,7 +423,6 @@ select {
 .dmrow.sc .t { color: var(--brand); }
 
 
-.livegrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0; }
 .metric {
   padding: 12px 14px; border-radius: 14px;
   background: rgba(255, 255, 255, .04);
@@ -622,7 +621,6 @@ select {
   .rail { display: none; }
   .steps-bar { display: flex; }
   .content { padding: 16px; }
-  .livegrid { grid-template-columns: repeat(2, 1fr); }
   .pickrow { grid-template-columns: 1fr; }
   .grid2 { grid-template-columns: 1fr; }
 }
@@ -630,7 +628,6 @@ select {
 @media (max-width: 600px) {
   .topbar { flex-wrap: wrap; }
   .lights { order: 3; width: 100%; }
-  .livegrid { grid-template-columns: 1fr 1fr; }
 }
 
 
@@ -1097,7 +1094,7 @@ select {
 }
 
 
-.preview-hint {
+.impl-hint {
   font-size: 12px;
   color: var(--dim);
 }
@@ -1131,9 +1128,6 @@ select {
 .sw:has(input:checked) { border-color: rgba(74,125,255,.55); background: rgba(74,125,255,.08); }
 
 
-.miniprev video { display: block; }  /* 不播放也占位，保持 16:9 */
-
-
 .accel-warn {
   margin: 0 0 16px; padding: 14px 16px;
   border-left: 3px solid #e8a33d;
@@ -1154,270 +1148,68 @@ select {
   border-top: 1px dashed rgba(255,255,255,.1);
 }
 
-/* 第 5 步：左边指标、右边预览 */
-.s5metrics {
-  display: flex; flex-direction: column; gap: 8px;
-}
-.s5metrics .metric {
-  display: flex; justify-content: space-between; align-items: baseline;
-  gap: 12px;
-}
-.s5metrics .metric .k { flex: 0 0 auto; }
-.s5metrics .metric .v { text-align: right; }
+
+/* 第 5 步：右侧开关列 */
 .swcol {
   display: flex; flex-direction: column; gap: 10px;
   margin-top: 16px;
 }
 .swcol .sw { flex: none; }
-@media (max-width: 1280px) {
-}
 
-.ovgrid input[type="text"], .ovgrid input[type="number"], .ovgrid select {
-  padding: 6px 9px; border-radius: 8px;
-  border: 1px solid var(--line-2); background: rgba(255,255,255,.05);
-  color: var(--text); font-size: 14px;
-}
-
-
-/* 左列的叠加区块（常驻展开，不折叠） */
-.ovsec .ovgrid input[type="number"],
-.ovsec .ovgrid input[type="text"],
-
-/* 指标卡片固定高度，状态文字长短变化不再撑高 */
-.s5metrics > .metric {
-  min-height: 44px;
-  padding: 6px 10px;
-  border-radius: 8px;
-  background: rgba(255,255,255,.025);
-  border: 1px solid transparent;
-  transition: border-color .15s, background .15s;
-}
-.s5metrics > .metric .v {
-  font-size: 14px; line-height: 1.35;
-  display: flex; flex-direction: column; align-items: flex-end;
-}
-.s5metrics > .metric .v small {
-  font-size: 11.5px; color: var(--dim); font-weight: 400;
-}
-/* 状态色：正常绿 / 等待黄 / 异常红 */
-.s5metrics > .metric .v.ok { color: var(--ok); }
-.s5metrics > .metric .v.warn { color: #e8a33d; }
-.s5metrics > .metric .v.err { color: #e05a4f; }
-.s5metrics > .metric:has(.v.ok) {
-  border-color: rgba(59,196,123,.22); background: rgba(59,196,123,.05);
-}
-.s5metrics > .metric:has(.v.warn) {
-  border-color: rgba(232,163,61,.2); background: rgba(232,163,61,.045);
-}
-
-
-/* 直播状态那排格子也固定高度，状态文字变化不再让整块跳动 */
-.livegrid .metric {
-  min-height: 62px;
-  display: flex; flex-direction: column; justify-content: center;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: rgba(255,255,255,.025);
-}
-.livegrid .metric .k {
-  font-size: 12px; color: var(--dim); margin-bottom: 4px;
-}
-.livegrid .metric .v {
-  font-size: 16px; font-weight: 600; line-height: 1.3;
-}
-
-
-/* 叠加配置改成两列，压缩高度；滑动条也跟着变短 */
-
-/* 叠加区自身限高，超出在内部滚，不把整列拉长 */
-
-/* 直播状态：和上面两列对齐，四格均匀 */
+/* 直播状态：四格均匀 */
 .stats-row {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 14px;
+  gap: 8px;
+  margin-top: 10px;
 }
-
-
-/* 叠加区高度锁死成和预览一样（340px 宽 16:9 ≈ 191px + 标题 30px） */
-.ovsec .ovgrid input[type="text"],
-.ovsec .ovgrid input[type="number"],
-
+.stats-row .metric {
+  min-height: 52px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: rgba(255,255,255,.025);
+}
+.stats-row .metric .k {
+  font-size: 11px; color: var(--dim); margin-bottom: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.stats-row .metric .v { font-size: 13.5px; font-weight: 600; }
+.stats-row .metric .v small { font-size: 11px; color: var(--dim); font-weight: 400; }
 
 /* 6 个链路状态横排均匀 */
 .stats-row.six {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
 }
 .stats-row.six .metric {
   min-height: 60px;
   display: flex; flex-direction: column; justify-content: center;
   padding: 6px 8px;
-  border-radius: 8px;
-  background: rgba(255,255,255,.025);
   border: 1px solid transparent;
 }
-.stats-row.six .metric .k {
-  font-size: 11.5px; color: var(--dim); margin-bottom: 3px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.stats-row.six .metric .v { font-size: 14px; font-weight: 600; }
-.stats-row.six .metric .v small { font-size: 11px; color: var(--dim); font-weight: 400; }
-
-/* 左列现在只剩叠加区，按预览高度走 */
-@media (max-width: 1400px) {
-  .stats-row.six { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
-
-/* 预览框：视频 + 可拖动的文字层 */
-
-/* 覆盖基础 stats-row 的 4 列，六格必须是 6 列（宽屏） */
-.stats-row.six { grid-template-columns: repeat(6, minmax(0, 1fr)) !important; }
+.stats-row.six .metric .k { margin-bottom: 3px; }
+.stats-row.six .metric .v { font-size: 14px; }
 @media (max-width: 1500px) {
   .stats-row.six { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
 }
 
-/* 预览里的弹幕占位框：和真实弹幕同样的样式，可拖动调纵向位置 */
-
+/* 最近弹幕压矮，别占太多 */
+.dmlist { max-height: 96px !important; }
 
 /* ── 第 5 步整体压缩，目标 1~1.5 屏装下 ── */
 #step-5 h1 { margin-bottom: 8px; }
 #step-5 .lead { margin-bottom: 12px; }
 #step-5 .card-sub { margin-bottom: 10px; }
-#step-5 h3 {
-  margin: 14px 0 8px; font-size: 15px;
-}
+#step-5 h3 { margin: 14px 0 8px; font-size: 15px; }
 #step-5 .swrow { margin: 4px 0 8px; gap: 10px; }
 #step-5 .sw { padding: 8px 12px; }
 #step-5 .sw-t { font-size: 14px; }
 #step-5 .sw-d { font-size: 11.5px; }
-
-/* 左右两栏压到 300 / 自适应，整体更矮 */
-
-/* 状态格子统一压矮 */
-.stats-row { gap: 8px !important; margin-top: 10px !important; }
-.stats-row .metric { min-height: 52px !important; padding: 5px 8px !important; }
-.stats-row .metric .k { font-size: 11px !important; margin-bottom: 2px !important; }
-.stats-row .metric .v { font-size: 13.5px !important; }
-
-/* 最近弹幕压矮，别占太多 */
-.dmlist { max-height: 96px !important; }
 #step-5 .btn-row { margin-top: 10px !important; }
 #step-5 .accel-warn { margin-top: 14px; }
 
-/* 叠加配置输入框需要点宽度，左列加到 360 */
-.ovsec .ovgrid input[type="text"],
 /* 提示改成折叠，默认收起，省一屏 */
 .accel-warn summary { cursor: pointer; font-weight: 600; }
 .accel-warn[open] { padding-bottom: 12px; }
-
-
-/* ── 预览窗口固定尺寸，不随浏览器缩放 ── */
-
-/* 右列不再拉伸，跟预览同宽，避免左下大片空白 */
-@media (max-width: 1200px) {
-  .miniprev, .miniprev-body { width: 100% !important; }
-}
-
-
-/* 叠加配置改三列：9 个弹幕项刚好 3 行，右列不留空 */
-.ovsec .ovgrid input[type="text"],
-.ovsec .ovgrid input[type="number"],
-/* checkbox 那两项比较短，不占满格 */
-@media (max-width: 1500px) {
-}
-
-
-/* 回到两列：三列会把预览挤没，颜色选择器也太小 */
-/* 最后那个"最多几条"单独一行时，左对齐就好，不用拉满 */
-
-
-/* 380px + 三列：比 440 窄，预览还能留出宽度，同时把弹幕项压成 3 行 */
-.ovsec .ovgrid input[type="text"],
-.ovsec .ovgrid input[type="number"],
-
-
-/* 三列下把可点面积救回来：颜色块加高、数字框给最小宽度 */
-
-
-/* ── 叠加配置里所有控件统一尺寸，三列对齐 ── */
-.ovsec .ovgrid input:not([type="checkbox"]):not([type="range"]),
-
-/* 滑动条：和输入框同高，滑块本身也放大到能点中 */
-
-/* 取色器：和输入框同高 */
-
-/* 勾选项：占一格，但做成和输入框一样高的一条，视觉上齐 */
-
-
-/* 保存按钮别被 grid 拉伸，正常大小放一行 */
-/* 勾选盒别被压窄 */
-
-
-/* ── 叠加配置：按行排布，同类控件尺寸统一 ── */
-.ovf > input, .ovf > select {
-  width: 100%;
-  height: 26px;
-  box-sizing: border-box;
-  padding: 2px 6px;
-  font-size: 12px;
-  line-height: 1.2;
-  border-radius: 6px;
-  border: 1px solid var(--line-2);
-  background: rgba(255,255,255,.05);
-  color: var(--text);
-}
-/* 宽度分配 */
-.ovf-grow { flex: 1 1 auto; }          /* 内容框，尽量长 */
-.ovf-sm { flex: 0 0 62px; }            /* 字号 */
-.ovf-square { flex: 0 0 34px; }        /* 色块 */
-.ovf-half { flex: 1 1 0; min-width: 0; }  /* 两个一行的 */
-
-/* 色块：正方形，只有颜色没有文字 */
-
-/* 滑动条：和输入框同高 */
-
-/* 复选框：完整显示文字，和输入框同高 */
-
-
-/* 色块列要能放下"文字色"三个字，同时保持色块是正方形 */
-/* 色块比别的控件高 8px，让它和文字框顶部对齐而不是底对齐 */
-.ovf > input, .ovf > select { margin-top: 0; }
-/* 内容框那行要把高度拉齐 */
-
-
-/* 一行塞 5 个控件：左列要够宽，滑动条和字号都得收窄 */
-
-/* 预览跟着缩，但保持 16:9 */
-.miniprev, .miniprev-body {
-  width: 100% !important;
-  max-width: 300px !important;
-}
-
-
-/* 滑动条单独一行后，和上面的输入框横向对齐：宽度跟着上一行的控件走 */
-/* 上一行是 内容(flex:1) + 字号48 + 色38；滑动条行跟这两个同宽，靠左对齐 */
-/* 弹幕滑动条那行同理，对齐到字号列 */
-
-/* 停留秒数/最多几条 的标签要能一行放下 */
-.ovf-xs > .ovf-c, .ovf-xs > input { white-space: nowrap; }
-
-
-/* 内容框收短，和其他控件那一行对齐；剩余空间全给预览 */
-.miniprev, .miniprev-body {
-  max-width: none !important;
-  width: 100% !important;
-}
-
-
-/* 预览撑满右列：高度跟随左侧配置，宽度吃掉所有剩余 */
-
-
-/* 预览必须是 16:9：宽度填满右列，高度按比例自动，不拉伸 */
-
-
-/* 左列再收窄：预览向左扩展，16:9 高度也跟着变高（向下也变大） */
-
 
 /* ── 常见问题排查 ── */
 .faq { margin-top: 14px; }
@@ -1467,9 +1259,6 @@ select {
   font-family: ui-monospace, Consolas, monospace;
 }
 
-
-/* 左列再收窄 + 缩小间距：预览向左、向下同时变大（16:9 联动） */
-.ovf > input, .ovf > select { font-size: 11px !important; padding: 2px 4px !important; }
 
 .faq-ul { margin: 6px 0 8px; padding-left: 20px; }
 .faq-ul li { margin: 5px 0; }

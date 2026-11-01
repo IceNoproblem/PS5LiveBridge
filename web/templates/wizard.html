@@ -573,14 +573,13 @@
             <option value="rtmpf">rtmp-forwarder</option>
             <option value="nginx">nginx + ffmpeg</option>
           </select>
-          <span class="preview-hint" id="impl-hint"></span>
+          <span class="impl-hint" id="impl-hint"></span>
         </div>
         <p class="small dim" style="margin:2px 0 10px">
           默认选中的那个就行，<b>不用动</b>。只有收流反复失败（诊断页提示换一种）时才需要切。
         </p>
         <h3>画面怎么用</h3>
-
-<div class="swcol">
+        <div class="swcol">
           <label class="sw">
             <input type="checkbox" id="sw-push" onchange="setOutputs()">
             <span class="sw-t">推流到 B 站</span>

@@ -735,12 +735,12 @@ async function loadDiag(force) {
     fwOk === fwAll.length ? 'ok' : 'warn']);
 
 
-  // 转码与推流
+  // 转发与推流
   const rly = L.relay_info || {};
   const rbox = $('diag-relay');
   if (rbox) {
     const rows3 = [];
-    rows3.push(['转码进程', rly.running ? '运行中' : '未运行',
+    rows3.push(['转发进程', rly.running ? '运行中' : '未运行',
       rly.running ? 'ok' : '']);
     rows3.push(['推流方式', rly.impl === 'rtmpf' ? 'rtmp-forwarder' : 'nginx+ffmpeg', '']);
     if (rly.bitrate) rows3.push(['目标码率', rly.bitrate, '']);
@@ -837,7 +837,7 @@ async function loadDiag(force) {
   rows.push(['1935 收流', portOn(1935) ? '在听' : '没在听', portOn(1935) ? 'ok' : 'err']);
   rows.push(['6667 弹幕', portOn(6667) ? '在听' : '没在听', portOn(6667) ? 'ok' : 'err']);
   rows.push(['收流进程', ck.rtmp_proc || '未识别到', ck.rtmp_proc ? 'ok' : 'err']);
-  rows.push(['编码进程', ck.ffmpeg ? '在跑' : '未启动（开播后才有）', ck.ffmpeg ? 'ok' : '']);
+  rows.push(['ffmpeg 转发', ck.ffmpeg ? '在跑' : '未启动', ck.ffmpeg ? 'ok' : '']);
   rows.push(['直播阶段', L.live_state || 'idle', '']);
   if (d.version) rows.push(['版本', 'v' + d.version + ' · ' + (d.platform || ''), '']);
   rows.push(ps5row);
@@ -1669,7 +1669,7 @@ function renderOutputMode() {
       <span class="mono" id="s5-url">${esc(url || '等 PS5 开始直播后出现地址')}</span>
       ${ready ? '<button class="btn sm" onclick="copyUrl()">复制</button>' : ''}
     </div>
-    <p class="sma">用 OBS / PotPlayer 拉这个地址就能本地看，不影响推 B 站。</p>
+    <p class="small dim">用 OBS 的「媒体源」，或 PotPlayer / VLC 打开这个地址就能本地看，不影响推 B 站。</p>
   `;
 }
 

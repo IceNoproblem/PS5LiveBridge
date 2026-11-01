@@ -253,7 +253,7 @@ def _proc_by_name(name: str) -> bool:
 
 
 def _runtime_checks(orch, rtmp_port: int) -> dict:
-    """程序自身的运行条件：管理员权限 / 收流进程 / 编码进程。"""
+    """程序自身的运行条件：管理员权限 / 收流进程 / 转发进程。"""
     out = {"admin": False, "rtmp_proc": "", "ffmpeg": False}
     # 走 netutil 的统一实现：Windows 用 IsUserAnAdmin，Linux/容器看 geteuid()==0。
     # 以前这里直接调 ctypes.windll，容器里必抛 AttributeError → admin 永远 False，

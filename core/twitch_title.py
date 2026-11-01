@@ -25,7 +25,7 @@ _LOCAL_TTL = 60.0
 def parse_broadcaster_id(stream_key: str) -> str:
     """
     从 Twitch 推流密钥里抠 broadcaster_id。
-        live_1348515979_DGbH2bro...  →  1348515979
+        live_1234567890_AbCdEfGh...  →  1234567890
     不是这个格式就返回空。
     """
     s = (stream_key or "").strip()

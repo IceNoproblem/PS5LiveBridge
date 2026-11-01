@@ -1,4 +1,4 @@
-# PS5 直播桥 v5.1.1beta
+# PS5 直播桥 v5.1.2
 
 <p align="center">
   <img src="docs/screens/00-overview.jpg" width="920" alt="PS5 直播桥界面">
@@ -92,7 +92,7 @@ dnsmasq 那套（OpenWrt / 梅林）支持后缀匹配，所以那种写法保�
 
 要管理员权限。
 
-## v5.1.1 改了什么
+## v5.1.2 改了什么
 
 两个真实用户的故障排查，重点在**让问题能被看见**。
 
