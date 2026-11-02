@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 import urllib.error
 import urllib.request
 
+from . import paths
+
 _CLIENT_ID = "kimne78kx3ncx6brgo4mv6wki5h1ko"
 _GQL_URL = "https://gql.twitch.tv/gql"
 
@@ -76,9 +78,9 @@ def _proxy_list() -> list:
     要依次尝试的通道：显式配置 > 本机现成的代理 > 直连。
     最后那个空串表示直连，保证无论如何都有退路。
     """
-    env = (os.environ.get("PS5LB_TWITCH_PROXY") or "").strip()
-    if env:
-        return [env, ""]
+    px = paths.configured_proxy()
+    if px:
+        return [px, ""]
     return _local_proxies() + [""]
 
 

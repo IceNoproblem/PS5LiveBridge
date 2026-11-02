@@ -44,9 +44,9 @@ def _proxy_candidates() -> list:
     先试它就不用等代理超时；不通再往后走，不让代理成为硬性依赖。
     """
     out = [""]
-    env = (os.environ.get("PS5LB_TWITCH_PROXY") or "").strip()
-    if env:
-        out.append(env)
+    cfg_px = paths.configured_proxy()
+    if cfg_px:
+        out.append(cfg_px)
     try:
         from . import twitch_title
         for p in twitch_title._local_proxies():
@@ -69,7 +69,10 @@ def _opener(proxy: str):
         h = urllib.request.ProxyHandler({"http": proxy, "https": proxy})
     else:
         h = urllib.request.ProxyHandler({})
-    return urllib.request.build_opener(h)
+    # context 只能交给 HTTPSHandler。OpenerDirector.open() 不认这个参数，
+    # 传了会抛 TypeError，更新检查会静默失败。
+    https = urllib.request.HTTPSHandler(context=_SSL_CTX)
+    return urllib.request.build_opener(h, https)
 
 
 def _fetch_bytes(url: str, timeout: float = 15.0, retries: int = 2) -> bytes:
@@ -80,7 +83,7 @@ def _fetch_bytes(url: str, timeout: float = 15.0, retries: int = 2) -> bytes:
             try:
                 req = urllib.request.Request(url, headers={
                     "User-Agent": "PS5LiveBridge/" + str(_VERSION_HINT[0])})
-                with _opener(px).open(req, timeout=timeout, context=_SSL_CTX) as r:
+                with _opener(px).open(req, timeout=timeout) as r:
                     return r.read()
             except Exception as e:
                 last = e
@@ -480,7 +483,7 @@ class Updater(object):
             headers["Range"] = "bytes=%d-" % done
         req = urllib.request.Request(url, headers=headers)
         mode = "ab" if done else "wb"
-        with _opener(proxy).open(req, timeout=60, context=_SSL_CTX) as resp:
+        with _opener(proxy).open(req, timeout=60) as resp:
             code = getattr(resp, "status", 200)
             if done and code != 206:
                 done = 0

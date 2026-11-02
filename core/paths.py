@@ -8,7 +8,7 @@ import time
 
 APP_NAME = "PS5LiveBridge"
 APP_TITLE = "PS5 直播桥"
-APP_VERSION = "5.1.3"
+APP_VERSION = "5.1.4"
 
 IS_WINDOWS = sys.platform == "win32"
 IS_MACOS = sys.platform == "darwin"
@@ -259,6 +259,22 @@ def load_config() -> dict:
         _apply_env(cfg, ENV_STRICT)
         _config_cache = cfg
         return cfg
+
+
+def configured_proxy() -> str:
+    """
+    当前该用的代理地址。
+
+    环境变量优先（容器、命令行场景），其次 config.json 里填的那个。
+    以前这里只看环境变量，界面填的代理存进了配置却没人读，等于白填。
+    """
+    env = (os.environ.get("PS5LB_TWITCH_PROXY") or "").strip()
+    if env:
+        return env
+    try:
+        return (load_config().get("TWITCH_PROXY") or "").strip()
+    except Exception:
+        return ""
 
 
 def save_config(patch: dict | None = None) -> dict:
