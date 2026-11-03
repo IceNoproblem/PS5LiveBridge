@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import tempfile
 import threading
 import time
 
@@ -25,6 +26,40 @@ def _run_pfctl(args: list, input_str: str = None) -> tuple:
         return -1, "pfctl 超时"
     except Exception as e:
         return -1, str(e)[:120]
+
+
+def _apply_rules_as_admin(rules: str) -> tuple:
+    """
+    没 root 时：规则落盘，再用 osascript 弹系统密码框让 pfctl 加载。
+
+    为什么不走 stdin：osascript 的 do shell script 不方便喂标准输入，
+    写临时文件再读最稳。用户点取消时 osascript 返回 1。
+    """
+    tmp = os.path.join(tempfile.gettempdir(), "ps5livebridge-pf.conf")
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(rules)
+    except Exception as e:
+        return -1, "写临时规则文件失败：%s" % e
+
+    # -e 确保 pf 是启用的；已经启用时它会报 "pf already enabled"，忽略即可
+    inner = "/sbin/pfctl -e 2>/dev/null; /sbin/pfctl -f %s" % tmp
+    script = 'do shell script "%s" with administrator privileges' % inner
+    try:
+        r = subprocess.run(["osascript", "-e", script],
+                           capture_output=True, timeout=180)
+    except subprocess.TimeoutExpired:
+        return -1, "等待管理员授权超时"
+    except Exception as e:
+        return -1, "调起授权失败：%s" % e
+
+    out = (r.stdout + r.stderr).decode("utf-8", errors="replace").strip()
+    if r.returncode != 0:
+        low = out.lower()
+        if "cancel" in low or "-128" in low:
+            return 1, "用户取消了授权"
+        return r.returncode, out
+    return 0, out
 
 
 def _local_ips() -> set:
@@ -109,37 +144,50 @@ class PfPortInterceptor(object):
         return list(self._exclude)
 
     def _reload_rules(self):
-        """重新加载 pf 规则。"""
+        """重新加载 pf 规则。同样可能要走一次授权。"""
         rules = self.build_rules()
-        _run_pfctl(["-f", "-"], input_str=rules)
-        self._log("规则已更新")
+        rc, out = _run_pfctl(["-f", "-"], input_str=rules)
+        if rc != 0:
+            rc, out = _apply_rules_as_admin(rules)
+        if rc == 0:
+            self._log("规则已更新")
+        else:
+            logbus.warn("规则更新失败：%s" % (out or "未知原因"), tag="劫持")
 
     def _log(self, msg: str):
         if self.verbose:
             logbus.info(msg, tag="劫持")
 
     def available(self) -> bool:
-        """检查 pfctl 是否可用且有权限。"""
-        if not os.path.exists("/sbin/pfctl"):
-            return False
-        rc, out = _run_pfctl(["-s", "info"])
-        return rc == 0
+        """系统里有 pfctl 就算可用。
+
+        权限不在这里判断：非 root 时 pfctl -s info 也会失败，
+        但那个失败可以用系统密码框解决，不能当成「不支持」。
+        """
+        return os.path.exists("/sbin/pfctl")
 
     def start(self):
-        """加载 pf 规则，开始劫持。"""
+        """加载 pf 规则，开始劫持。没有 root 时会弹系统密码框。"""
         if self.running:
             return True, ""
         if not self.target_ip:
             return False, "没指定目标 IP"
         if not self.available():
-            return False, "pfctl 不可用（需要 root 权限）"
+            return False, "系统里找不到 pfctl，端口接管用不了"
 
         rules = self.build_rules()
         rc, out = _run_pfctl(["-f", "-"], input_str=rules)
         if rc != 0:
-            err = "pfctl 加载规则失败：%s" % out
-            logbus.error(err, tag="劫持")
-            return False, err
+            # 多半是没 root。交给系统授权框，不用让用户去开终端
+            logbus.step("端口接管需要管理员权限，正在请求授权…", tag="劫持")
+            rc, out = _apply_rules_as_admin(rules)
+            if rc != 0:
+                err = out or "授权失败"
+                if "取消" in err:
+                    logbus.warn("已取消授权，端口接管没开", tag="劫持")
+                else:
+                    logbus.error("pfctl 加载规则失败：%s" % err, tag="劫持")
+                return False, err
 
         self._rules_loaded = True
         self.running = True

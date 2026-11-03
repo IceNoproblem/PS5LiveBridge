@@ -329,7 +329,24 @@ def _is_private_ipv4(ip: str) -> bool:
 
 
 def socket_lan_ip() -> str:
-    """用 UDP 路由技巧拿默认出口 IP（不发包）。"""
+    """拿物理网卡的局域网 IP。
+
+    优先用网卡枚举：list_adapters() 会给虚拟网卡重罚，代理软件开 TUN 模式
+    时 utun 的 192.0.0.1 会排在最末，而 en0 的真实地址排第一。
+    单靠 UDP 路由技巧不行 —— 流量被 TUN 接走之后 getsockname() 拿到的是
+    隧道地址（192.0.0.1），于是界面会报「本机 IP 与网关不在同一网段」。
+    """
+    try:
+        for a in list_adapters():
+            ip = (a.get("ip") or "").strip()
+            if not ip:
+                continue
+            if ip.startswith(("127.", "169.254.", "192.0.0.", "0.")):
+                continue
+            return ip
+    except Exception:
+        pass
+
     s = None
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

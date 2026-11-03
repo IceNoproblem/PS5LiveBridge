@@ -14,10 +14,19 @@ config.json
 bili_credential.json
 路由器配置/
 *.log
+# macOS 打包轮换出来的旧目录 / HTTPS 中继自签证书
+.build-old-*/
+.dist-old-*/
+auto.crt
+auto.key
+mediamtx.yml
+# 弹幕落盘的运行产物
+danmaku/
 
 # ── 二进制：不入库（自行放入 tools/ffmpeg.exe 与 nginx-rtmp/nginx.exe）──
 tools/ffmpeg.exe
 tools/rtmf.exe
+tools/macos/
 nginx-rtmp/nginx.exe
 nginx-rtmp/logs/*
 nginx-rtmp/temp/*
@@ -44,3 +53,4 @@ ov_title.txt
 docs/screens/old/
 
 scripts/
+research/

@@ -250,6 +250,11 @@ def _bundle_problems() -> list:
     """
     if not getattr(sys, "frozen", False):
         return []
+    # macOS 打包出来是 .app 目录包，双击整个包启动，不存在「只拷了一个文件」
+    # 这种误操作；而且内部结构是 Contents/Frameworks，跟 Windows 的 _internal
+    # 完全是两套，下面这些检查套上去只会误报。
+    if sys.platform == "darwin":
+        return []
     probs = []
     internal = os.path.join(_BASE, "_internal")
     if not os.path.isdir(internal):
@@ -276,6 +281,45 @@ def _bundle_problems() -> list:
     if not rtmp_ok:
         probs.append("缺少 nginx-rtmp 文件夹（收流服务）。\n请重新解压整个压缩包。")
     return probs
+
+
+def _find_free_web_port(host: str, start: int, tries: int = 20) -> int:
+    """
+    找一个真正能用的界面端口。
+
+    不能只用 bind 判断：macOS 的「隔空播放接收器」绑的是 *:5000，
+    我们再绑 127.0.0.1:5000 会成功，但浏览器的连接被它接走，返回 403。
+    用户看到的是一片空白，而日志还会说「界面已就绪」，排查起来非常绕。
+
+    所以先真连一下：连得上就说明有人占着，继续往后找。
+    """
+    import socket
+
+    for p in range(start, start + tries):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(0.3)
+        busy = False
+        try:
+            s.connect((host, p))
+            busy = True
+        except OSError:
+            busy = False
+        finally:
+            s.close()
+        if busy:
+            continue
+
+        t = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            t.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            t.bind((host, p))
+            t.listen(1)
+            return p
+        except OSError:
+            continue
+        finally:
+            t.close()
+    return start
 
 
 def main() -> int:
@@ -355,11 +399,25 @@ def _main() -> int:
     _trace("加载核心模块")
     from core.orchestrator import Orchestrator
 
-    orch = Orchestrator()
+    # 先定端口，再建 Orchestrator：它启动时会打一行「界面端口 xxxx」的日志，
+    # 顺序反过来的话那行永远写 5000，跟实际地址对不上，排查时很误导。
     cfg = paths.load_config()
     port = args.port or int(cfg.get("WEB_PORT", 5000))
     host = str(cfg.get("WEB_HOST") or ("0.0.0.0" if headless else "127.0.0.1"))
+    # 只有 macOS 需要让端口：系统的「隔空播放接收器」常年占着 5000，
+    # 我们再绑 127.0.0.1:5000 会成功，但浏览器的连接被它接走返回 403，
+    # 界面一片空白，日志还写着「就绪」。Windows 和容器上 5000 一般没人抢，
+    # 那边保持原样，端口一点不动。
+    if paths.PLATFORM == "macos" and not args.port:
+        _wanted = port
+        port = _find_free_web_port("127.0.0.1", port)
+        if port != _wanted:
+            logbus.warn("界面端口 %d 被占用，改用 %d" % (_wanted, port), tag="界面")
+    # Orchestrator 启动时按这个变量打日志，所有平台都同步一次
+    os.environ["PS5LB_WEB_PORT"] = str(port)
     url = "http://127.0.0.1:%d/" % port
+
+    orch = Orchestrator()
     # 启动默认落在「基础信息」页：先让人看到本机到底行不行，再谈后面几步
     start_url = url + "?step=info"
 

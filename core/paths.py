@@ -8,7 +8,7 @@ import time
 
 APP_NAME = "PS5LiveBridge"
 APP_TITLE = "PS5 直播桥"
-APP_VERSION = "5.1.4"
+APP_VERSION = "5.1.4a"
 
 IS_WINDOWS = sys.platform == "win32"
 IS_MACOS = sys.platform == "darwin"
@@ -45,10 +45,34 @@ def data_dir() -> str:
 
     桌面版就是 exe 同级目录（用户能看见、能备份）；
     容器版由 PS5LB_DATA_DIR 指定（一般挂 /data），镜像本身保持只读。
+
+    macOS 的 .app 是例外：Contents/MacOS 每次重新打包都会被整目录重建，
+    配置和登录凭据放那儿等于每次升级都要重新扫码。所以冻结版改用
+    ~/Library/Application Support/PS5LiveBridge，这也是 macOS 的惯例位置。
     """
     forced = (os.environ.get("PS5LB_DATA_DIR") or "").strip()
     if forced:
         return os.path.abspath(forced)
+
+    if IS_MACOS and is_frozen():
+        import shutil
+
+        app_support = os.path.expanduser("~/Library/Application Support/PS5LiveBridge")
+        try:
+            os.makedirs(app_support, exist_ok=True)
+            # 一次性迁移：老版本把数据写在 .app 内部，升级时会连同目录一起被换掉
+            for name in ("config.json", "bili_credential.json"):
+                old = os.path.join(BASE_DIR, name)
+                new = os.path.join(app_support, name)
+                if os.path.exists(old) and not os.path.exists(new):
+                    try:
+                        shutil.copy2(old, new)
+                    except Exception:
+                        pass
+        except Exception:
+            return BASE_DIR
+        return app_support
+
     return BASE_DIR
 
 
@@ -78,6 +102,9 @@ def caps() -> dict:
     return {
         "platform": PLATFORM,
         "divert": IS_WINDOWS or IS_MACOS,
+        # macOS 的 pfctl 要 root（会弹系统密码框），Windows 的 WinDivert 装完驱动就不用再提权。
+        # 界面据此决定方案三要不要额外提示「会请求管理员权限」。
+        "divert_needs_auth": IS_MACOS,
         "ps5_net_step": IS_WINDOWS or IS_MACOS,
         "builtin_dns": (not docker) or allow_dns,
         "gui": not docker,

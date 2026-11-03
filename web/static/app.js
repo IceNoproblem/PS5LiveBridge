@@ -56,7 +56,14 @@ function fmtDur(sec) {
 function applyCaps(st) {
   if (!st || !st.caps) return;
   CAPS = st.caps;
-  if (!isDocker()) return;
+  if (!isDocker()) {
+    // macOS 专属调整：只在 macos 生效，Windows 走原有路径完全不动。
+    // 包一层 try：界面适配出问题不能连累 boot() 后面的 goStep，否则整个页面空白。
+    if (CAPS.platform === 'macos') {
+      try { applyMacCaps(st); } catch (e) { console.warn('macOS 界面适配失败', e); }
+    }
+    return;
+  }
 
   const setHtml = (id, html) => { const el = $(id); if (el) el.innerHTML = html; };
   const show = (id, on) => { const el = $(id); if (el) el.style.display = on ? '' : 'none'; };
@@ -85,6 +92,29 @@ function applyCaps(st) {
   show('btn-quit', false);
   if ($('s3-docker-ip')) $('s3-docker-ip').textContent = st.lan_ip || '—';
   setHtml('nav-3-label', '网络配置<small>PS5 保持自动</small>');
+}
+
+
+// macOS 专属界面调整。只在 CAPS.platform === 'macos' 时调用，
+// Windows 和容器走的还是原来那套，一个字都不改。
+function applyMacCaps(st) {
+  const setHtml = (id, html) => { const el = $(id); if (el) el.innerHTML = html; };
+  const show = (id, on) => { const el = $(id); if (el) el.style.display = on ? '' : 'none'; };
+
+  // 方案三的说明文字由模板按 platform 渲染（见 wizard.html 的 s1-divert-desc），
+  // 这里只处理前端才需要动的东西
+
+  // macOS 的收流端固定是 MediaMTX，没有 nginx / rtmf 可选
+  show('impl-block', false);
+
+  // 嗅探靠 pydivert（WinDivert 的 Python 绑定），只有 Windows 有。
+  // macOS 上这个按钮一点就报「缺少 pydivert 组件」，而且也没必要：
+  // MediaMTX 的 /v3/paths/list 直接就能看出有没有流、是谁在推。
+  show('sniff-block', false);
+
+  // 方案一的提示：macOS 版没有远程改路由器的账号密码框时也能手动改
+  const btn = $('s1-btn-bridge');
+  if (btn && CAPS.divert) btn.textContent = '开启流量接管（会请求一次密码）';
 }
 
 
@@ -525,7 +555,7 @@ function applyState(st) {
     const ps5On = !!ps5.publishing;
     $('m-ps5').className = 'v ' + (ps5On ? 'ok' : 'warn');
     $('m-ps5').innerHTML = ps5On
-      ? `已连<br><small>${ps5.width || 0}×${ps5.height || 0} ${ps5.fps || 0}fps ${ps5.bw_in || 0}kbps</small>`
+      ? `已连<br><small>${ps5.width || 0}×${ps5.height || 0}${ps5.fps ? ' ' + ps5.fps + 'fps' : ''} ${ps5.bw_in || 0}kbps</small>`
       : '未连';
 
     const pushing = live.state === 'live' || live.state === 'relaying';
@@ -537,7 +567,10 @@ function applyState(st) {
         : (live.state === 'face_verify' ? '待验证'
         : (outs.push_bili ? '等待 PS5' : '已关闭')));
 
-    const engine = st.rtmp_impl === 'rtmpf' ? 'rtmp-forwarder' : 'nginx + ffmpeg';
+    // macOS 固定是 MediaMTX，不能按 rtmp_impl 推，那个字段只在 Windows/容器有意义
+    const engine = CAPS.platform === 'macos'
+      ? 'MediaMTX + ffmpeg'
+      : (st.rtmp_impl === 'rtmpf' ? 'rtmp-forwarder' : 'nginx + ffmpeg');
     $('m-relay').className = 'v ' + (pushing ? 'ok' : '');
     $('m-relay').innerHTML = pushing
       ? `${engine}<br><small>原样转发</small>`
@@ -707,8 +740,9 @@ async function loadDiag(force) {
 
     const proc = String(rtmp.process || '').toLowerCase();
     const named = proc !== '';
-    // 收流端可能是 nginx，也可能是 rtmp-forwarder（进程名 rtmf.exe）
-    const isOwn = /nginx|rtmf|rtmpf|rtmp-forwarder/.test(proc);
+    // 收流端可能是 nginx、rtmp-forwarder（进程名 rtmf.exe），或者 macOS 上的 mediamtx。
+    // 少写一个就会把「自己的服务在跑」误报成「端口被别人占了」。
+    const isOwn = /nginx|rtmf|rtmpf|rtmp-forwarder|mediamtx/.test(proc);
     const ok = nginxOn && (!named || isOwn);
     const label = ok
       ? '监听中'
@@ -747,7 +781,9 @@ async function loadDiag(force) {
     const rows3 = [];
     rows3.push(['转发进程', rly.running ? '运行中' : '未运行',
       rly.running ? 'ok' : '']);
-    rows3.push(['推流方式', rly.impl === 'rtmpf' ? 'rtmp-forwarder' : 'nginx+ffmpeg', '']);
+    rows3.push(['推流方式', CAPS.platform === 'macos'
+      ? 'MediaMTX + ffmpeg'
+      : (rly.impl === 'rtmpf' ? 'rtmp-forwarder' : 'nginx+ffmpeg'), '']);
     if (rly.bitrate) rows3.push(['目标码率', rly.bitrate, '']);
     if (rly.restarts) rows3.push(['重启次数', rly.restarts + ' 次',
       rly.restarts > 3 ? 'warn' : '']);
@@ -1876,7 +1912,17 @@ async function doUpdate() {
   S.state = st;
 
 
-  applyCaps(st);
+  // 界面适配失败不能连累后面的 goStep，否则整页空白，还看不出为什么。
+  // 出错就把原因贴到页面顶部，截图和远程排障都能直接看到。
+  try {
+    applyCaps(st);
+  } catch (e) {
+    console.error('applyCaps 失败', e);
+    document.body.insertAdjacentHTML('afterbegin',
+      '<pre id="boot-err" style="color:#f66;background:#2a0000;padding:12px;'
+      + 'font-size:13px;white-space:pre-wrap;margin:0">applyCaps 出错：'
+      + (e && e.message ? e.message : e) + '</pre>');
+  }
 
 
   const q = new URLSearchParams(location.search);

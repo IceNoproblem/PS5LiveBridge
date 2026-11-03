@@ -183,6 +183,11 @@ class Relay(object):
                                           "unable", "invalid")):
                     self.last_error = line[:200]
                     logbus.warn("转发告警：%s" % line[:200], tag="转发")
+                elif ("bitrate=" in low or "time=" in low) and self.last_error:
+                    # ffmpeg 自己重连成功后会继续打进度行。这时候那条
+                    # "Input/output error" 已经是过去式了，不清掉的话
+                    # 界面会一直挂着红色报错，看着像还没恢复。
+                    self.last_error = ""
         except Exception:
             pass
 

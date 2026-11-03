@@ -26,7 +26,8 @@ def create_app(orch, on_exit=None) -> Flask:
 
     @app.get("/")
     def index():
-        return render_template("wizard.html")
+        # 把平台能力传给模板，部分文案在服务端就定下来，不依赖前端 JS 时序
+        return render_template("wizard.html", caps=paths.caps())
 
     @app.get("/favicon.ico")
     def favicon():

@@ -7,6 +7,7 @@ import time
 from collections import deque
 
 from . import bili as bilimod
+from . import mtx
 from . import rtmf
 from . import (config_store, danmaku_history, danmaku_throttle, divert,
                dnscheck, dnsserver, eventbus, ffmpeg_mgr, logbus, netutil,
@@ -32,7 +33,12 @@ class Orchestrator(object):
         _impl = (os.environ.get("PS5LB_RTMP_IMPL")
                  or self.cfg.get("RTMP_IMPL") or "nginx").strip().lower()
         _rtmp_port = int(self.cfg.get("RTMP_PORT", 1935))
-        if _impl in ("rtmpf", "rtmp-forwarder", "rtmp_forwarder"):
+        if paths.PLATFORM == "macos":
+            # macOS 上 rtmf 和 nginx 都没有现成的 macOS 二进制，
+            # 换 MediaMTX 当收流端。它只收不转发，转发仍走 relay 的 ffmpeg。
+            self.nginx = mtx.MediaMtxManager(rtmp_port=_rtmp_port)
+            self.native_relay = False
+        elif _impl in ("rtmpf", "rtmp-forwarder", "rtmp_forwarder"):
             self.nginx = rtmf.RtmpForwarderManager(rtmp_port=_rtmp_port)
             self.native_relay = True
         else:
@@ -106,7 +112,10 @@ class Orchestrator(object):
         if self.bili.logged_in:
             threading.Thread(target=self._verify_login_bg, daemon=True).start()
 
-        if paths.caps()["divert"] and self.cfg.get("HIJACK_MODE", "divert") == "divert":
+        # macOS 上不自动恢复 divert：pfctl 要弹系统密码框，一启动就弹会让人莫名其妙。
+        # 那边等用户自己点「开启流量接管」，点的时候再授权。
+        if (paths.caps()["divert"] and not paths.IS_MACOS
+                and self.cfg.get("HIJACK_MODE", "divert") == "divert"):
             threading.Thread(target=self._auto_enable_divert, daemon=True).start()
 
         self._monitor = threading.Thread(target=self._monitor_loop, name="orchestrator", daemon=True)
@@ -458,11 +467,12 @@ class Orchestrator(object):
         if self.divert and self.divert.running:
             return {"ok": True, "detail": "端口劫持已在运行", **self.divert.snapshot()}
 
-        if not netutil.is_admin():
-            if paths.IS_MACOS:
-                detail = "没有管理员权限，流量接管开不了。请在终端用 sudo 启动：sudo /path/to/PS5LiveBridge"
-            else:
-                detail = "没有管理员权限，流量接管开不了。右键程序 → 以管理员身份运行。"
+        # macOS 不能在这里卡权限：pfctl 那一步会自己弹系统密码框（见 divert_macos
+        # 的 _apply_rules_as_admin），程序本身就该以普通用户跑。提前 return 的话
+        # 方案三永远打不开，用户还会被提示去终端敲 sudo。
+        # Windows 的 WinDivert 必须整个进程提权，那边还是提前拦住。
+        if not paths.IS_MACOS and not netutil.is_admin():
+            detail = "没有管理员权限，流量接管开不了。右键程序 → 以管理员身份运行。"
             self.hijack_error = detail
             logbus.error(detail, tag="劫持")
             return {"ok": False, "detail": detail}

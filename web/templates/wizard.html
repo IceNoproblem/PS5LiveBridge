@@ -304,11 +304,19 @@
 
         <div id="mode-divert" style="display:none">
           <h3>方案三 · 开流量接管</h3>
-          <p class="small dim" style="margin-top:-4px">
+          <p class="small dim" style="margin-top:-4px" id="s1-divert-desc">
+            {% if caps and caps.platform == 'macos' %}
+            在本机网络栈加一条 pf 规则，把 PS5 的推流导向本机，不碰路由器、也不改 DNS。
+            <b>开启时会弹出一次系统密码框</b>，这是 macOS 对所有系统级网络配置的强制要求，
+            输一次就好，不用去「系统设置」里翻任何开关。<br>
+            前提是加速器装在<b>这台电脑</b>上，PS5 的流量真的经过本机 ——
+            如果是路由器版加速器，选方案一或方案二，那两个全程不需要任何授权。
+            {% else %}
             在本机网卡层直接拦下 PS5 的推流，不碰路由器、也不改 DNS。
             <b>需要以管理员身份运行</b>，否则驱动加载不起来。<br>
             前提是加速器装在<b>这台电脑</b>上，PS5 的流量真的经过本机 ——
             如果是路由器版加速器，选方案一或方案二。
+            {% endif %}
           </p>
           <div class="flexline">
             <button class="btn primary" id="s1-btn-bridge" onclick="toggleBridge()">开启流量接管</button>
@@ -566,6 +574,19 @@
           PS5 点「开始直播」，选 Twitch。推流起来后这边自动开 B 站并转发，电脑上不用点按钮。
         </p>
 
+        {% if caps and caps.platform == 'macos' %}
+        <div id="impl-block">
+          <h3>收流实现</h3>
+          <div class="impl-row">
+            <span class="impl-label">用哪个</span>
+            <span class="mono" style="font-size:15px">MediaMTX + ffmpeg</span>
+          </div>
+          <p class="small dim" style="margin:2px 0 10px">
+            macOS 版固定用这个组合：<b>MediaMTX</b> 负责接住 PS5 的推流，
+            <b>ffmpeg</b> 把它原样转到 B 站。不用选，也没得选。
+          </p>
+        </div>
+        {% else %}
         <div id="impl-block">
           <h3>收流实现</h3>
           <div class="impl-row">
@@ -580,6 +601,7 @@
             默认选中的那个就行，<b>不用动</b>。只有收流反复失败（诊断页提示换一种）时才需要切。
           </p>
         </div>
+        {% endif %}
         <h3>画面怎么用</h3>
         <div class="swcol">
           <label class="sw">
@@ -902,7 +924,7 @@
           <button class="btn sm" onclick="loadDiag(1)">重新自检</button>
         </div>
         <p class="card-sub">
-          先看这台机器够不够格跑。下面是系统自检结果，左边是检查项，右边是当前状态。
+          本机相关服务、接口、端口、全面自检
         </p>
 
         <div class="diagbar" id="diag-verdict">还没采集</div>

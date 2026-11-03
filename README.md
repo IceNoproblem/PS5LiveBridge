@@ -1,4 +1,4 @@
-# PS5 直播桥 v5.1.4
+# PS5 直播桥 v5.1.4a
 
 <p align="center">
   <img src="docs/screens/00-overview.jpg" width="920" alt="PS5 直播桥界面">
@@ -12,16 +12,17 @@
 把 PS5 的原生直播画面转到 B 站，B 站弹幕再送回 PS5 画面。
 不破解、不装采集卡，全程在网络层解决。
 
-本来原来的也能用，但是很多人弄不明白那个 DNS 劫持，索性用分步引导的方式重做了一个 Windows 版 —— 毕竟会弄容器的还是少数，所以这个项目以后以 Win 版为主，容器版同步升级。
+本来原来的也能用，但是很多人弄不明白那个 DNS 劫持，索性用分步引导的方式重做了一个桌面版，Windows 和 Mac 都有。会弄容器的还是少数，所以以桌面版为主，容器版同步升级。
 
 两种跑法，功能一样，选一个：
 
 | | 适合 | 加速器装在哪 |
 |---|---|---|
 | **Windows 桌面版** | 手边有一台常开的 Windows 电脑 | 路由器上、电脑上，都行 |
+| **Mac 桌面版** | 手边是一台 Apple 芯片的 Mac，macOS 13 以上 | 路由器上、电脑上，都行 |
 | **容器版** | 有 NAS / 常年开机的 Linux 机器 | 必须装在路由器上 |
 
-桌面版成品在 [Releases](https://github.com/IceNoproblem/PS5LiveBridge/releases) 下载，解压即用。
+桌面版成品在 [Releases](https://github.com/IceNoproblem/PS5LiveBridge/releases) 下载，解压即用。Windows 是 zip，Mac 是 dmg，拖进「应用程序」就行。
 容器版有现成镜像 `icenoproblem/ps5livebridge`（[Docker Hub](https://hub.docker.com/r/icenoproblem/ps5livebridge) / GHCR 同步发布），也可以自己构建，见[容器版部署](#容器版)。
 
 | 第 1 步 · 选你的情况 | 第 2 步 · 检测 |
@@ -32,7 +33,7 @@
 |---|---|
 | ![](docs/screens/03-扫码登录.png) | ![](docs/screens/04-开播.png) |
 
-截图是 Windows 桌面版实际跑的界面。容器版界面一样，只是没有三选一那一屏 —— 它只有「改路由器」一条路。
+截图是 Windows 桌面版实际跑的界面。Mac 版和容器版界面一样，只是某些项不一样：容器版没有三选一那一屏，它只有「改路由器」一条路；Mac 版三种方案都在，收流用 MediaMTX + ffmpeg，方案三第一次点开会弹一次系统密码框。
 
 ---
 
@@ -88,9 +89,17 @@ dnsmasq 那套（OpenWrt / 梅林）支持后缀匹配，所以那种写法保�
 
 ### 方案三 · 路由器和 hosts 都动不了
 
-那就把加速器装到电脑上，走端口级接管 —— 在本机直接拦 PS5 的推流连接，不碰路由器、也不改 DNS。
+那就把加速器装到电脑上，走端口级接管。在本机直接拦 PS5 的推流连接，不碰路由器，也不改 DNS。
 
-要管理员权限。
+要管理员权限。Windows 上第一次启动就要，Mac 上是点到方案三的时候弹一次系统密码框。
+
+## v5.1.4a 改了什么
+
+加了 Mac 版，Apple 芯片的机器能直接跑了，dmg 拖进「应用程序」就行。界面跟 Windows 一样，三种方案都能用。
+
+Mac 上收流没法用 rtmf，也没法塞 nginx，换成 MediaMTX，一个单文件的小服务，转给 ffmpeg 再接 B 站。
+
+顺手把几处文案捋了一遍。有些话说得含糊，改成了人话。
 
 ## v5.1.4 改了什么
 
@@ -215,11 +224,27 @@ dnsmasq 那套（OpenWrt / 梅林）支持后缀匹配，所以那种写法保�
 
 ## 桌面版
 
-下载对应系统的压缩包，解压，双击 `PS5LiveBridge.exe`。
+### Windows
+
+下载 zip，解压，双击 `PS5LiveBridge.exe`。
 
 第一次启动会要管理员权限（要绑 53、1935、6667，还要动防火墙），点「是」。
 
 数据都在程序同目录（`config.json`、`logs/`、`data/`），整个文件夹拷走就能换机器，删掉就是卸载。
+
+### Mac
+
+下载 dmg，双击，把 `PS5LiveBridge` 拖进「应用程序」。
+
+没做公证签名，第一次打开会被系统拦。去「系统设置 → 隐私与安全性」，页面往下拉，点「仍要打开」，之后就不再问了。命令行的一步到位办法：
+
+```bash
+xattr -dr com.apple.quarantine /Applications/PS5LiveBridge.app
+```
+
+配置不在程序包里，在 `~/Library/Application Support/PS5LiveBridge`。重装程序不会丢配置，想彻底清干净就删这个目录。
+
+界面默认开在 `http://127.0.0.1:5000`。要是 5000 被别的程序占了（macOS 的隔空播放接收器常年霸着它），程序会自动往后找第一个能用的端口，启动日志里能看到实际地址。
 
 ## 容器版
 
