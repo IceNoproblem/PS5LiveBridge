@@ -13,7 +13,7 @@ from werkzeug.exceptions import HTTPException
 from core import logbus, netutil, paths
 
 
-def create_app(orch, on_exit=None) -> Flask:
+def create_app(orch, on_exit=None, on_restart=None) -> Flask:
     app = Flask(
         __name__,
         template_folder=paths.resource_path("web", "templates"),
@@ -270,6 +270,23 @@ def create_app(orch, on_exit=None) -> Flask:
         threading.Thread(target=_bye, daemon=True).start()
         return jsonify({"ok": True})
 
+    @app.post("/api/restart")
+    def api_restart():
+        """退出前拉起一份新的。延迟由 main 那边控制，等本进程放掉端口和锁。"""
+        if not on_restart:
+            return jsonify({"ok": False, "msg": "当前模式不支持重启"})
+        def _again():
+            try:
+                orch.shutdown()
+            except Exception:
+                pass
+            try:
+                on_restart()
+            except Exception as e:
+                logbus.error("重启失败：%s" % e)
+        threading.Thread(target=_again, daemon=True).start()
+        return jsonify({"ok": True})
+
     @app.post("/api/hide")
     def api_hide():
         return jsonify({"ok": False, "msg": "浏览器模式无法隐藏窗口，直接关掉窗口即可"})
@@ -347,12 +364,16 @@ def create_app(orch, on_exit=None) -> Flask:
         # 容器版没有 rtmf 二进制（镜像里只装了 nginx + libnginx-mod-rtmp），选了收流必失败
         if impl == "rtmpf" and paths.PLATFORM == "docker":
             return jsonify({"ok": False, "error": "容器版只能用 nginx"}), 400
-        orch.cfg = paths.save_config({"RTMP_IMPL": impl})
-        active = "rtmpf" if getattr(orch, "native_relay", False) else "nginx"
-        logbus.info("收流实现已设为 %s（%s）"
-                    % (impl, "重启后生效" if impl != active else "当前已生效"),
-                    tag="收流")
-        return jsonify({"ok": True, "impl": impl, "need_restart": impl != active})
+        # 空闲时直接重建收流端，切完就生效；正在直播才留给下次启动
+        r = orch.switch_rtmp_impl(impl)
+        if not r.get("ok") and r.get("error"):
+            return jsonify(r), 400
+        if r.get("ok") and not r.get("need_restart"):
+            logbus.info("收流实现已设为 %s（已生效）" % impl, tag="收流")
+        elif r.get("need_restart"):
+            logbus.info("收流实现已设为 %s（%s）"
+                        % (impl, r.get("detail") or "重启后生效"), tag="收流")
+        return jsonify(r)
 
     @app.get("/api/diag")
     def api_diag():
@@ -511,9 +532,10 @@ def create_app(orch, on_exit=None) -> Flask:
     return app
 
 
-def serve(orch, host: str = "127.0.0.1", port: int = 5000, on_exit=None) -> None:
+def serve(orch, host: str = "127.0.0.1", port: int = 5000, on_exit=None,
+          on_restart=None) -> None:
     """阻塞运行。Flask 自带的 werkzeug 开发服务器对本场景够用且无额外依赖。"""
-    app = create_app(orch, on_exit=on_exit)
+    app = create_app(orch, on_exit=on_exit, on_restart=on_restart)
     import logging
     log = logging.getLogger("werkzeug")
     log.setLevel(logging.ERROR)

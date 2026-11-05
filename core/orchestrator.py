@@ -445,7 +445,8 @@ class Orchestrator(object):
             self.dns = None
             self._stop_https_relay()
             logbus.info("内置 DNS 已停止", tag="DNS")
-        self.cfg = paths.save_config({"DNS_MODE": "router"})
+        self.cfg = paths.save_config({"DNS_MODE": "router",
+                                      "HIJACK_MODE": "router"})
         return {"ok": True}
 
     def _divert_target(self) -> str:
@@ -515,7 +516,9 @@ class Orchestrator(object):
         if self.divert:
             self.divert.stop()
             self.divert = None
-            logbus.info("端口劫持已停止（正在进行的推流不受影响）", tag="劫持")
+            logbus.info("端口劫持已停止，正在走的连接会断", tag="劫持")
+        # 顺手把方案标记退回去，否则下次启动还会按 divert 自动开回来
+        self.cfg = paths.save_config({"HIJACK_MODE": "router"})
         return {"ok": True}
 
     def divert_status(self) -> dict:
@@ -1795,3 +1798,75 @@ class Orchestrator(object):
             return {"ok": True, "detail": "收流服务已在运行"}
         ok = self.nginx.start()
         return {"ok": ok, "detail": self.nginx.last_error or "收流服务已启动"}
+
+    def switch_rtmp_impl(self, impl: str) -> dict:
+        """热切换收流实现，切完立刻生效，不用退出程序。
+
+        以前只写配置，要用户退出再手动双击，多一道没必要的操作。
+        正在直播时不动，避免把当前这路流打断，那种情况留到下次启动生效。
+        """
+        impl = (impl or "").strip().lower()
+        if impl not in ("nginx", "rtmpf"):
+            return {"ok": False, "detail": "只能是 nginx 或 rtmpf"}
+        # macOS 只有 MediaMTX + ffmpeg 这一条路，rtmf/nginx 都没有对应二进制，不让切
+        if paths.PLATFORM == "macos":
+            return {"ok": False, "detail": "macOS 版固定用 MediaMTX 收流，没有可切换的实现"}
+        cur = "rtmpf" if getattr(self, "native_relay", False) else "nginx"
+        self.cfg = paths.save_config({"RTMP_IMPL": impl})
+        if impl == cur:
+            return {"ok": True, "impl": impl, "active": cur,
+                    "need_restart": False, "detail": "当前已经在用这个"}
+        with self.lock:
+            state = str((self.live or {}).get("state") or "idle")
+        if state != "idle":
+            return {"ok": True, "impl": impl, "active": cur, "need_restart": True,
+                    "detail": "现在正在直播，切换会在下次启动生效"}
+
+        _rtmp_port = int(self.cfg.get("RTMP_PORT", 1935))
+        old = self.nginx
+        prev_native = bool(getattr(self, "native_relay", False))
+        prev_impl = "rtmpf" if prev_native else "nginx"
+        try:
+            old.stop()
+        except Exception:
+            pass
+        if impl == "rtmpf":
+            self.nginx = rtmf.RtmpForwarderManager(rtmp_port=_rtmp_port)
+            self.native_relay = True
+        else:
+            self.nginx = nginxmgr.NginxManager(
+                rtmp_port=_rtmp_port,
+                stat_port=int(os.environ.get("PS5LB_STAT_PORT", "8099")),
+            )
+            self.native_relay = False
+        # 旧对象先挂着，别在这里析构。它内部的 Popen 一旦在请求线程里被回收，
+        # 某些 Python 版本会在 Popen.__del__ 里递归到爆栈，把整个进程带走。
+        retired = getattr(self, "_retired_nginx", None)
+        if retired is None:
+            retired = self._retired_nginx = []
+        retired.append(old)
+        ok = False
+        try:
+            ok = bool(self.nginx.start())
+        except Exception as e:
+            self.nginx.last_error = "切换失败：%s" % e
+        if not ok:
+            # 起不来就退回原来那个，别让界面显示成已经切过去了
+            new_err = getattr(self.nginx, "last_error", "") or "切换失败"
+            retired.append(self.nginx)   # 失败的那个也留着，别让它在这里析构
+            self.nginx = old
+            self.native_relay = prev_native
+            self.cfg = paths.save_config({"RTMP_IMPL": prev_impl})
+            try:
+                old.start()
+            except Exception:
+                pass
+            logbus.error("收流切到 %s 失败：%s，已退回 %s"
+                         % (impl, new_err, prev_impl), tag="收流")
+            return {"ok": False, "impl": prev_impl, "active": prev_impl,
+                    "need_restart": False,
+                    "detail": "切换失败（%s），已退回 %s" % (new_err, prev_impl)}
+        logbus.ok("收流已切到 %s，不用重启程序" % impl, tag="收流")
+        return {"ok": True, "impl": impl,
+                "active": "rtmpf" if getattr(self, "native_relay", False) else "nginx",
+                "need_restart": False, "detail": ""}

@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import io
 import os
+import shlex
+import subprocess
 import sys
 import threading
 import time
@@ -28,6 +30,35 @@ def _base_dir() -> str:
 _BASE = _base_dir()
 _TRACE_FILE = os.path.join(_BASE, "启动轨迹.txt")
 _CRASH_FILE = os.path.join(_BASE, "崩溃日志.txt")
+
+# 重启时拉起的进程句柄，留着不析构
+_KEEP_PROCS = []
+
+
+def _spawn_restart(delay: int = 3) -> None:
+    """拉起一份新的自己，延迟几秒等当前进程放掉端口和单实例锁。
+
+    Windows 上必须带 CREATE_BREAKAWAY_FROM_JOB：主程序挂在「关闭即杀」的
+    Job 对象里，不脱离的话新进程会跟着一起被系统收掉，重启永远失败。
+    """
+    if getattr(sys, "frozen", False):
+        target = [sys.executable] + list(sys.argv[1:])
+    else:
+        target = [sys.executable, os.path.abspath(sys.argv[0])] + list(sys.argv[1:])
+
+    if os.name == "nt":
+        inner = " ".join('"%s"' % a for a in target)
+        flags = 0x01000000 | 0x08000000  # CREATE_BREAKAWAY_FROM_JOB | CREATE_NO_WINDOW
+        proc = subprocess.Popen(
+            ["cmd", "/c", "timeout /t %d /nobreak >nul & %s" % (delay, inner)],
+            creationflags=flags, close_fds=True)
+    else:
+        inner = " ".join(shlex.quote(a) for a in target)
+        proc = subprocess.Popen(["sh", "-c", "sleep %d; exec %s" % (delay, inner)],
+                                start_new_session=True,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # 留个引用，别让它在函数返回时析构（某些 Python 版本 Popen.__del__ 会爆栈）
+    _KEEP_PROCS.append(proc)
 
 
 def _trace(msg: str) -> None:
@@ -445,6 +476,19 @@ def _main() -> int:
     from core.shutdown import shutdown_mgr
     shutdown_mgr.register("直播收尾（关播 + 停转发 + 停服务）", orch.shutdown, priority=0)
 
+    def request_restart():
+        """重启：先排一份新的（延迟 3 秒），再收尾退出当前这份。"""
+        logbus.info("正在重启，3 秒后自动开回来")
+        try:
+            _spawn_restart(3)
+        except Exception as e:
+            logbus.error("拉起新进程失败：%s，请手动双击程序" % e)
+        try:
+            shutdown_mgr.shutdown(reason="重启")
+        except Exception:
+            pass
+        stop_event.set()
+
     def _on_signal(signum, _frame):
         logbus.info("收到退出信号（%d），正在收尾" % signum)
         shutdown_mgr.shutdown(reason="信号 %d" % signum)
@@ -460,7 +504,7 @@ def _main() -> int:
     web_thread = threading.Thread(
         target=webserver.serve,
         args=(orch, host, port),
-        kwargs={"on_exit": request_exit},
+        kwargs={"on_exit": request_exit, "on_restart": request_restart},
         name="web", daemon=True)
     web_thread.start()
 

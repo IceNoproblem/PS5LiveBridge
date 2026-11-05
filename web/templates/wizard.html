@@ -55,6 +55,7 @@
       GitHub
     </a>
     <button class="btn sm" onclick="toggleLogPanel()">日志</button>
+    <button class="btn sm ghost" id="btn-restart" onclick="restartApp()">重启</button>
     <button class="btn sm ghost" id="btn-quit" onclick="quitApp()">退出</button>
   </div>
 </div>
@@ -219,6 +220,10 @@
             只动推流域名，PS5 上网、PSN、联机对战都不受影响。
             这条路配一次就长期有效，PS5 重启也不丢。
           </p>
+          <div class="note">
+            选这一条，本机会把<b>端口接管</b>和<b>内置 DNS</b>都关掉：方案一靠路由器转发，
+            本机不用再拦包。所以路由器里的这几个域名必须真的生效，本机不再兜底。
+          </div>
           <div class="tabs" id="router-tabs"></div>
           <div id="router-body"></div>
 
@@ -552,17 +557,17 @@
       <details class="note warn accel-warn" id="accel-warn" style="display:none">
         <summary>开播前必须按这个顺序操作（点开看步骤）</summary>
         <ol class="accel-steps">
-          <li><b>关掉路由器上的加速器</b>（路由器上没装加速器就跳过这一步）——
-              它会接管 DNS，把推流地址解析成公网 IP，这个软件就收不到 PS5 的画面了</li>
+          <li><b>加速器保持开着</b>。它负责让 PS5 连得上 Twitch，关掉的话 PS5 连推流地址都
+              解析不出来，根本开不了播。它跟这个软件不冲突</li>
           <li>在 <b>PS5 → 设置 → 网络</b> 里<b>断开网络连接</b></li>
           <li>确认 PS5 的网络设置符合<b>第 3 步</b>的要求
               （IP / 子网掩码 / 网关 / DNS 四个数）</li>
-          <li>改完设置之后<b>重新连接一次网络</b>——PS5 不会自动重连，
-              不重连的话新 DNS 不生效</li>
+          <li>改完设置之后<b>重新连接一次网络</b>，PS5 不会自动重连，
+              不重连的话新设置不生效</li>
           <li>打开游戏，<b>开始直播</b></li>
-          <li>确认这边画面通了之后，<b>再把路由器的加速器打开</b></li>
         </ol>
-        <div class="accel-tip">加速器最后再开——它只负责游戏联机的加速，不影响已经建好的推流。</div>
+        <div class="accel-tip">两件事分工不同：加速器管“让 PS5 连得上 Twitch”，这个软件管“把推流接过来”。
+          万一开播后这边一直收不到画面，再临时关掉加速器单独排查一次。</div>
       </details>
 
       <div class="card">
@@ -585,6 +590,11 @@
             macOS 版固定用这个组合：<b>MediaMTX</b> 负责接住 PS5 的推流，
             <b>ffmpeg</b> 把它原样转到 B 站。不用选，也没得选。
           </p>
+          <div class="note warn">
+            <b>开播时 PS5 报「有其他设备正在向这个频道播放」？</b><br>
+            macOS 上没有第二种收流实现可换。先点右上角「重启」把程序重开一次，
+            再让 PS5 重新开播。还不行就导一份诊断包。
+          </div>
         </div>
         {% else %}
         <div id="impl-block">
@@ -598,8 +608,13 @@
             <span class="impl-hint" id="impl-hint"></span>
           </div>
           <p class="small dim" style="margin:2px 0 10px">
-            默认选中的那个就行，<b>不用动</b>。只有收流反复失败（诊断页提示换一种）时才需要切。
+            默认选中的那个就行，<b>不用动</b>。换一个会立刻生效，不用重启程序。
           </p>
+          <div class="note warn">
+            <b>开播时 PS5 报「有其他设备正在向这个频道播放」？</b><br>
+            把这里换成另一个收流实现，再开一次试试，多数情况换过去就好了。<br>
+            正在直播的时候切换，要等下次启动才生效，右上角有「重启」可以直接重开。
+          </div>
         </div>
         {% endif %}
         <h3>画面怎么用</h3>
@@ -720,7 +735,8 @@
               <ol>
                 <li>按第 3 步的要求检查 PS5 的网络设置（IP / 子网掩码 / 网关 / DNS 四个数）</li>
                 <li>改完设置后 <b>重新连接一次网络</b>（PS5 不会自动重连）</li>
-                <li>开播前先<b>关掉路由器上的加速器</b>，画面通了之后再开</li>
+                <li>加速器先保持开着。它能正常开播就别动它，关掉加速器 PS5 反而连不上 Twitch</li>
+                <li>万一一直开不了，再临时关掉加速器试一次，用来判断是不是它的问题</li>
               </ol>
             </div>
           </details>
@@ -729,11 +745,13 @@
             <summary><b>⑤ 开了加速器之后画面没了</b></summary>
             <div class="faq-body">
               <p><b>你会看到：</b>本来好好的，一开游戏加速器直播就断了。</p>
-              <p><b>为什么：</b>加速器会改 DNS，把推流地址指向公网，这台电脑就收不到 PS5 的画面了。</p>
+              <p><b>为什么：</b>个别加速器会改 DNS，把推流地址指回公网，这台电脑就收不到 PS5 的画面了。
+                大多数装在路由器上的插件式加速器不会动 hosts，不受影响。</p>
               <p><b>怎么办：</b></p>
               <ol>
-                <li><b>顺序很重要：</b>先关加速器 → PS5 断网重连 → 开播 → 画面通了 → 再开加速器</li>
-                <li>加速器只负责游戏联机加速，最后开不影响已经建好的推流</li>
+                <li>先确认是不是它引起的：临时关掉加速器，PS5 断网重连，再开播看画面能不能通</li>
+                <li>如果关掉就正常、开着就断，那这台加速器确实改 DNS，开播时先关掉它，画面通了再开</li>
+                <li>如果关掉也一样收不到，问题不在加速器，回去看第 3 步的 PS5 网络设置</li>
               </ol>
             </div>
           </details>
@@ -794,7 +812,7 @@
                 <li>确认本机的「内置 DNS」是运行中（不是应开未开）</li>
                 <li>去 PS5 上检查网络设置里的 DNS，必须是本案电脑的 IP（第 3 步会让你抄的那四个数）</li>
                 <li>改完 <b>在 PS5 上重新连接一次网络</b>，再点开始直播</li>
-                <li>如果开了游戏加速器，先关掉它再试</li>
+                <li>如果一直不行，临时关掉游戏加速器试一次，排除它把 DNS 抢走的可能</li>
                 <li>还不行就重启 PS5 的网络，让它重新走一次 DNS 解析</li>
               </ol>
             </div>

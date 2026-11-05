@@ -144,6 +144,9 @@ def add_kill_on_close_job() -> bool:
                         ("PeakJobMemoryUsed", ctypes.c_size_t)]
 
         JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
+        # 允许「重启」时新进程带着 CREATE_BREAKAWAY_FROM_JOB 脱离这个 Job，
+        # 否则主程序一退出，刚拉起来的新进程会被一起收掉，重启永远失败。
+        JOB_OBJECT_LIMIT_BREAKAWAY_OK = 0x0800
         extended_limit_information = 9
 
         kernel32.CreateJobObjectW.restype = wintypes.HANDLE
@@ -160,7 +163,8 @@ def add_kill_on_close_job() -> bool:
         if not job:
             return False
         info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
-        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        info.BasicLimitInformation.LimitFlags = (JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+                                                 | JOB_OBJECT_LIMIT_BREAKAWAY_OK)
         ok = kernel32.SetInformationJobObject(
             job, extended_limit_information, ctypes.byref(info), ctypes.sizeof(info))
         if not ok:

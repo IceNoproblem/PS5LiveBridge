@@ -303,12 +303,15 @@ function applyState(st) {
   const dnsMode = st.dns_mode || 'router';
   {
     const w = $('accel-warn');
-    // 容器版压根不显示这段：第 3 步已经写明 PS5 保持自动、加速器照常给 PS5 加速。
-    // 那段「关加速器 + 填四个数 + 断网重连」是 Windows 上走加速器拿参数的流程，对容器版反过来。
-    // 其余情况：只有方案三（流量接管）要留着电脑上的加速器，方案一/二都得关掉路由器上的加速器
-    const _dvOn = !!(st.hijack && st.hijack.divert && st.hijack.divert.running);
-    const _dnsOn2 = (st.dns_mode || 'router') === 'builtin';
-    const _showAccelTip = !isDocker() && (_dnsOn2 || !_dvOn);
+    // 这段只在方案二（内置 DNS）显示。
+    // 方案一改的是路由器 hosts，方案三是端口接管，两者都不碰 DNS，
+    // 加速器开不开跟它们没关系，摆出来只会误导。
+    // 容器版同样不显示：第 3 步已经写明 PS5 保持自动、加速器照常加速。
+    //
+    // 2026-11-04 issue #4：原来文案写的是「先关加速器、开播成功后再开」，
+    // 但关掉加速器后 PS5 连 contribute.live-video.net 都解析不出来，压根开不了播。
+    // 用户的实测是开着 UU 走方案一完全正常。文案已改，显示范围也一并收窄。
+    const _showAccelTip = !isDocker() && dnsMode === 'builtin';
     if (w) w.style.display = _showAccelTip ? '' : 'none';
   }
   // 加速方案：三种走法的真实状态
@@ -1075,21 +1078,25 @@ async function loadRtmpImpl() {
     if (hint) {
       hint.textContent = r && r.impl === r.active
         ? '当前生效'
-        : '重启程序后生效';
+        : '下次启动生效（正在直播时切换会这样）';
     }
   } catch (e) {}
 }
 
 async function setRtmpImpl(v) {
-  const r = await api('/api/rtmp_impl', { impl: v });
   const hint = $('impl-hint');
+  if (hint) hint.textContent = '正在切换…';
+  const r = await api('/api/rtmp_impl', { impl: v });
   if (!r || !r.ok) {
-    if (hint) hint.textContent = (r && r.error) || '保存失败';
+    if (hint) hint.textContent = (r && (r.error || r.detail)) || '切换失败';
     return;
   }
   if (hint) {
-    hint.textContent = r.need_restart ? '已保存，重启程序后生效' : '当前生效';
+    hint.textContent = r.need_restart
+      ? (r.detail || '已保存，重启程序后生效')
+      : '已生效';
   }
+  await tick();
 }
 
 async function toggleDebugLog() {
@@ -1384,8 +1391,13 @@ async function useBridgeFromVerify(btn) {
 async function chooseRouterAccel(btn) {
   await pickMode('hosts', true);
   btn.disabled = true;
+  // 方案一用不上端口接管和内置 DNS，点下去就把它们停掉。
+  // 以前这里什么都不做，界面写着方案一、后台还在拦包，重启还会自动开回来。
+  const hj = (S.state && S.state.hijack) || {};
+  if (hj.divert && hj.divert.running) await api('/api/divert/stop', {});
+  if (hj.dns_running) await api('/api/builtin/stop', {});
   $('s2-pick-note').innerHTML = 'PS5 保持「自动获取」，什么都不用改。<br>'
-    + '接管不用关，它不碰 PS5 直连本机的流量。<br>'
+    + '本机不接管、不代理 DNS，PS5 直连这台电脑的收流端口。<br>'
     + '去登录 B 站，然后直接在 PS5 上开播。';
   await tick();
   setTimeout(() => goStep(4), 900);
@@ -1829,6 +1841,19 @@ async function quitApp() {
   await api('/api/shutdown', {});
   document.body.innerHTML = '<div style="display:grid;place-items:center;height:100vh;color:#8b93a7;'
     + 'font-family:system-ui">已退出，可以关掉这个窗口。</div>';
+}
+
+async function restartApp() {
+  if (isDocker()) {
+    alert('容器里没有「重启」按钮。\n重启容器：docker compose restart');
+    return;
+  }
+  if (!confirm('重启会中断当前的直播/本地取流，然后自动重新打开。\n确定重启？')) return;
+  await api('/api/restart', {});
+  document.body.innerHTML = '<div style="display:grid;place-items:center;height:100vh;'
+    + 'color:#8b93a7;font-family:system-ui"><div style="text-align:center;line-height:1.9">'
+    + '<div style="font-size:16px;margin-bottom:6px">正在重启…</div>'
+    + '<div style="font-size:13px">3 秒后自动开回来。要是没反应，手动双击一下程序。</div></div></div>';
 }
 
 
