@@ -257,7 +257,12 @@ class Tray:
     # -- 生命周期
 
     def _on_ready(self, icon):
-        """pystray 完成初始化后回调，此时才能弹气泡。"""
+        """pystray 完成初始化后回调，此时窗口和消息循环才真正建好。"""
+        try:
+            logbus.info("托盘图标已就位（visible=%s）" % getattr(icon, "visible", "?"),
+                        tag="界面")
+        except Exception:
+            pass
         self._first_tip()
 
     def _first_tip(self):

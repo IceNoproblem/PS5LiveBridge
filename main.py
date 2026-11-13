@@ -225,6 +225,8 @@ def parse_args():
     p.add_argument("--no-window", action="store_true", help="不用原生窗口，直接开浏览器")
     p.add_argument("--headless", action="store_true",
                    help="纯服务模式：不建窗口、不开浏览器，收到 SIGTERM 就收工（容器用）")
+    p.add_argument("--autostart", choices=["on", "off"], default=None,
+                   help="只开关开机自启然后退出，不启动程序")
     p.add_argument("--check", action="store_true", help="只做环境体检，然后退出")
     p.add_argument("--version", action="store_true", help="显示版本")
     return p.parse_args()
@@ -395,6 +397,21 @@ def _main() -> int:
         print("PS5 直播桥 v%s" % APP_VERSION)
         _trace("--version 查询，退出")
         return 0
+
+    # 只开关开机自启就退出。托盘菜单点的是同一份逻辑，这里留个命令行入口，
+    # 方便批量部署和排查时确认注册表到底写没写进去。
+    if args.autostart:
+        try:
+            from ui import tray as tray_mod
+            ok, msg = tray_mod.set_autostart(args.autostart == "on")
+        except Exception as e:
+            ok, msg = False, str(e)
+        if ok:
+            print("开机自启已%s" % ("打开" if args.autostart == "on" else "关闭"))
+        else:
+            print("设置失败：%s" % msg)
+        _trace("--autostart %s -> %s" % (args.autostart, "OK" if ok else msg))
+        return 0 if ok else 1
 
     for prob in _bundle_problems():
         _trace("完整性检查失败: %s" % prob.replace("\n", " "))
