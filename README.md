@@ -262,6 +262,15 @@ Mac 上收流没法用 rtmf，也没法塞 nginx，换成 MediaMTX，一个单�
 
 下载 dmg，双击，把 `PS5LiveBridge` 拖进「应用程序」。
 
+**按芯片选对包，两个版本不通用：**
+
+| 机器 | 下哪个 |
+|---|---|
+| Apple 芯片（M1 / M2 / M3 / M4） | `PS5LiveBridge-x.y.z-macOS-arm64.dmg` |
+| Intel 芯片 | `PS5LiveBridge-x.y.z-macOS-x86_64.dmg` |
+
+选错了打不开或者开了就闪退。不确定的话点左上角苹果图标 →「关于本机」，看「芯片」那一行写的是 Apple 还是 Intel。
+
 没做公证签名，第一次打开会被系统拦。去「系统设置 → 隐私与安全性」，页面往下拉，点「仍要打开」，之后就不再问了。命令行的一步到位办法：
 
 ```bash
