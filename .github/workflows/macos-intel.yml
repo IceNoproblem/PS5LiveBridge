@@ -1,0 +1,66 @@
+name: build-macos-intel
+
+# Intel Mac 版。
+#
+# PyInstaller 不能在 arm64 上交叉编译出 x86_64，所以只能用 x86_64 的 runner。
+# macos-13 已于 2025-12-08 退役，目前唯一可用的 Intel 镜像是 macos-15-intel，
+# 官方说法是可维持到 2027 年 8 月。到那之后要么自备 Intel 机器，要么下架这一版。
+#
+# 手动触发：Actions → build-macos-intel → Run workflow
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  intel:
+    name: macOS x86_64
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 装依赖
+        run: |
+          brew install ffmpeg
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+
+      - name: 放进 Intel 版 mediamtx
+        run: |
+          mkdir -p tools/macos
+          curl -fsSL -o /tmp/mtx.tar.gz \
+            "https://github.com/bluenviron/mediamtx/releases/download/v1.21.3/mediamtx_v1.21.3_darwin_amd64.tar.gz"
+          tar -xzf /tmp/mtx.tar.gz -C /tmp mediamtx
+          cp /tmp/mediamtx tools/macos/mediamtx
+          chmod +x tools/macos/mediamtx
+          file tools/macos/mediamtx
+
+      - name: 打包
+        run: |
+          bash scripts/build_mac.sh
+          bash scripts/build_dmg.sh
+          ls -lh dist/
+
+      - name: 校验三个二进制都是 x86_64
+        run: |
+          set -e
+          for f in "dist/PS5LiveBridge.app/Contents/MacOS/PS5LiveBridge" \
+                   "dist/PS5LiveBridge.app/Contents/MacOS/tools/mediamtx" \
+                   "dist/PS5LiveBridge.app/Contents/MacOS/tools/ffmpeg"; do
+            echo "--- $f"
+            file "$f"
+            file "$f" | grep -q x86_64
+          done
+          echo "三个都是 x86_64，通过"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dmg-x86_64
+          path: dist/*.dmg
+          if-no-files-found: error
