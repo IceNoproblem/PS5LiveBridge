@@ -130,11 +130,20 @@ def _web_diff(manifest: dict) -> list:
 
 
 def parse_ver(tag: str) -> tuple:
-    """'v4.6.1' -> (4, 6, 1)。比大小用；尾部 0 归一化，保证 4.5 == 4.5.0。"""
+    """
+    'v4.6.1' -> (4, 6, 1)。比大小用；尾部 0 归一化，保证 4.5 == 4.5.0。
+
+    字母后缀也参与比较：'5.1.7a' -> (5, 1, 7, 1)，排在 '5.1.7' -> (5, 1, 7) 之后。
+    以前直接把字母丢掉，5.1.7a 会被认成 5.1.7，装了 5.1.7 的人就收不到这一版的
+    更新提示，等于白发。
+    """
     out = []
     for part in str(tag or "").lstrip("vV").split("."):
         digits = "".join(ch for ch in part if ch.isdigit())
+        letters = "".join(ch for ch in part if ch.isalpha())
         out.append(int(digits) if digits else 0)
+        if letters:
+            out.append(ord(letters[0].lower()) - 96)      # a=1, b=2 ...
     while len(out) > 1 and out[-1] == 0:
         out.pop()
     return tuple(out or [0])

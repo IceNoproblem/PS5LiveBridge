@@ -170,6 +170,24 @@ def _fix_streams():
 _mutex = None
 
 
+def _start_tray(orch, url: str, on_quit, on_restart=None) -> bool:
+    """
+    把图标放进系统托盘。任何失败都返回 False，不影响程序本身。
+
+    桌面版是 console=False，双击之后界面上只有浏览器一个标签页，关掉标签
+    程序还在跑。托盘补上「看得到它在跑」「右键能退干净」「开机自启开关」
+    这三件普通用户需要的事。只有 Windows 走这条路，Mac 版保持原样。
+    """
+    if paths.PLATFORM != "windows":
+        return False
+    try:
+        from ui import tray
+        return tray.start(orch, url, on_quit=on_quit, on_restart=on_restart)
+    except Exception as e:
+        _trace("托盘起不来：%s" % e)
+        return False
+
+
 def acquire_single_instance() -> bool:
     """
     两个实例同时跑会互抢端口，表现为「劫持/弹幕时好时坏」，排查成本极高，
@@ -540,6 +558,7 @@ def _main() -> int:
 
     if args.no_browser:
         logbus.info("界面地址：%s（按 Ctrl+C 退出）" % url)
+        _start_tray(orch, url, request_exit, request_restart)
         try:
             while not stop_event.wait(1):
                 pass
@@ -559,7 +578,10 @@ def _main() -> int:
     webbrowser.open(start_url)
     _trace("浏览器模式已打开")
     logbus.info("已在浏览器打开 %s" % start_url)
-    logbus.warn("关掉浏览器标签不会退出程序；要退出请点界面右上角「退出」")
+    if _start_tray(orch, url, request_exit, request_restart):
+        logbus.info("关掉浏览器标签不会退出，右键托盘图标可以退出")
+    else:
+        logbus.warn("关掉浏览器标签不会退出程序；要退出请点界面右上角「退出」")
     try:
         while not stop_event.wait(1):
             pass

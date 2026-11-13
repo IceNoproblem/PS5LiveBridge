@@ -8,7 +8,7 @@ import time
 
 APP_NAME = "PS5LiveBridge"
 APP_TITLE = "PS5 直播桥"
-APP_VERSION = "5.1.7"
+APP_VERSION = "5.1.7a"
 
 IS_WINDOWS = sys.platform == "win32"
 IS_MACOS = sys.platform == "darwin"
@@ -199,6 +199,9 @@ DEFAULT_CONFIG = {
     "ENABLE_GIFT": True,
     "ENABLE_SC": True,
     "MAX_LOG_ITEMS": 200,
+
+    # 托盘那个「程序在这里跑」的提示只弹一次，弹过就记下，别每次启动都烦人
+    "TRAY_TIP_SHOWN": False,
 }
 
 _lock = threading.RLock()

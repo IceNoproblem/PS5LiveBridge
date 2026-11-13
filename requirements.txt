@@ -20,6 +20,9 @@ pydivert>=3.0; sys_platform == "win32"
 qrcode>=7.4
 Pillow>=10.0
 
+# 系统托盘图标（只有 Windows 版用；Mac 版不开托盘，保持原样）
+pystray>=0.19; sys_platform == "win32"
+
 # B 站弹幕的 brotli 压缩帧（缺了会丢一部分弹幕，装上更稳）
 brotli>=1.0.9
 
