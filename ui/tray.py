@@ -20,6 +20,7 @@ from __future__ import annotations
 import os
 import sys
 import threading
+import time
 
 try:
     import pystray
@@ -266,13 +267,24 @@ class Tray:
     # -- 生命周期
 
     def _on_ready(self, icon):
-        """pystray 完成初始化后回调，此时窗口和消息循环才真正建好。"""
-        try:
-            logbus.info("托盘图标已就位（visible=%s）" % getattr(icon, "visible", "?"),
-                        tag="界面")
-        except Exception:
-            pass
-        self._first_tip()
+        """
+        pystray 完成初始化后回调，此时窗口和消息循环才真正建好。
+
+        这里不能直接读 visible：pystray 是先调这个回调、后把 visible 置 True，
+        当场读到的一直是 False，看日志的人会以为没成功。等一秒再读才是真的。
+        """
+        logbus.info("托盘图标已创建", tag="界面")
+
+        def _after():
+            time.sleep(1.0)
+            try:
+                logbus.info("托盘图标可见=%s" % bool(getattr(icon, "visible", False)),
+                            tag="界面")
+            except Exception:
+                pass
+            self._first_tip()
+
+        threading.Thread(target=_after, name="tray-ready", daemon=True).start()
 
     def _first_tip(self):
         if paths.load_config().get("TRAY_TIP_SHOWN"):
