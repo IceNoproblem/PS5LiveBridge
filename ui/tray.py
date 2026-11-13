@@ -268,23 +268,28 @@ class Tray:
 
     def _on_ready(self, icon):
         """
-        pystray 完成初始化后回调，此时窗口和消息循环才真正建好。
+        pystray 完成初始化后回调。
 
-        这里不能直接读 visible：pystray 是先调这个回调、后把 visible 置 True，
-        当场读到的一直是 False，看日志的人会以为没成功。等一秒再读才是真的。
+        这里必须自己把 visible 置 True：pystray 只在「没传 setup」时帮你设，
+        一旦传了自定义回调就得自己来。漏掉这行不会报任何错，进程一切正常，
+        图标就是不出现（实测过一次，日志里 clean 得很）。
         """
-        logbus.info("托盘图标已创建", tag="界面")
+        try:
+            icon.visible = True
+            logbus.info("托盘图标已就位", tag="界面")
+        except Exception as e:
+            logbus.warn("托盘图标显示失败：%s" % e, tag="界面")
+        threading.Thread(target=self._after_ready, args=(icon,),
+                         name="tray-tip", daemon=True).start()
 
-        def _after():
-            time.sleep(1.0)
-            try:
-                logbus.info("托盘图标可见=%s" % bool(getattr(icon, "visible", False)),
-                            tag="界面")
-            except Exception:
-                pass
-            self._first_tip()
-
-        threading.Thread(target=_after, name="tray-ready", daemon=True).start()
+    def _after_ready(self, icon):
+        time.sleep(1.0)
+        try:
+            logbus.info("托盘图标可见=%s" % bool(getattr(icon, "visible", False)),
+                        tag="界面")
+        except Exception:
+            pass
+        self._first_tip()
 
     def _first_tip(self):
         if paths.load_config().get("TRAY_TIP_SHOWN"):
