@@ -149,6 +149,15 @@ class Orchestrator(object):
         if self.divert:
             self.divert.stop()
             self.divert = None
+        # 驱动是本程序包里带的那份，退出时顺手停掉，别让它一直挂在内核里。
+        # 只在服务记录的 ImagePath 指向我们自己时才动手，别的软件装的同款不碰。
+        # 必须排在 divert.stop() 之后：句柄还开着的时候驱动停不掉。
+        try:
+            _msg = divert.stop_own_driver()
+            if _msg:
+                logbus.info(_msg, tag="劫持")
+        except Exception:
+            pass
         if self.dns:
             self.dns.stop()
             self.dns = None

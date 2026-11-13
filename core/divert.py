@@ -353,6 +353,85 @@ def pyk_available() -> bool:
     return pydivert is not None
 
 
+def _driver_image_path() -> str:
+    """从注册表读 WinDivert 服务记录的驱动路径，读不到返回空串。"""
+    if paths.PLATFORM != "windows":
+        return ""
+    try:
+        import winreg
+    except Exception:
+        return ""
+    try:
+        key = winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SYSTEM\CurrentControlSet\Services\WinDivert",
+        )
+        try:
+            val, _ = winreg.QueryValueEx(key, "ImagePath")
+        finally:
+            winreg.CloseKey(key)
+        return str(val or "")
+    except Exception:
+        return ""
+
+
+def _our_driver_path() -> str:
+    """本程序包里那份 WinDivert64.sys 的绝对路径。"""
+    base = os.path.dirname(getattr(pydivert, "__file__", "") or "")
+    if not base:
+        return ""
+    return os.path.join(base, "windivert_dll", "WinDivert64.sys")
+
+
+def _same_path(a: str, b: str) -> bool:
+    """比较两个 Windows 路径是否指向同一个文件。
+
+    用 ntpath 而不是 os.path：os.path 跟着当前系统走，在 Mac 上跑测试时
+    normcase 不转小写、normpath 也不认盘符和反斜杠，判断会出错。
+    """
+    import ntpath
+
+    def norm(p):
+        p = str(p or "").strip().strip('"')
+        # 服务记录的 ImagePath 常带 \??\ 前缀
+        for pre in ("\\??\\", "\\\\?\\"):
+            if p.startswith(pre):
+                p = p[len(pre):]
+        return ntpath.normcase(ntpath.normpath(p))
+
+    if not a or not b:
+        return False
+    return norm(a) == norm(b)
+
+
+def stop_own_driver() -> str:
+    """
+    退出时把本程序装的那份 WinDivert 驱动停掉，返回一句人话供写日志。
+
+    只在服务记录的 ImagePath 指向我们自己包里的 sys 时才动手：服务名
+    WinDivert 是全局唯一的，机器上若有别的软件也用这个驱动，它的服务项会
+    指向它自己的路径，这时停掉就把别人一起打断了。
+
+    停完服务项保留，下次开程序时 pydivert 会自己把它加载回来，不用重装。
+    """
+    if paths.PLATFORM != "windows" or pydivert is None:
+        return ""
+    image = _driver_image_path()
+    if not image:
+        return ""
+    if not _same_path(image, _our_driver_path()):
+        return "驱动不属于本程序，跳过停止"
+    try:
+        from . import netutil
+        rc, out = netutil.run(["sc.exe", "stop", "WinDivert"], timeout=15)
+    except Exception as e:
+        return "停驱动出错：%s" % e
+    if rc == 0:
+        return "驱动已停止"
+    text = (out or "").strip().replace("\r", " ").replace("\n", " ")
+    return "停驱动失败（rc=%s）：%s" % (rc, text[:120])
+
+
 import sys as _sys
 
 if _sys.platform == "darwin":
