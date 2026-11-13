@@ -78,6 +78,7 @@ class Bilibili(object):
         self._wbi_keys = ("", "")
         self._wbi_at = 0.0
         self._partitions = {}
+        self._area_pinyin = {}
         self.load_credential()
 
     def load_credential(self) -> bool:
@@ -318,10 +319,22 @@ class Bilibili(object):
         out = {}
         if d.get("code") == 0:
             for p in d.get("data") or []:
-                subs = {s.get("name"): str(s.get("id")) for s in p.get("list") or []}
+                subs = {}
+                for s in p.get("list") or []:
+                    sid = str(s.get("id"))
+                    subs[s.get("name")] = sid
+                    # 顺手把拼音留下来，前端分区搜索用得上（456 个分区，只能靠搜）
+                    py = s.get("pinyin") or ""
+                    if py:
+                        self._area_pinyin[sid] = py
                 out[p.get("name")] = subs
             self._partitions = out
         return out
+
+    def area_pinyin(self) -> dict:
+        """分区 id 到拼音的映射，给前端做拼音搜索。"""
+        self.partitions()
+        return dict(self._area_pinyin)
 
     def area_id_by_name(self, parent: str, sub: str) -> str:
         return (self.partitions().get(parent) or {}).get(sub, "")

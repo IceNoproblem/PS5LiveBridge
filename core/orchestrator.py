@@ -736,7 +736,9 @@ class Orchestrator(object):
     def partition_choices(self) -> dict:
         parts = self.bili.partitions()
         current = str(self.cfg.get("BILIBILI_AREA_ID", "236"))
-        return {"partitions": parts, "current": current}
+        # 分区一共 456 个，前端要做搜索框，带上拼音才能用「zhilang」这种查法
+        return {"partitions": parts, "current": current,
+                "pinyin": self.bili.area_pinyin()}
 
     def save_area(self, area_id: str, title: str = None,
                   twitch_channel: str = None,

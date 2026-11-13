@@ -514,7 +514,16 @@
             <div class="grid2">
               <div class="field">
                 <label>分区</label>
-                <select id="sel-area"><option>登录后可选</option></select>
+                <div class="combo" id="area-combo">
+                  <input type="text" id="area-input" class="combo-input"
+                         placeholder="登录后可选" autocomplete="off" spellcheck="false" disabled>
+                  <input type="hidden" id="sel-area" value="">
+                  <span class="combo-arrow" aria-hidden="true"></span>
+                  <div class="combo-pop" id="area-pop" hidden>
+                    <div class="combo-list" id="area-list" role="listbox"></div>
+                    <div class="combo-empty" id="area-empty" hidden>没找到匹配的分区</div>
+                  </div>
+                </div>
               </div>
               <div class="field">
                 <label>直播间标题（留空则自动跟随 PS5）</label>

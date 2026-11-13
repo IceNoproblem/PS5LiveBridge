@@ -1627,26 +1627,177 @@ async function doLogout() {
   tick();
 }
 
+// ── 分区选择器 ──
+// B 站一共 12 个大区、456 个二级分区，原生下拉滚起来根本找不到。
+// 换成可搜索的组合框：输入中文或拼音都能过滤，方向键 + 回车选。
+// 全量渲染 456 条没问题（几十毫秒），设个上限只是防止接口将来膨胀到几千条
+const AREA_ROW_LIMIT = 600;
+
+function _areaNorm(s) {
+  return String(s || '').toLowerCase().replace(/[\s·\/]+/g, '');
+}
+
 async function loadAreas() {
   const r = await api('/api/partitions');
-  const sel = $('sel-area');
   if (!r || !r.partitions) return;
-  sel.innerHTML = '';
   const cur = String(r.current || '236');
+  const pinyin = r.pinyin || {};
+  const list = [];
   Object.keys(r.partitions).forEach((parent) => {
-    const og = document.createElement('optgroup');
-    og.label = parent;
     Object.entries(r.partitions[parent]).forEach(([name, id]) => {
-      const o = document.createElement('option');
-      o.value = id;
-      o.textContent = parent + ' / ' + name;
-      if (String(id) === cur) o.selected = true;
-      og.appendChild(o);
+      const sid = String(id);
+      const label = parent + ' / ' + name;
+      list.push({
+        id: sid, name, parent, label,
+        // 中文名和拼音拼在一起，输入「只狼」「zhi lang」「danji」都能命中
+        key: _areaNorm(label) + '|' + String(pinyin[sid] || '').toLowerCase(),
+      });
     });
-    sel.appendChild(og);
   });
+  S.areas = list;
+  const inp = $('area-input');
+  if (inp) {
+    inp.disabled = false;
+    inp.placeholder = '搜索分区名或拼音，比如 只狼 / zhilang';
+  }
+  const hit = list.find((a) => a.id === cur) || list[0];
+  if (hit) applyArea(hit.id);
   const st = S.state || {};
-  $('in-title').value = (st.config && st.config.bilibili_title) || '';
+  if ($('in-title')) $('in-title').value = (st.config && st.config.bilibili_title) || '';
+  bindAreaEvents();
+}
+
+function applyArea(id) {
+  const a = (S.areas || []).find((x) => String(x.id) === String(id));
+  if (!a) return;
+  S.areaId = a.id;
+  const h = $('sel-area');
+  if (h) h.value = a.id;
+  const inp = $('area-input');
+  if (inp) inp.value = a.label;
+}
+
+function renderAreaList(q) {
+  const box = $('area-list');
+  const empty = $('area-empty');
+  if (!box) return;
+  const key = _areaNorm(q);
+  const all = S.areas || [];
+  const hit = key ? all.filter((a) => a.key.indexOf(key) >= 0) : all;
+  box.textContent = '';
+  if (!hit.length) {
+    if (empty) empty.hidden = false;
+    return;
+  }
+  if (empty) empty.hidden = true;
+  const frag = document.createDocumentFragment();
+  hit.slice(0, AREA_ROW_LIMIT).forEach((a) => {
+    const row = document.createElement('div');
+    row.className = 'combo-item' + (a.id === S.areaId ? ' on' : '');
+    row.dataset.id = a.id;
+    row.setAttribute('role', 'option');
+    const p = document.createElement('span');
+    p.className = 'ci-parent';
+    p.textContent = a.parent;
+    const n = document.createElement('span');
+    n.className = 'ci-name';
+    n.textContent = a.name;
+    row.appendChild(p);
+    row.appendChild(n);
+    frag.appendChild(row);
+  });
+  box.appendChild(frag);
+}
+
+let _areaBackup = '';
+
+function openAreaPop() {
+  const inp = $('area-input');
+  const pop = $('area-pop');
+  if (!inp || inp.disabled || !pop || !pop.hidden) return;
+  _areaBackup = inp.value;
+  inp.value = '';
+  renderAreaList('');
+  pop.hidden = false;
+  const on = pop.querySelector('.combo-item.on');
+  if (on) setTimeout(() => on.scrollIntoView({ block: 'center' }), 0);
+}
+
+function closeAreaPop(restore) {
+  const pop = $('area-pop');
+  if (!pop || pop.hidden) return;
+  pop.hidden = true;
+  if (restore === false) return;
+  const a = (S.areas || []).find((x) => x.id === S.areaId);
+  const inp = $('area-input');
+  if (inp) inp.value = a ? a.label : _areaBackup;
+}
+
+function pickArea(id) {
+  const a = (S.areas || []).find((x) => String(x.id) === String(id));
+  if (!a) return;
+  S.areaId = a.id;
+  const h = $('sel-area');
+  if (h) h.value = a.id;
+  const inp = $('area-input');
+  if (inp) { inp.value = a.label; inp.blur(); }
+  closeAreaPop(false);
+}
+
+function moveAreaSel(delta) {
+  const box = $('area-list');
+  if (!box) return;
+  const rows = Array.from(box.querySelectorAll('.combo-item'));
+  if (!rows.length) return;
+  let i = rows.findIndex((r) => r.classList.contains('cursor'));
+  i = i < 0 ? (delta > 0 ? 0 : rows.length - 1)
+            : Math.max(0, Math.min(rows.length - 1, i + delta));
+  rows.forEach((r) => r.classList.remove('cursor'));
+  rows[i].classList.add('cursor');
+  rows[i].scrollIntoView({ block: 'nearest' });
+}
+
+function areaKeydown(e) {
+  const pop = $('area-pop');
+  const open = pop && !pop.hidden;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (!open) { openAreaPop(); return; }
+    moveAreaSel(e.key === 'ArrowDown' ? 1 : -1);
+  } else if (e.key === 'Enter') {
+    if (!open) return;
+    e.preventDefault();
+    const row = pop.querySelector('.combo-item.cursor') || pop.querySelector('.combo-item.on');
+    if (row) pickArea(row.dataset.id);
+  } else if (e.key === 'Escape') {
+    if (!open) return;
+    e.preventDefault();
+    e.stopPropagation();
+    closeAreaPop(true);
+  }
+}
+
+function bindAreaEvents() {
+  if (S.areaBound) return;
+  const inp = $('area-input');
+  const pop = $('area-pop');
+  const wrap = $('area-combo');
+  if (!inp || !pop || !wrap) return;
+  S.areaBound = true;
+  inp.addEventListener('focus', openAreaPop);
+  inp.addEventListener('input', () => {
+    if (pop.hidden) pop.hidden = false;
+    renderAreaList(inp.value);
+  });
+  inp.addEventListener('keydown', areaKeydown);
+  // 用 mousedown + preventDefault，避免输入框先失焦导致 click 落空
+  pop.addEventListener('mousedown', (e) => {
+    const row = e.target.closest('.combo-item');
+    if (row) { e.preventDefault(); pickArea(row.dataset.id); }
+  });
+  document.addEventListener('mousedown', (e) => {
+    if (!pop.hidden && !wrap.contains(e.target)) closeAreaPop(true);
+  });
 }
 
 async function saveArea() {
@@ -1663,8 +1814,8 @@ async function saveArea() {
     if ($('in-proxy-1st') && $('in-proxy')) {
       $('in-proxy-1st').value = $('in-proxy').value;
     }
-    const opt = $('sel-area').selectedOptions[0];
-    alert('已保存：' + (opt ? opt.textContent : ''));
+    const a = (S.areas || []).find((x) => x.id === S.areaId);
+    alert('已保存：' + (a ? a.label : ''));
   } else alert('保存失败');
 }
 
