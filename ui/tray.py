@@ -118,12 +118,21 @@ def _autostart_stale() -> bool:
 # ---------------------------------------------------------------- 图标绘制
 
 def _base_image():
-    p = paths.resource_path("assets", "icon.png")
-    try:
-        im = Image.open(p).convert("RGBA")
-    except Exception:
-        im = Image.new("RGBA", (128, 128), (37, 99, 235, 255))
-    return im.resize((128, 128), Image.LANCZOS)
+    """
+    托盘底图。
+
+    优先取 web/static 下那份，因为 web 目录一定会被 --add-data 带进包，
+    不依赖 assets 的打包参数写没写对。都没有就退回纯色方块，图标难看
+    总比托盘起不来好。
+    """
+    for parts in (("web", "static", "tray-icon.png"), ("assets", "icon.png")):
+        p = paths.resource_path(*parts)
+        try:
+            im = Image.open(p).convert("RGBA")
+        except Exception:
+            continue
+        return im.resize((128, 128), Image.LANCZOS)
+    return Image.new("RGBA", (128, 128), (37, 99, 235, 255))
 
 
 def _with_dot(base, color):
