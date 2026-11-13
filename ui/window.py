@@ -33,6 +33,29 @@ def _find_browser() -> str:
     return ""
 
 
+def _fit_window_size() -> str:
+    """
+    按当前屏幕算窗口大小。
+
+    原来写死 1200x860，在 1024x768 / 1366x768 这类屏幕上会超出工作区，
+    底部的按钮被切掉，用户以为界面坏了。这里留出标题栏和任务栏的余量，
+    小屏自动缩，大屏仍然是 1200x860。
+    """
+    w, h = 1200, 860
+    try:
+        if netutil.IS_WINDOWS:
+            import ctypes
+            u = ctypes.windll.user32
+            sw = int(u.GetSystemMetrics(0) or 0)      # SM_CXSCREEN
+            sh = int(u.GetSystemMetrics(1) or 0)      # SM_CYSCREEN
+            if sw > 0 and sh > 0:
+                w = max(940, min(w, sw - 80))
+                h = max(620, min(h, sh - 100))
+    except Exception:
+        pass
+    return "--window-size=%d,%d" % (w, h)
+
+
 def _app_mode(name_hint: str, browser: str, url: str):
     """
     用独立 profile 起一个 app 窗口。
@@ -57,7 +80,7 @@ def _app_mode(name_hint: str, browser: str, url: str):
         "--disable-features=Translate,MediaRouter",
         "--disable-background-mode",
         "--new-window",
-        "--window-size=1200,860",
+        _fit_window_size(),
         "--disable-background-networking",
     ]
     try:

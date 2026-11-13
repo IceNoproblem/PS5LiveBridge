@@ -1099,6 +1099,9 @@ select {
   color: var(--dim);
 }
 
+.impl-hint.ok { color: var(--ok, #3ecf8e); }
+.impl-hint.err { color: var(--danger, #ff6b6b); }
+
 .impl-row {
   display: flex;
   align-items: center;

@@ -1799,6 +1799,75 @@ class Orchestrator(object):
         ok = self.nginx.start()
         return {"ok": ok, "detail": self.nginx.last_error or "收流服务已启动"}
 
+    def repair_receiver(self) -> dict:
+        """一键修复收流：踢残留连接 → 停收流端 → 清端口 → 重新拉起来。
+
+        PS5 报「有其他设备正在向同一频道播放」时，用户原来只能重启电脑。
+        根因是上一轮的收流进程或会话没退干净，还占着推流位置。这里把它
+        清到底，再重新起一份干净的。
+        """
+        try:
+            return self._repair_receiver_locked()
+        except Exception as e:
+            # 这个接口不能被异常打穿：请求线程崩掉的话用户看到的是
+            # 「页面连不上」，比修复失败本身更难判断。
+            logbus.error("修复收流时出错：%s" % e, tag="收流")
+            return {"ok": False, "detail": "修复过程出错：%s，试试右上角的重启" % e}
+
+    def _repair_receiver_locked(self) -> dict:
+        with self.lock:
+            state = str((self.live or {}).get("state") or "idle")
+        if state not in ("idle", "", "error"):
+            return {"ok": False,
+                    "detail": "正在直播，先停播再修复。修复会重启收流端，当前这路流会断"}
+
+        steps = []
+
+        # 1) 能温和就先温和：只断掉残留的推流连接（MediaMTX 支持）
+        try:
+            if hasattr(self.nginx, "kick_publishers"):
+                r = self.nginx.kick_publishers() or {}
+                kicked = int(r.get("kicked") or 0)
+                if kicked:
+                    steps.append("断开 %d 条残留推流连接" % kicked)
+        except Exception as e:
+            steps.append("踢连接失败（%s）" % e)
+
+        # 2) 停掉转发和收流端
+        try:
+            if self.relay:
+                self.relay.stop()
+        except Exception:
+            pass
+        try:
+            if self.nginx:
+                self.nginx.stop()
+        except Exception:
+            pass
+        steps.append("收流端已停")
+
+        # 3) 按端口清场，把没退干净的按进程名捞出来
+        rtmp_port = int(self.cfg.get("RTMP_PORT", 1935))
+        killed = []
+        for p in (rtmp_port, 8098, 8099, 9997):
+            g = netutil.free_port_for_receiver(p)
+            killed.extend(g.get("killed") or [])
+            if not g.get("ok"):
+                return {"ok": False,
+                        "detail": "%s（已做：%s）" % (g["detail"], "；".join(steps) or "无")}
+        if killed:
+            steps.append("清掉残留进程 %s" % "、".join(str(p) for p in killed))
+
+        # 4) 重新起一份
+        r = self.ensure_nginx()
+        if r.get("ok"):
+            steps.append("收流端已重新启动")
+            logbus.ok("收流已修复：%s" % "；".join(steps), tag="收流")
+            return {"ok": True, "detail": "；".join(steps)}
+        steps.append("重启失败：%s" % (r.get("detail") or "未知原因"))
+        logbus.error("收流修复失败：%s" % "；".join(steps), tag="收流")
+        return {"ok": False, "detail": "；".join(steps)}
+
     def switch_rtmp_impl(self, impl: str) -> dict:
         """热切换收流实现，切完立刻生效，不用退出程序。
 

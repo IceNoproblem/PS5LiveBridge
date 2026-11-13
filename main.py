@@ -418,6 +418,13 @@ def _main() -> int:
 
     if netutil.add_kill_on_close_job():
         logbus.info("已启用子进程随主程序退出（Job 对象）")
+    elif netutil.IS_WINDOWS:
+        # 以前这里失败是一行日志都没有。Job 没建成，主程序一崩（或被强杀），
+        # 收流进程会留在 1935 上抱着 PS5 的推流会话，下次开播就报
+        # 「有其他设备正在向同一频道播放」，用户只能重启电脑。
+        logbus.warn("子进程自动回收没启用（Job 对象没建成）。程序异常退出时"
+                    "收流进程可能残留，下次启动会自动清，但最好确认一下权限设置",
+                    tag="启动")
     _trace("Job 对象已设置")
 
     ok, msgs = netutil.ensure_firewall()

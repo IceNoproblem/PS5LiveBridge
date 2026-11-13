@@ -355,6 +355,15 @@ def create_app(orch, on_exit=None, on_restart=None) -> Flask:
             "active": "rtmpf" if getattr(orch, "native_relay", False) else "nginx",
         })
 
+    @app.post("/api/receiver/repair")
+    def api_receiver_repair():
+        """一键修复收流：断残留连接、清残留进程、重启收流端。
+
+        专门对付「PS5 报有其他设备正在向同一频道播放」这一类残留问题，
+        用户不用再重启电脑。
+        """
+        return jsonify(orch.repair_receiver())
+
     @app.post("/api/rtmp_impl")
     def api_rtmp_impl_set():
         body = request.get_json(silent=True) or {}

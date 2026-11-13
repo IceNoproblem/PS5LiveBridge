@@ -141,6 +141,9 @@ class NginxManager(object):
         self.module = ""
         self.last_error = ""
         self._start_lock = threading.Lock()
+        # 停掉的 Popen 挂这儿不就地析构：Python 3.13 的 Popen.__del__
+        # 会递归爆栈，在请求线程里触发会直接带走整个进程。
+        self._retired = []
 
     def _is_ascii(self, p: str) -> bool:
         try:
@@ -271,23 +274,26 @@ class NginxManager(object):
     def _start_locked(self) -> bool:
         if self.running():
             return True
-        if netutil.port_listening(self.rtmp_port):
-            pid, name = netutil.port_owner(self.rtmp_port)
-            if pid and "nginx" in (name or "").lower():
-                logbus.info("端口 %d 已有 nginx 在监听（PID %d），复用它" % (self.rtmp_port, pid),
-                            tag="收流")
-                return True
+        # 上一次留下的死进程先收进退休列表，别让下面赋值时析构它
+        if self.proc is not None and self.proc.poll() is not None:
+            netutil.disarm_popen(self.proc)
+            self._retired.append(self.proc)
+            self.proc = None
         if not self.exe and not self.prepare():
             return False
-        if netutil.port_listening(self.rtmp_port):
-            logbus.warn("端口 %d 已被占用，先清理残留进程" % self.rtmp_port, tag="收流")
-            pid, name = netutil.port_owner(self.rtmp_port)
-            if pid and "nginx" in (name or "").lower():
-                netutil.kill_pid(pid)
-                time.sleep(0.8)
-            elif pid:
-                self.last_error = "端口 %d 被 %s（PID %d）占用" % (self.rtmp_port, name or "?", pid)
+        # 端口清场。原来这里遇到「端口上已经有个 nginx」就直接复用，
+        # 那个 nginx 很可能上一轮留下的：配置里的转发目标已经过期、
+        # 还抱着一份 PS5 的 publisher 会话。复用之后新实例又起一份
+        # ffmpeg，两路推同一个推流码，B 站和 PS5 都会报冲突。
+        # 现在一律清掉重建，反正 nginx 起停成本只有几百毫秒。
+        for _port in (self.rtmp_port, getattr(self, "stat_port", 0)):
+            guard = netutil.free_port_for_receiver(_port)
+            if not guard["ok"]:
+                self.last_error = guard["detail"]
+                logbus.error(self.last_error, tag="收流")
                 return False
+            if guard["killed"]:
+                logbus.warn("端口 %d：%s" % (_port, guard["detail"]), tag="收流")
 
         startup = {}
         cmd = [self.exe]
@@ -343,10 +349,7 @@ class NginxManager(object):
                 sig_cmd += ["-p", self.prefix + "/",
                             "-c", os.path.join(self.prefix, "conf", "nginx.conf")]
             try:
-                subprocess.run(sig_cmd, cwd=self.prefix or None,
-                               timeout=5, stdout=subprocess.DEVNULL,
-                               stderr=subprocess.DEVNULL,
-                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                netutil.run(sig_cmd, timeout=5, cwd=self.prefix or None)
             except Exception:
                 pass
         time.sleep(0.5)
@@ -360,7 +363,18 @@ class NginxManager(object):
                 except Exception:
                     pass
         if netutil.IS_WINDOWS:
-            netutil.run(["taskkill", "/F", "/IM", "nginx.exe"], timeout=5)
+            # 原来这里 taskkill /F /IM nginx.exe，会把这台机器上所有 nginx
+            # 一起带走。改成只收自己这一份：先按自己的 pid 杀树，
+            # 自己没有 pid 了再按端口反查，仍然限定进程名是 nginx。
+            if self.proc is not None and self.proc.poll() is None:
+                netutil.kill_pid_tree(self.proc.pid)
+            else:
+                _pid, _name = netutil.port_owner(self.rtmp_port)
+                if _pid and "nginx" in (_name or "").lower():
+                    netutil.kill_pid_tree(_pid)
+        if self.proc is not None:
+            netutil.disarm_popen(self.proc)
+            self._retired.append(self.proc)
         self.proc = None
 
     def stat_xml(self, timeout=1.5) -> str:

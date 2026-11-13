@@ -6,7 +6,7 @@ import subprocess
 import threading
 import time
 
-from . import logbus, paths
+from . import logbus, netutil, paths
 
 
 def find_ffmpeg() -> str:
@@ -47,6 +47,9 @@ class Relay(object):
         self._watch_gen = 0
         self._stopping = False
         self.on_drop = None
+        # 停掉的 Popen 挂这儿不就地析构：Python 3.13 的 Popen.__del__
+        # 会递归爆栈，在请求线程里触发会直接带走整个进程。
+        self._retired = []
 
     @property
     def running(self) -> bool:
@@ -95,21 +98,22 @@ class Relay(object):
         # 只杀「自己上一次留下的」进程，不按进程名乱杀。
         # 之前用 taskkill /F /IM ffmpeg.exe 会把并发起来的另一路也杀掉。
         oldp = self.proc
-        if oldp is not None and oldp.poll() is None:
-            try:
-                if os.name == "nt":
-                    subprocess.run(
-                        ["taskkill", "/F", "/T", "/PID", str(oldp.pid)],
-                        capture_output=True, timeout=6,
-                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-                else:
-                    oldp.terminate()
-                oldp.wait(timeout=5)
-            except Exception:
+        if oldp is not None:
+            if oldp.poll() is None:
                 try:
-                    oldp.kill()
+                    if os.name == "nt":
+                        netutil.run(["taskkill", "/F", "/T", "/PID", str(oldp.pid)],
+                                    timeout=6)
+                    else:
+                        oldp.terminate()
+                    oldp.wait(timeout=5)
                 except Exception:
-                    pass
+                    try:
+                        oldp.kill()
+                    except Exception:
+                        pass
+            netutil.disarm_popen(oldp)
+            self._retired.append(oldp)
 
         args = [
             self.ffmpeg,
@@ -249,10 +253,7 @@ class Relay(object):
             # 用 taskkill /F /T 强杀整棵进程树。
             try:
                 if os.name == "nt":
-                    subprocess.run(
-                        ["taskkill", "/F", "/T", "/PID", str(p.pid)],
-                        capture_output=True, timeout=6,
-                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                    netutil.run(["taskkill", "/F", "/T", "/PID", str(p.pid)], timeout=6)
                 else:
                     p.terminate()
                 p.wait(timeout=5)
@@ -267,6 +268,9 @@ class Relay(object):
         # 那种僵尸进程继续占着推流地址，新进程连不上，
         # 而界面又显示没在转发，排查时完全对不上。
         if p is None or p.poll() is not None:
+            if p is not None:
+                netutil.disarm_popen(p)
+                self._retired.append(p)
             self.proc = None
         if not _internal:
             self.started_at = 0.0

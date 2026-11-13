@@ -1099,6 +1099,29 @@ async function setRtmpImpl(v) {
   await tick();
 }
 
+async function repairReceiver(btn) {
+  const hint = $('repair-hint');
+  if (btn) { btn.disabled = true; btn.textContent = '修复中…'; }
+  if (hint) {
+    hint.className = 'impl-hint';
+    hint.textContent = '正在断开残留连接、清残留进程、重启收流端，最多十几秒';
+  }
+  const r = await api('/api/receiver/repair', {});
+  if (r && r.ok) {
+    if (hint) {
+      hint.className = 'impl-hint ok';
+      hint.textContent = r.detail || '收流端已重启';
+    }
+    await tick();
+  } else {
+    if (hint) {
+      hint.className = 'impl-hint err';
+      hint.textContent = (r && r.detail) || '修复失败，试试右上角的重启';
+    }
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '修复收流'; }
+}
+
 async function toggleDebugLog() {
   const cur = await api('/api/logs/debug');
   const next = !(cur && cur.on);

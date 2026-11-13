@@ -19,7 +19,7 @@ import threading
 import time
 import urllib.request
 
-from . import logbus, paths
+from . import logbus, netutil, paths
 
 # MediaMTX 不直接给码率，靠 bytesReceived 前后两次采样差分算。
 # 进程里只有一份收流服务，用模块级变量存上次的采样就够了。
@@ -51,6 +51,10 @@ class MediaMtxManager(object):
         self.web_port = 0          # MediaMTX 不提供 HTTP-FLV，留空
         self._proc = None
         self._lock = threading.Lock()
+        # 停掉的 Popen 先挂这儿，不就地析构。实测 Python 3.13.12 的
+        # Popen.__del__ 会递归到爆栈，而「修复收流」是在请求线程里停进程的，
+        # 一崩就把整个 Flask 进程带走，页面直接连不上。
+        self._retired = []
 
     # ---------- 二进制与配置 ----------
 
@@ -99,12 +103,29 @@ class MediaMtxManager(object):
         with self._lock:
             if self.running():
                 return True
+            # 上一次启动失败留下的死进程先收进退休列表
+            if self._proc is not None and self._proc.poll() is not None:
+                netutil.disarm_popen(self._proc)
+                self._retired.append(self._proc)
+                self._proc = None
             exe = self.exe_path()
             if not exe:
                 self.last_error = ("找不到 mediamtx。macOS 版需要 tools/macos/mediamtx，"
                                    "从 bluenviron/mediamtx 的 release 里下 darwin-arm64 那份。")
                 logbus.error(self.last_error, tag="收流")
                 return False
+
+            # 起之前清场，跟 rtmf 一个道理：上次残留的 mediamtx 还抱着
+            # publisher 会话时，PS5 重推会被它拒掉，报
+            # 「有其他设备正在向同一频道播放」。
+            for _port, _label in ((self.rtmp_port, "RTMP"), (self.api_port, "管理")):
+                guard = netutil.free_port_for_receiver(_port)
+                if not guard["ok"]:
+                    self.last_error = guard["detail"]
+                    logbus.error(self.last_error, tag="收流")
+                    return False
+                if guard["killed"]:
+                    logbus.warn("%s端口 %d：%s" % (_label, _port, guard["detail"]), tag="收流")
 
             try:
                 cfg = self._write_config()
@@ -136,6 +157,15 @@ class MediaMtxManager(object):
             for _ in range(25):
                 time.sleep(0.2)
                 if self.running():
+                    # 接口能通不代表是刚起的这个进程，可能连到了上一轮残留实例。
+                    owner, _oname = netutil.port_owner(self.api_port)
+                    if owner and self._proc.pid and owner != self._proc.pid:
+                        self.last_error = ("管理端口 %d 属于另一个进程（PID %d），"
+                                           "不是刚启动的这个（PID %d）"
+                                           % (self.api_port, owner, self._proc.pid))
+                        logbus.error(self.last_error, tag="收流")
+                        self.stop()
+                        return False
                     self.last_error = ""
                     logbus.ok("收流服务已就绪（MediaMTX，RTMP %d / 管理 %d）"
                               % (self.rtmp_port, self.api_port), tag="收流")
@@ -159,18 +189,53 @@ class MediaMtxManager(object):
     def stop(self) -> None:
         with self._lock:
             p = self._proc
-            self._proc = None
             if p is None:
+                self._proc = None
                 return
             try:
                 if p.poll() is None:
                     p.terminate()
                     p.wait(timeout=5)
             except Exception:
+                pass
+            if p.poll() is None:
+                logbus.warn("收流进程（PID %d）没响应终止请求，强制结束" % p.pid, tag="收流")
+                netutil.kill_pid_tree(p.pid)
                 try:
-                    p.kill()
+                    p.wait(timeout=3)
                 except Exception:
                     pass
+            if p.poll() is None:
+                logbus.error("收流进程（PID %d）结束不掉，下次启动会按端口自动清理" % p.pid,
+                             tag="收流")
+            netutil.disarm_popen(p)
+            self._retired.append(p)
+            self._proc = None
+
+    def kick_publishers(self, path: str = "") -> dict:
+        """
+        踢掉正在推流的 RTMP 连接。
+
+        PS5 报「有其他设备正在向同一频道播放」时，常见是旧连接已经没数据了
+        但 MediaMTX 还认着它，PS5 再推就被拒。踢连接比杀进程温和：
+        收流端不用重启，正在看的观众也不受影响。
+        """
+        d = self._api("/v3/rtmpconns/list", timeout=3.0)
+        items = d.get("items") or []
+        kicked = 0
+        for it in items:
+            if (it.get("state") or "") != "publish":
+                continue
+            if path and (it.get("path") or "") != path:
+                continue
+            cid = it.get("id") or ""
+            if not cid:
+                continue
+            self._api("/v3/rtmpconns/kick/%s" % cid, timeout=3.0, method="POST")
+            kicked += 1
+        if kicked:
+            logbus.info("已断开 %d 条残留的推流连接" % kicked, tag="收流")
+        return {"ok": True, "kicked": kicked}
 
     def running(self) -> bool:
         p = self._proc
@@ -180,13 +245,16 @@ class MediaMtxManager(object):
 
     # ---------- API ----------
 
-    def _api(self, path: str, timeout: float = 2.0) -> dict:
+    def _api(self, path: str, timeout: float = 2.0, method: str = "GET") -> dict:
         url = "http://127.0.0.1:%d%s" % (self.api_port, path)
         try:
             # 本机请求，绕开系统代理，否则 Clash 一类会把 127.0.0.1 也代理走
             opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-            with opener.open(url, timeout=timeout) as r:
-                return json.loads(r.read().decode("utf-8"))
+            data = b"" if method != "GET" else None
+            req = urllib.request.Request(url, data=data, method=method)
+            with opener.open(req, timeout=timeout) as r:
+                raw = r.read()
+                return json.loads(raw.decode("utf-8")) if raw else {}
         except Exception:
             return {}
 

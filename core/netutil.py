@@ -34,7 +34,74 @@ FAKE_IP_PREFIXES = ("198.18.", "198.19.")
 _NON_ROUTABLE_PREFIXES = ("127.", "169.254.", "0.", "255.", "224.", "239.")
 
 
-def run(cmd, timeout=8, env=None):
+_PROC_JANITOR = []
+
+
+def _patch_popen_del() -> None:
+    """
+    给 subprocess.Popen.__del__ 套一层异常保护。
+
+    实测这台机器的 Python 3.13.12 在 Popen.__del__ 里会抛 RecursionError。
+    多数时候它只是被 "Exception ignored" 吞掉，看着人畜无害；但在请求
+    线程里触发过一次，直接把整个 Flask 进程带走了（「修复收流」第一版
+    就是这么崩的，页面显示连接被拒）。
+
+    与其在每个 new Popen 的地方各防一遍，不如在源头兜住：析构阶段
+    出什么异常都不应该影响程序本身。这是针对解释器缺陷的兜底，
+    不改变任何正常行为。
+    """
+    try:
+        import subprocess as _sp
+        orig = _sp.Popen.__del__
+        if getattr(orig, "_ps5lb_safe", False):
+            return
+
+        def safe_del(self, *a, **kw):
+            try:
+                orig(self, *a, **kw)
+            except BaseException:
+                pass
+
+        safe_del._ps5lb_safe = True
+        _sp.Popen.__del__ = safe_del
+    except Exception:
+        pass
+
+
+_patch_popen_del()
+
+
+def disarm_popen(proc) -> None:
+    """
+    拆掉 Popen 的析构逻辑。
+
+    CPython 的 Popen.__del__ 第一行就是 `if not self._child_created: return`，
+    把这个标志置 False，析构就成了空操作。实测 Python 3.13.12 的 __del__
+    会抛 RecursionError，在请求线程里触发时能连带把整个 Flask 进程带走
+    （「修复收流」第一版就是这么崩的）。
+
+    调用前必须已经 wait 过子进程，否则子进程会变僵尸。
+    """
+    if proc is None:
+        return
+    try:
+        proc._child_created = False
+    except Exception:
+        pass
+
+
+def _retire(proc) -> None:
+    """用完的 Popen 挂起来，别就地析构。"""
+    disarm_popen(proc)
+    try:
+        _PROC_JANITOR.append(proc)
+        if len(_PROC_JANITOR) > 300:
+            del _PROC_JANITOR[:150]
+    except Exception:
+        pass
+
+
+def run(cmd, timeout=8, env=None, cwd=None):
     """
     执行命令返回 (returncode, 文本)。
 
@@ -43,11 +110,33 @@ def run(cmd, timeout=8, env=None):
     这里先严格 UTF-8，失败退系统 ANSI 代码页。
     """
     try:
-        kwargs = dict(stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
+        kwargs = dict(stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         if IS_WINDOWS:
             kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        p = subprocess.run(cmd, **kwargs)
-        raw = p.stdout or b""
+        if env is not None:
+            kwargs["env"] = env
+        if cwd:
+            kwargs["cwd"] = cwd
+        # 不用 subprocess.run：它内部的 Popen 在函数返回时就被析构，
+        # 正好撞上上面说的 __del__ 递归问题。
+        # finally 里一定要 retire：communicate 抛异常时也不能漏掉，
+        # 漏掉的那个会在下一次创建进程时被 GC，然后原地炸掉。
+        p = None
+        try:
+            p = subprocess.Popen(cmd, **kwargs)
+            try:
+                raw, _ = p.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                try:
+                    p.kill()
+                except Exception:
+                    pass
+                raw, _ = p.communicate()
+            rc = p.returncode
+        finally:
+            if p is not None:
+                _retire(p)
+        raw = raw or b""
         try:
             text = raw.decode("utf-8")
         except UnicodeDecodeError:
@@ -56,7 +145,7 @@ def run(cmd, timeout=8, env=None):
                 text = raw.decode(encoding, "replace")
             except Exception:
                 text = raw.decode("latin-1", "replace")
-        return p.returncode, text
+        return rc, text
     except Exception as e:
         return -1, str(e)
 
@@ -900,6 +989,108 @@ def kill_pid(pid: int) -> bool:
                 return False
     rc, _ = run(["taskkill", "/PID", str(pid), "/F"], timeout=10)
     return rc == 0
+
+
+def kill_pid_tree(pid: int) -> bool:
+    """
+    连子进程一起杀。
+
+    收流端会有派生进程：nginx 带 worker，ffmpeg 有时挂在别处。
+    只杀父进程会留下孤儿继续占着 1935，那正是「有其他设备正在向同一频道
+    播放」的来源之一：旧进程抱着 publisher 会话不放，PS5 再推就被拒。
+    """
+    if not pid:
+        return False
+    if not IS_WINDOWS:
+        import signal
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except Exception:
+            pass
+        for _ in range(20):
+            time.sleep(0.15)
+            if not pid_alive(pid):
+                return True
+        try:
+            os.kill(pid, signal.SIGKILL)
+            return True
+        except Exception:
+            return False
+    rc, _ = run(["taskkill", "/F", "/T", "/PID", str(pid)], timeout=10)
+    return rc == 0
+
+
+def pid_alive(pid: int) -> bool:
+    if not pid:
+        return False
+    if not IS_WINDOWS:
+        try:
+            os.kill(pid, 0)
+            return True
+        except Exception:
+            return False
+    rc, out = run(["tasklist", "/FI", "PID eq %d" % pid, "/FO", "CSV", "/NH"],
+                  timeout=10)
+    return rc == 0 and ('"%d"' % pid) in out
+
+
+# 收流端会用到的进程名。启动前发现这些占着端口才动手清；
+# 别的程序占着就一个字都不碰，明确报错让用户自己处理。
+RECEIVER_PROC_NAMES = (
+    "rtmf", "rtmp-forwarder", "rtmp_forwarder",
+    "nginx", "mediamtx",
+    "ffmpeg",
+)
+
+
+def free_port_for_receiver(port: int, names=None, wait: float = 5.0) -> dict:
+    """
+    收流端口启动前的清场。
+
+    为什么必须有这个：rtmf / mediamtx 的 start() 原来只看自己的进程退没退，
+    完全不管 1935 上是不是还坐着一个上次留下的同款进程。结果是新进程 bind
+    失败、旧进程继续抱着 PS5 的 publisher 会话，PS5 一重推就被拒，报
+    「有其他设备正在向同一频道播放」。用户只能靠重启电脑解决。
+
+    只清自己家的进程（rtmf/nginx/mediamtx/ffmpeg），别人的进程一律不动。
+
+    返回 {"ok": bool, "killed": [pid], "detail": str}
+    """
+    if not port:
+        return {"ok": True, "killed": [], "detail": ""}
+    names = tuple(n.lower() for n in (names or RECEIVER_PROC_NAMES))
+    killed = []
+    last_pid, last_name = 0, ""
+    deadline = time.time() + max(1.0, wait)
+
+    while True:
+        if not port_listening(port):
+            if killed:
+                msg = "已清掉上次残留的收流进程（%s）" % "、".join(str(p) for p in killed)
+                return {"ok": True, "killed": killed, "detail": msg}
+            return {"ok": True, "killed": [], "detail": ""}
+
+        pid, name = port_owner(port)
+        last_pid, last_name = pid, name
+        if not pid:
+            return {"ok": False, "killed": killed,
+                    "detail": "端口 %d 被占用，但查不到是哪个进程（可能需要管理员权限）" % port}
+
+        low = (name or "").lower()
+        if not any(n in low for n in names):
+            return {"ok": False, "killed": killed,
+                    "detail": "端口 %d 被 %s（PID %d）占着，那不是直播桥的进程，没有动它"
+                              % (port, name or "未知程序", pid)}
+
+        if pid != os.getpid() and pid not in killed:
+            killed.append(pid)
+            kill_pid_tree(pid)
+
+        if time.time() > deadline:
+            return {"ok": False, "killed": killed,
+                    "detail": "端口 %d 上的 %s（PID %d）清不掉，可能需要用管理员身份启动，"
+                              "或者有安全软件在拦" % (port, last_name or "进程", last_pid)}
+        time.sleep(0.25)
 
 
 FIREWALL_RULES = [

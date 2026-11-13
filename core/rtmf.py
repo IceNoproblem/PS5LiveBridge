@@ -9,7 +9,7 @@ import time
 import urllib.request
 from collections import deque
 
-from . import amf, logbus, paths
+from . import amf, logbus, netutil, paths
 
 DEFAULT_WEB_PORT = 8098
 BANDWIDTH_WINDOW = 3.0
@@ -124,6 +124,9 @@ class RtmpForwarderManager(object):
         self._logfh = None
         self.last_error = ""
         self._lock = threading.RLock()
+        # 停掉的 Popen 挂这儿不就地析构：Python 3.13 的 Popen.__del__
+        # 会递归爆栈，在请求线程里触发会直接带走整个进程。
+        self._retired = []
         self._snap = {}
         self._meta = {}
         self._samples = deque()
@@ -151,9 +154,28 @@ class RtmpForwarderManager(object):
     def start(self) -> bool:
         if self.running():
             return True
+        # 上一次启动失败留下的死进程先收进退休列表，别让下一次赋值时析构它
+        if self.proc is not None and self.proc.poll() is not None:
+            netutil.disarm_popen(self.proc)
+            self._retired.append(self.proc)
+            self.proc = None
         if not self.exe:
             self.last_error = "找不到 rtmpf.exe"
             return False
+
+        # 起之前先清场。
+        # 上次进程没退干净时，它还抱着 PS5 的 publisher 会话：新进程 bind 不上
+        # 1935，旧进程继续拒掉 PS5 的每一次重推，PS5 就报「有其他设备正在向
+        # 同一频道播放」。原来这里什么都不查，直接 Popen，于是「启动成功」
+        # 其实连到了旧实例的管理口，状态全对不上。
+        for _port, _label in ((self.rtmp_port, "RTMP"), (self.web_port, "管理")):
+            guard = netutil.free_port_for_receiver(_port)
+            if not guard["ok"]:
+                self.last_error = guard["detail"]
+                logbus.error(self.last_error, tag="收流")
+                return False
+            if guard["killed"]:
+                logbus.warn("%s端口 %d：%s" % (_label, _port, guard["detail"]), tag="收流")
 
         os.makedirs(paths.DATA_DIR, exist_ok=True)
         self._write_config([])
@@ -198,6 +220,17 @@ class RtmpForwarderManager(object):
             self.last_error = "接口没响应（端口 %d）" % self.web_port
             return False
 
+        # 接口能通不等于「这个进程起的」。管理口可能还是上一次残留实例的，
+        # 那种情况下界面显示收流正常，实际收流的却是没人管的旧进程。
+        owner, _owner_name = netutil.port_owner(self.web_port)
+        if owner and self.proc.pid and owner != self.proc.pid:
+            self.last_error = ("管理端口 %d 属于另一个进程（PID %d），不是刚启动的这个"
+                               "（PID %d），收流端可能没起来"
+                               % (self.web_port, owner, self.proc.pid))
+            logbus.error(self.last_error, tag="收流")
+            self.stop()
+            return False
+
         self._started_at = time.time()
         self._stop.clear()
         self._thread = threading.Thread(target=self._poll_loop,
@@ -213,19 +246,36 @@ class RtmpForwarderManager(object):
         if t and t.is_alive():
             t.join(timeout=2.0)
         self._thread = None
-        p = self.proc
-        self.proc = None
         self._started_at = 0.0
-        if p is None:
-            return
-        try:
-            p.terminate()
-            p.wait(timeout=5)
-        except Exception:
+        p = self.proc
+        if p is not None:
             try:
-                p.kill()
+                if p.poll() is None:
+                    p.terminate()
+                    p.wait(timeout=5)
             except Exception:
                 pass
+            # terminate 对 Windows 上的 Go 程序经常不生效。确认一次，
+            # 还活着就连进程树一起强杀。留一个僵尸在 1935 上抱着
+            # publisher 会话，PS5 再推就被拒，这就是那句
+            # 「有其他设备正在向同一频道播放」的直接来源。
+            if p.poll() is None:
+                logbus.warn("收流进程（PID %d）没响应终止请求，强制结束" % p.pid, tag="收流")
+                netutil.kill_pid_tree(p.pid)
+                try:
+                    p.wait(timeout=3)
+                except Exception:
+                    pass
+            if p.poll() is None:
+                logbus.error("收流进程（PID %d）结束不掉，下次启动会按端口自动清理" % p.pid,
+                             tag="收流")
+        # 这里无论死没死都放掉引用。原先是先置 None 再 terminate，
+        # 杀失败就成了「进程还在、程序认为它没了」的幽灵。现在由 start()
+        # 里的端口清场兜底，引用的执念反而会让 running() 永远为真。
+        if p is not None:
+            netutil.disarm_popen(p)
+            self._retired.append(p)
+        self.proc = None
         fh = getattr(self, "_logfh", None)
         if fh:
             try:

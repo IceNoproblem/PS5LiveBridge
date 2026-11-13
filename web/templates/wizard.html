@@ -592,8 +592,12 @@
           </p>
           <div class="note warn">
             <b>开播时 PS5 报「有其他设备正在向这个频道播放」？</b><br>
-            macOS 上没有第二种收流实现可换。先点右上角「重启」把程序重开一次，
-            再让 PS5 重新开播。还不行就导一份诊断包。
+            先点下面的「修复收流」。它会把上一次没退干净的推流连接断掉，再让 PS5 重新开播。<br>
+            还不行再点右上角「重启」。这一步已经不用重启电脑了。
+          </div>
+          <div class="impl-row">
+            <button class="btn sm" onclick="repairReceiver(this)">修复收流</button>
+            <span class="impl-hint" id="repair-hint"></span>
           </div>
         </div>
         {% else %}
@@ -612,8 +616,13 @@
           </p>
           <div class="note warn">
             <b>开播时 PS5 报「有其他设备正在向这个频道播放」？</b><br>
-            把这里换成另一个收流实现，再开一次试试，多数情况换过去就好了。<br>
-            正在直播的时候切换，要等下次启动才生效，右上角有「重启」可以直接重开。
+            先点下面的「修复收流」。它会把上一次没退干净的收流进程清掉再重新起来，
+            多数情况点一下就恢复了，不用重启电脑。<br>
+            还不行再换一个收流实现试试。正在直播的时候修复会先失败，先停播再点。
+          </div>
+          <div class="impl-row">
+            <button class="btn sm" onclick="repairReceiver(this)">修复收流</button>
+            <span class="impl-hint" id="repair-hint"></span>
           </div>
         </div>
         {% endif %}

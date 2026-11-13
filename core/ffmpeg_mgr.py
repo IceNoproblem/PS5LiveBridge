@@ -128,9 +128,9 @@ class FfmpegManager:
             if self._process:
                 try:
                     if os.name == 'nt':
-                        subprocess.run(["taskkill", "/F", "/T", "/PID",
-                                       str(self._process.pid)],
-                                      capture_output=True, timeout=5)
+                        from . import netutil as _nu
+                        _nu.run(["taskkill", "/F", "/T", "/PID",
+                                 str(self._process.pid)], timeout=5)
                     else:
                         os.killpg(os.getpgid(self._process.pid), signal.SIGKILL)
                 except Exception:
