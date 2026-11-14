@@ -54,3 +54,6 @@ docs/screens/old/
 
 scripts/
 research/
+
+# 诊断包导出目录（源码模式下生成在这里）
+diag/
