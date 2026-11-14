@@ -1422,3 +1422,12 @@ select option:checked {
   padding-top: 0;
   border-top: 0;
 }
+
+/* 端口试绑失败时的原因说明，跟在端口那一行下面 */
+.bindhint {
+  display: block;
+  font-size: 12px;
+  line-height: 1.55;
+  opacity: .72;
+  padding: 2px 0 8px;
+}

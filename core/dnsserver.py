@@ -148,7 +148,7 @@ def build_query(domain: str, qtype: int = QTYPE_A, qid: int = 0x4C42) -> bytes:
     return header + qname + struct.pack("!HH", qtype, 1)
 
 
-def parse_answers(data: bytes):
+def parse_answers(data: bytes, want_aaaa: bool = False):
     """
     取出应答里的 A 记录与 CNAME 目标。
 
@@ -186,6 +186,11 @@ def parse_answers(data: bytes):
             pos += rdlen
             if rtype == QTYPE_A and rdlen == 4:
                 ips.append(socket.inet_ntoa(rdata))
+            elif rtype == QTYPE_AAAA and rdlen == 16 and want_aaaa:
+                try:
+                    ips.append(socket.inet_ntop(socket.AF_INET6, rdata))
+                except Exception:
+                    pass
             elif rtype == 5:
                 try:
                     name, _ = parse_qname(data, pos - rdlen)
@@ -253,11 +258,12 @@ def query(server: str, domain: str, qtype: int = QTYPE_A,
         return False, "NXDOMAIN"
     if rcode == 2:
         return False, "SERVFAIL"
-    ips, cnames = parse_answers(resp)
+    ips, cnames = parse_answers(resp, want_aaaa=(qtype == QTYPE_AAAA))
     if not ips and cnames and follow_cname:
         return query(server, cnames[0], qtype, timeout, port, follow_cname=False)
     if not ips:
-        return False, "无 A 记录(rcode=%d)" % rcode
+        return False, "无 %s 记录(rcode=%d)" % (
+            "AAAA" if qtype == QTYPE_AAAA else "A", rcode)
     return True, ips
 
 

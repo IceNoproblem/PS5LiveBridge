@@ -808,9 +808,16 @@ async function loadDiag(force) {
         const name = labels[x.port] || '管理口';
         const ok = !!x.listening;
         const who = x.process ? (' · ' + esc(x.process)) : '';
-        return '<div class="kvrow"><span>' + x.port + ' ' + name + who
-          + '</span><b class="' + (ok ? 'ok' : 'err') + '">'
-          + (ok ? '已开' : '未开') + '</b></div>';
+        let tail = ok ? '已开' : '未开';
+        // 没开的时候把试绑拿到的错误码一起显示，10013 和 10048 是两回事
+        if (!ok && x.bind_code) tail += ' · ' + x.bind_code;
+        let row = '<div class="kvrow"><span>' + x.port + ' ' + name + who
+          + '</span><b class="' + (ok ? 'ok' : 'err') + '">' + tail + '</b></div>';
+        if (!ok && x.bind_hint) {
+          row += '<div class="kvrow dim"><span class="bindhint">'
+            + esc(x.bind_hint) + '</span></div>';
+        }
+        return row;
       }).join('');
     }
   }

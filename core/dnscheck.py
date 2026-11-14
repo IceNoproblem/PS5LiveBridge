@@ -56,10 +56,21 @@ def check_server(server: str, expected_ip: str, domains=None, timeout: float = 2
     def one(domain):
         ok, res = dnsserver.query(server, domain, timeout=timeout)
         ips = res if ok else []
+        # 顺手看一眼 AAAA。hosts 只能改 IPv4，有 IPv6 记录的话 PS5 开了 IPv6
+        # 就会直接绕过本机，而且表现出来跟「hosts 没配」一模一样。
+        aaaa = []
+        try:
+            ok6, res6 = dnsserver.query(server, domain,
+                                        qtype=dnsserver.QTYPE_AAAA, timeout=timeout)
+            if ok6:
+                aaaa = list(res6)[:3]
+        except Exception:
+            pass
         return {
             "domain": domain,
             "ok": bool(ok and expected_ip in ips),
             "ips": ips,
+            "aaaa": aaaa,
             "err": "" if ok else str(res),
             "fake": netutil_classify_fake(ips),
         }
@@ -74,6 +85,7 @@ def check_server(server: str, expected_ip: str, domains=None, timeout: float = 2
         "hits": hits,
         "ok": hits == len(domains),
         "fake_ip": any(r["fake"] for r in rows),
+        "aaaa_any": any(r["aaaa"] for r in rows),
         "rows": rows,
     }
 
@@ -146,13 +158,22 @@ def verify(expected_ip: str, target=None, domains=None, mode: str = "router") ->
     if ok:
         kind = winner["kind"]
         if kind == "router":
-            hint = "路由器已把推流域名指向本机（%s），配置生效。" % expected_ip
+            hint = ("路由器已把推流域名指向本机（%s）。这是从本机查到的结果，"
+                    "只说明路由器这一侧配对了；PS5 是另一台设备，"
+                    "它用哪个 DNS、有没有缓存，得看收流端口有没有收到连接。"
+                    % expected_ip)
         elif kind == "local":
-            hint = "PS5 的 DNS 已直接指向本机（%s），配置生效。" % expected_ip
+            hint = ("PS5 的 DNS 已直接指向本机（%s）。配置对了，"
+                    "实际上有没有连过来要看收流端口的连接情况。" % expected_ip)
         elif kind == "self":
             hint = "本机内置 DNS 正在生效，PS5 指向本机即可。"
         else:
-            hint = "系统 DNS 已把推流域名指向本机（%s）。" % expected_ip
+            hint = ("系统 DNS 已把推流域名指向本机（%s）。"
+                    "这只是本机的解析结果，PS5 侧需单独确认。" % expected_ip)
+        if winner.get("aaaa_any"):
+            hint += (" 另外这些域名有 IPv6（AAAA）记录，"
+                     "hosts 只改 IPv4，PS5 开着 IPv6 的话会绕过本机。"
+                     "建议在 PS5 网络设置里把 IPv6 设为不使用。")
     else:
         if fake_any:
             hint = ("检测到 DNS 返回 198.18.x.x / 198.19.x.x 这类加速器伪地址："

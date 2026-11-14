@@ -12,6 +12,54 @@ _FW_RULES = (
     ("界面 (5000)", "PS5LiveBridge-Web"),
 )
 
+# 试绑失败时系统给的错误码，翻成人话。
+# 10013 和 10048 一定要分开：前者是系统不让绑（端口被保留），后者是别人占着，
+# 解法完全不同。2026-11-14 有个用户卡在这上面，界面上写的是「被占」，其实是 10013。
+_BIND_HINTS = {
+    10013: "系统不允许绑定这个端口。没有程序在监听，多半是被系统保留了"
+           "（装了 Hyper-V / WSL / Docker 的机器会占掉一批端口，每次开机范围还会变）。"
+           "管理员命令行依次执行：net stop winnat，重开本程序，再 net start winnat。"
+           "要确认就 netsh int ipv4 show excludedportrange protocol=tcp",
+    10048: "这个端口已经被别的程序占用。netstat -ano | findstr :端口号 能查到是谁",
+    10049: "指定的 IP 不属于本机，绑不了",
+    13: "权限不足。低于 1024 的端口需要管理员或 root",
+    98: "这个端口已经被别的程序占用（EADDRINUSE）",
+    99: "无法分配地址（EADDRNOTAVAIL）",
+}
+
+
+def _probe_bind(port: int, host: str = "0.0.0.0") -> dict:
+    """
+    试绑一次这个端口，拿系统给的错误码。
+
+    比「看有没有在听」信息量大得多：端口在听只说明有人占着，
+    试绑失败能区分「系统不让绑」和「别人占着」，这两件事的解法完全相反。
+    只在端口没在监听时调用，否则会把「自己占着」当成故障报出来。
+    """
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        # Windows 默认允许多个 socket 绑同一个端口，不设独占的话试绑永远成功，
+        # 探测就白做了（2026-11-14 实测：端口被占着，bind 照样 ok）。
+        # SO_EXCLUSIVEADDRUSE 只有 Windows 有，Linux 默认就是独占。
+        excl = getattr(socket, "SO_EXCLUSIVEADDRUSE", None)
+        if excl is not None:
+            try:
+                s.setsockopt(socket.SOL_SOCKET, excl, 1)
+            except Exception:
+                pass
+        s.bind((host, port))
+        return {"ok": True, "code": 0, "hint": ""}
+    except OSError as e:
+        code = getattr(e, "winerror", None) or e.errno or 0
+        return {"ok": False, "code": int(code),
+                "hint": _BIND_HINTS.get(int(code), str(e)[:120])}
+    finally:
+        try:
+            s.close()
+        except Exception:
+            pass
+
 
 def _probe_port(port: int, proto: str = "tcp") -> dict:
     try:
@@ -74,12 +122,21 @@ def _ports_overview(orch, caps=None) -> dict:
                 udp = bool(netutil.port_listening(port, "udp"))
             except Exception:
                 udp = False
-        out.append({
+        item = {
             "port": port,
             "listening": bool(probe["listening"]) or udp,
             "udp": udp,
             "process": probe["process"],
-        })
+        }
+        # 业务端口没在听时试着绑一下，把系统的错误码带出来。
+        # 只看 listening 的话，10013（系统不让绑）和 10048（别人占着）分不出来。
+        # 53 不试：低于 1024 的端口在非 root 下必然报权限，会误导。
+        if not item["listening"] and port in (1935, 6667, 443):
+            b = _probe_bind(port)
+            if not b["ok"]:
+                item["bind_code"] = b["code"]
+                item["bind_hint"] = b["hint"]
+        out.append(item)
     return {"items": out}
 
 
@@ -534,6 +591,251 @@ def collect(orch, plan: str = "") -> dict:
     }
 
 
+def _os_evidence(rtmp_port: int = 1935, irc_port: int = 6667) -> dict:
+    """
+    系统层的证据，专门回答「端口为什么绑不上」。
+
+    这几条 netsh 加起来两百毫秒上下，界面那条自检要几十毫秒返回，所以不背它们，
+    只在导出诊断包时跑。
+    """
+    if paths.PLATFORM != "windows":
+        return {}
+    import re
+
+    out = {}
+    watch = [rtmp_port, irc_port, 53, 5000, 8098]
+
+    # 端口保留段：10013 的唯一解释。落在段里的端口，bind 会被系统拒掉
+    for proto in ("tcp", "udp"):
+        try:
+            rc, txt = netutil.run(["netsh", "int", "ipv4", "show",
+                                   "excludedportrange", "protocol=" + proto],
+                                  timeout=15)
+        except Exception:
+            continue
+        if rc != 0 or not txt:
+            continue
+        rows = []
+        for line in txt.splitlines():
+            m = re.match(r"\s*(\d+)\s+(\d+)\s*$", line)
+            if not m:
+                continue
+            start, end = int(m.group(1)), int(m.group(2))
+            row = {"start": start, "end": end}
+            covers = [p for p in watch if start <= p <= end]
+            if covers:
+                row["covers"] = covers
+            rows.append(row)
+        out["excluded_" + proto] = {
+            "count": len(rows),
+            "hits": [p for p in watch if any(r["start"] <= p <= r["end"] for r in rows)],
+            "rows": rows,
+        }
+
+    # 端口代理：1935 被转去别处的可能
+    try:
+        rc, txt = netutil.run(["netsh", "interface", "portproxy", "show", "all"],
+                              timeout=10)
+        if rc == 0 and txt:
+            out["portproxy"] = [l.strip() for l in txt.splitlines() if l.strip()][:40]
+    except Exception:
+        pass
+
+    # URL 预留：HTTP.sys 先占了端口，普通 socket 就绑不上
+    try:
+        rc, txt = netutil.run(["netsh", "http", "show", "urlacl"], timeout=15)
+        if rc == 0 and txt:
+            hits = []
+            for line in txt.splitlines():
+                s = line.strip()
+                if s.startswith("Reserved URL") or s.startswith("保留的 URL"):
+                    if any(":%d/" % p in s or ":%d " % p in s for p in watch):
+                        hits.append(s)
+            if hits:
+                out["urlacl_hits"] = hits[:20]
+    except Exception:
+        pass
+
+    # 默认路由：网关不对，PS5 的包根本不会经过本机
+    try:
+        rc, txt = netutil.run(["route", "print", "-4"], timeout=10)
+        if rc == 0 and txt:
+            defs = []
+            for line in txt.splitlines():
+                parts = line.split()
+                if len(parts) >= 5 and parts[0] == "0.0.0.0" and parts[1] == "0.0.0.0":
+                    defs.append({"gateway": parts[2], "iface": parts[3],
+                                 "metric": parts[4]})
+            out["default_routes"] = defs
+    except Exception:
+        pass
+
+    return out
+
+
+def _conn_summary(netstat_text: str, port: int) -> list:
+    """
+    从已经抓好的 netstat 输出里，挑出这个端口上的连接。
+
+    不重新跑 netstat，直接解析现成的文本。有 ESTABLISHED 就说明对面真的连过来了，
+    这是判断「PS5 到底有没有走过来」最直接的证据。
+    """
+    out = []
+    tail = ":%d" % port
+    for line in (netstat_text or "").splitlines():
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        if parts[0].upper() not in ("TCP", "TCPV6"):
+            continue
+        local, remote = parts[1], parts[2]
+        if not (local.endswith(tail) or remote.endswith(tail)):
+            continue
+        out.append({
+            "local": local,
+            "remote": remote,
+            "state": parts[3] if len(parts) > 3 else "",
+            "pid": parts[4] if len(parts) > 4 else "",
+        })
+    return out[:30]
+
+
+def _dns_snapshot(domains, servers=None, timeout: float = 1.2) -> list:
+    """
+    每个域名查一遍 A 和 AAAA，把实际拿到的东西列出来。
+
+    2026-11-14 那个「hosts 配了但 PS5 还是直连」的用户，缺的就是这一份：
+    只看 hosts 内容不知道有没有命中，得看真实解析结果。
+    AAAA 有记录是危险信号，说明 PS5 可能走 IPv6 绕过 hosts。
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    from . import dnsserver
+
+    if servers is None:
+        gw = ""
+        try:
+            gw = netutil.default_gateway()
+        except Exception:
+            pass
+        servers = [gw] if gw else []
+
+    def one(dom):
+        row = {"domain": dom, "a": [], "aaaa": [], "error": ""}
+        for srv in servers:
+            try:
+                ok, res = dnsserver.query(srv, dom, qtype=dnsserver.QTYPE_A,
+                                          timeout=timeout)
+            except Exception as e:
+                row["error"] = str(e)[:80]
+                continue
+            if ok:
+                row["a"] = list(res)[:6]
+                row["server"] = srv
+                break
+        for srv in servers:
+            try:
+                ok6, res6 = dnsserver.query(srv, dom, qtype=dnsserver.QTYPE_AAAA,
+                                            timeout=timeout)
+            except Exception:
+                continue
+            if ok6:
+                row["aaaa"] = list(res6)[:6]
+                break
+        if not row["a"] and not row["error"]:
+            row["error"] = "查不到 A 记录"
+        return row
+
+    items = list(domains or [])
+    if not items:
+        return []
+    with ThreadPoolExecutor(max_workers=min(6, len(items))) as pool:
+        return list(pool.map(one, items))
+
+
+def _hosts_entries() -> list:
+    """本机 hosts 里生效的条目（去掉注释和空行）。"""
+    import os
+    p = (r"C:\Windows\System32\drivers\etc\hosts"
+         if paths.PLATFORM == "windows" else "/etc/hosts")
+    out = []
+    try:
+        with open(p, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                s = line.split("#", 1)[0].strip()
+                if s:
+                    out.append(s)
+    except Exception:
+        return []
+    return out[:40]
+
+
+def _summary_text(info: dict) -> str:
+    """
+    诊断包里那份人话摘要。用户发问题时可以直接贴这段，不用打开 JSON 找。
+    """
+    d = info.get("diag") or {}
+    ev = d.get("evidence") or {}
+    local = d.get("local") or {}
+    lines = []
+    lines.append("PS5 直播桥 诊断摘要")
+    lines.append("时间  %s" % info.get("time", ""))
+    lines.append("版本  %s    平台 %s    方案 %s"
+                 % (d.get("version") or "?", d.get("platform") or "?", d.get("mode") or "?"))
+    lines.append("本机  %s    网关 %s" % (d.get("lan_ip") or "?", d.get("gateway") or "?"))
+    lines.append("")
+
+    ports = (local.get("ports") or {}).get("items") or []
+    if ports:
+        lines.append("端口")
+        for it in ports:
+            s = "  %-5d %s" % (it.get("port"), "在听" if it.get("listening") else "没听")
+            if it.get("process"):
+                s += "  (%s)" % it["process"]
+            if it.get("bind_code"):
+                s += "  试绑失败(%d)" % it["bind_code"]
+            lines.append(s)
+            if it.get("bind_hint"):
+                lines.append("        %s" % str(it["bind_hint"])[:160])
+        lines.append("")
+
+    issues = d.get("issues") or []
+    if issues:
+        lines.append("自检问题 %d 条" % len(issues))
+        for i in issues:
+            lines.append("  [%s] %s" % (i.get("level") or "?", i.get("msg") or ""))
+    else:
+        lines.append("自检没有发现问题")
+    lines.append("")
+
+    ex = ev.get("excluded_tcp") or {}
+    if ex.get("hits"):
+        lines.append("!! TCP 端口落在系统保留段里: %s" % ex["hits"])
+        for r in ex.get("rows") or []:
+            if r.get("covers"):
+                lines.append("   %d-%d 覆盖 %s" % (r["start"], r["end"], r["covers"]))
+        lines.append("")
+
+    dns_rows = ev.get("dns") or []
+    if dns_rows:
+        lines.append("域名解析（从本机查）")
+        for r in dns_rows:
+            lines.append("  %-42s A=%-16s AAAA=%s"
+                         % (r.get("domain"), ",".join(r.get("a") or []) or "-",
+                            ",".join(r.get("aaaa") or []) or "-"))
+        if any(r.get("aaaa") for r in dns_rows):
+            lines.append("  注意: 有 AAAA 记录，如果 PS5 开了 IPv6 会绕过 hosts")
+        lines.append("")
+
+    conns = ev.get("rtmp_connections") or []
+    est = [c for c in conns if "ESTABLISHED" in (c.get("state") or "")]
+    lines.append("收流端口连接 %d 条，其中已建立 %d 条" % (len(conns), len(est)))
+    for c in est[:6]:
+        lines.append("  %s <- %s" % (c.get("local"), c.get("remote")))
+    if not est:
+        lines.append("  没有已建立的连接。PS5 没有连到本机，先查它是怎么拿到地址的")
+    return "\n".join(lines) + "\n"
+
+
 def _mask_proxy(url: str) -> str:
     """代理地址保留前两段：192.168.*.*:7890。端口留着，排查时要用。"""
     if not url:
@@ -604,21 +906,63 @@ def export(orch, diag_data=None) -> dict:
 
     from . import paths, twitch_title
 
-    stamp = time.strftime("%Y%m%d-%H%M%S")
-    name = "diag-%s.zip" % stamp
-    out_dir = os.path.join(paths.DATA_DIR, "diag")
-    os.makedirs(out_dir, exist_ok=True)
-    path = os.path.join(out_dir, name)
-
     d = diag_data or collect(orch)
     try:
         snap = orch.snapshot()
     except Exception:
         snap = {}
+
+    # 文件名带上版本和平台，用户发几个包过来时能分清
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    ver = str(snap.get("version") or "0").replace(".", "_")
+    name = "diag-%s-%s-%s.zip" % (ver, paths.PLATFORM, stamp)
+    out_dir = os.path.join(paths.DATA_DIR, "diag")
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, name)
+
+    try:
+        rtmp_p = int(orch.cfg.get("RTMP_PORT", 1935) or 1935)
+    except Exception:
+        rtmp_p = 1935
+    try:
+        irc_p = int(orch.cfg.get("IRC_PORT", 6667) or 6667)
+    except Exception:
+        irc_p = 6667
+
+    # 系统层证据：保留段、端口代理、URL 预留、默认路由、域名解析、hosts。
+    # 几条 netsh 加起来两百毫秒上下，只在打包时跑，界面那条自检不等这些命令。
+    ev = {}
+    try:
+        ev = _os_evidence(rtmp_p, irc_p)
+    except Exception:
+        ev = {}
+    try:
+        from .dnscheck import CHECK_DOMAINS
+        ev["dns"] = _dns_snapshot(CHECK_DOMAINS)
+    except Exception:
+        ev["dns"] = []
+    try:
+        ev["hosts"] = _hosts_entries()
+    except Exception:
+        ev["hosts"] = []
+
+    # netstat 只跑一次：既进包，也用来提炼收流端的连接
+    net_txt = ""
+    try:
+        rc, out = netutil.run(["netstat", "-ano"] if paths.PLATFORM == "windows"
+                              else ["lsof", "-nP", "-i"], timeout=25)
+        net_txt = out or ""
+    except Exception:
+        net_txt = ""
+    if net_txt:
+        ev["rtmp_connections"] = _conn_summary(net_txt, rtmp_p)
+    d["evidence"] = ev
+
     ch = (orch.cfg.get("TWITCH_CHANNEL") or "").strip()
     px = (orch.cfg.get("TWITCH_PROXY") or "").strip()
     try:
-        tw = twitch_title.fetch_session(ch, proxy=px, timeout=8.0)
+        # 两秒拿不到就算了，诊断包不该卡在这一步
+        tw = twitch_title.fetch_session(ch, proxy=px, timeout=2.0)
     except Exception as e:
         tw = {"ok": False, "error": str(e)}
 
@@ -638,6 +982,7 @@ def export(orch, diag_data=None) -> dict:
     }
 
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("summary.txt", _summary_text(info))
         z.writestr("info.json", json.dumps(info, ensure_ascii=False, indent=2))
         z.writestr("config.json",
                    json.dumps(_mask_config(orch.cfg), ensure_ascii=False, indent=2))
@@ -665,13 +1010,8 @@ def export(orch, diag_data=None) -> dict:
             if os.path.exists(p3):
                 _add_tail(z, p3, "logs/" + extra, lines=tail)
 
-        try:
-            rc, out = netutil.run(["netstat", "-ano"] if paths.PLATFORM == "windows"
-                                  else ["lsof", "-nP", "-i"], timeout=25)
-            if out:
-                z.writestr("netstat.txt", out[:300000])
-        except Exception:
-            pass
+        if net_txt:
+            z.writestr("netstat.txt", net_txt[:300000])
 
     return {"ok": True, "name": name, "path": path,
             "size": os.path.getsize(path) if os.path.exists(path) else 0}
