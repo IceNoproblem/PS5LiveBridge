@@ -104,6 +104,31 @@ def split_rtmp_url(addr: str, key: str):
     return host, app, k
 
 
+def _explain_exit(rtmp_port: int, web_port: int, tail: str) -> str:
+    """
+    把 rtmf 的退出原因翻译成人能看懂的话。
+
+    以前这里只写「进程启动后立即退出（端口 X 被占？）」，可实际日志里
+    往往写着 Windows 错误码。10013 是权限拒绝，不是被别人占着；
+    10048 才是真的地址在用。两种情况解法完全不同，不能混在一句里。
+    """
+    if "10013" in tail:
+        return ("收流端绑定 %d 失败，Windows 返回 10013（权限拒绝）。"
+                "这个端口没有程序在监听，多半是被系统保留了：装了 Hyper-V、WSL、"
+                "Docker Desktop 的机器会占掉一批端口，开机后每次分配的段还可能不一样。"
+                "用管理员命令行按顺序执行：net stop winnat，然后重开本程序，"
+                "起来之后 net start winnat。还不行就跑 "
+                "netsh int ipv4 show excludedportrange protocol=tcp "
+                "看 %d 是否落在保留段里。" % (rtmp_port, rtmp_port))
+    if "10048" in tail:
+        return ("收流端口 %d 已经被别的程序占用（10048）。"
+                "netstat -ano | findstr :%d 能看到是谁，结束它再重试。"
+                % (rtmp_port, rtmp_port))
+    if tail:
+        return "进程启动后立即退出（端口 %d）：%s" % (rtmp_port, tail)
+    return "进程启动后立即退出（端口 %d），没有任何输出" % rtmp_port
+
+
 class RtmpForwarderManager(object):
     """
     rtmp-forwarder 的管理壳，接口与 NginxManager 对齐。
@@ -150,6 +175,26 @@ class RtmpForwarderManager(object):
     @property
     def uptime(self) -> float:
         return (time.time() - self._started_at) if self._started_at else 0.0
+
+    def _stderr_tail(self, limit: int = 3) -> str:
+        """取 rtmf-stderr.log 末尾几条关键行，用来解释秒退原因。"""
+        path = os.path.join(paths.LOGS_DIR, "rtmf-stderr.log")
+        try:
+            with open(path, "rb") as f:
+                f.seek(0, 2)
+                size = f.tell()
+                f.seek(max(0, size - 8192))
+                text = f.read().decode("utf-8", "replace")
+        except Exception:
+            return ""
+        hits = []
+        for line in text.splitlines():
+            s = line.strip()
+            if not s or s.startswith("=====") or s.startswith("note:"):
+                continue
+            if any(k in s for k in ("Error", "code:", "panic")):
+                hits.append(s)
+        return " | ".join(hits[-limit:])[:320]
 
     def start(self) -> bool:
         if self.running():
@@ -209,7 +254,8 @@ class RtmpForwarderManager(object):
 
         for _ in range(40):
             if self.proc.poll() is not None:
-                self.last_error = "进程启动后立即退出（端口 %d 被占？）" % self.rtmp_port
+                self.last_error = _explain_exit(self.rtmp_port, self.web_port,
+                                                self._stderr_tail())
                 return False
             try:
                 _http("GET", self.base + "/api/stream-info", timeout=1.0)
