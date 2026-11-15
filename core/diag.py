@@ -23,7 +23,8 @@ _BIND_HINTS = {
     10048: "这个端口已经被别的程序占用。netstat -ano | findstr :端口号 能查到是谁",
     10049: "指定的 IP 不属于本机，绑不了",
     13: "权限不足。低于 1024 的端口需要管理员或 root",
-    98: "这个端口已经被别的程序占用（EADDRINUSE）",
+    98: "这个端口已经被别的程序占用（EADDRINUSE，Linux）",
+    48: "这个端口已经被别的程序占用（EADDRINUSE，macOS）",
     99: "无法分配地址（EADDRNOTAVAIL）",
 }
 

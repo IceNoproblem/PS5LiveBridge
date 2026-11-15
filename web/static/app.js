@@ -1478,8 +1478,13 @@ async function renderNet() {
   const dnsMode = (S.state && S.state.dns_mode) || 'router';
   const _pk3 = S.modePick
     || (((S.state && S.state.dns_mode) === 'builtin') ? 'dns' : '');
+  // dv 是 applyState 里的局部变量，这里取不到，直接用状态里的值。
+  // 之前这行写成 dv.running，step3 一打开就抛 ReferenceError，
+  // 整个 renderNet 后面的代码全不执行（2026-11-15 发现）。
+  const _hj3 = (S.state && S.state.hijack) || {};
+  const _dv3 = _hj3.divert || {};
   const routerDone = (_pk3 === 'hosts')
-    || (!S.modePick && !(dv.running) && !(S.state && S.state.hijack && S.state.hijack.dns_running)
+    || (!S.modePick && !_dv3.running && !_hj3.dns_running
         && !!(S.state && S.state.progress_dns_ok));
   if (accel.length && _pk3 !== 'hosts') {
     // 方案一走路由器 hosts，本机装没装加速器跟它没关系，别在这里误导
@@ -1886,6 +1891,10 @@ async function loadNetcheck(force) {
   }
 }
 
+// 复制成功的短暂标记。tick 每秒都会重绘这块，状态得存在函数外面，
+// 不然「已复制」一秒就被刷掉了。
+let copiedAt = 0;
+
 function renderOutputMode() {
   const st = S.state || {};
   const live = st.live || {};
@@ -1897,16 +1906,23 @@ function renderOutputMode() {
   if (!outs.local_stream) { box.innerHTML = ''; return; }
 
   const url = live.local_url || '';
-  const ready = !!url;
+  // rtmp://host:port/app/ 结尾是空的，说明还没开播过、也没有上次的流名，
+  // 这种半截地址复制过去也用不了，不如直接提示等开播
+  const incomplete = !!url && /^rtmp:\/\/[^/]+\/[^/]*\/$/.test(url);
+  const ready = !!url && !incomplete;
+  const copied = ready && copiedAt > 0 && (Date.now() - copiedAt < 1200);
   // 没开播时给的是上次记下的地址，流名一般不会变，说一句免得以为错了
   const idle = (live.state || 'idle') === 'idle';
   const memoNote = (ready && idle)
     ? '<p class="small dim">PS5 现在没在播，这是上次的地址。流名不变的话，开播就是这个。</p>'
     : '';
+  const shown = ready ? url : '等 PS5 开始直播后出现地址';
   box.innerHTML = `
     <div class="urlbox">
-      <span class="mono" id="s5-url">${esc(url || '等 PS5 开始直播后出现地址')}</span>
-      ${ready ? '<button class="copy-btn" id="s5-copy" type="button">复制</button>' : ''}
+      <span class="mono" id="s5-url">${esc(shown)}</span>
+      ${ready ? ('<button class="copy-btn" id="s5-copy" type="button"'
+                + (copied ? ' disabled' : '') + '>'
+                + (copied ? '已复制' : '复制') + '</button>') : ''}
     </div>
     ${memoNote}
     <details class="usage">
@@ -1930,9 +1946,12 @@ async function copyUrl() {
   const text = el.textContent.trim();
   if (!text) return;
 
+  // 只让按钮短暂变一下，地址那一行保持不动。原来是把地址替换成「已复制」，
+  // 复制完反而看不到自己要用的地址了（2026-11-15 截图发现）。
   const done = () => {
-    el.textContent = '已复制';
-    setTimeout(renderOutputMode, 1200);
+    copiedAt = Date.now();
+    renderOutputMode();
+    setTimeout(renderOutputMode, 1250);
   };
   // 用局域网 IP 打开界面时不是安全上下文，navigator.clipboard 是 undefined，
   // 必须退回 execCommand，不然点了一点反应都没有（2026-11-15 用户报的）
