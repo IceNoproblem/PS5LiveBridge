@@ -1366,12 +1366,25 @@ class Orchestrator(object):
         因为浏览器和 OBS 都在另一台机器上。
         """
         cur = self.live.get("local") or {}
-        app = app or cur.get("app") or "app"
+        app = app or cur.get("app") or ""
         name = name or cur.get("name") or ""
         if not name:
             ps5 = self.live.get("ps5") or {}
-            app = ps5.get("app") or app
-            name = ps5.get("name") or ""
+            app = app or ps5.get("app") or ""
+            name = name or ps5.get("name") or ""
+        # 没开播时 live 和 ps5 里都是空的，拼出来是 rtmp://127.0.0.1:1935/app/
+        # 这种半截地址。流名在同一台机器上不会变，用上回记下的补全。
+        used_memo = False
+        if not name:
+            memo = self.cfg.get("LOCAL_STREAM_MEMO") or {}
+            if isinstance(memo, dict) and memo.get("name"):
+                app = app or memo.get("app") or ""
+                name = memo["name"]
+                used_memo = True
+        app = app or "app"
+        # 拼得出完整名字就记下来，下次没开播也能用
+        if name and not used_memo:
+            self._remember_local(app, name)
         if paths.PLATFORM == "docker":
             host = self.lan_ip or "127.0.0.1"
         else:
@@ -1385,6 +1398,22 @@ class Orchestrator(object):
                 return "http://%s:%d/live/stream.flv" % (host, web)
         port = int(self.cfg.get("RTMP_PORT", 1935))
         return "rtmp://%s:%d/%s/%s" % (host, port, app, name)
+
+    def _remember_local(self, app: str, name: str) -> None:
+        """
+        记下当前流名，下次没开播时也能拼出完整取流地址。
+
+        只在真的变化时写盘。snapshot 每秒都会调 local_play_url，
+        每次都写配置既没必要也会磨文件。
+        """
+        memo = self.cfg.get("LOCAL_STREAM_MEMO") or {}
+        if isinstance(memo, dict) and memo.get("app") == app and memo.get("name") == name:
+            return
+        try:
+            self.cfg = paths.save_config(
+                {"LOCAL_STREAM_MEMO": {"app": app, "name": name}})
+        except Exception:
+            pass
 
     def set_output_mode(self, mode: str) -> dict:
         """

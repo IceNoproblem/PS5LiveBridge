@@ -1898,22 +1898,70 @@ function renderOutputMode() {
 
   const url = live.local_url || '';
   const ready = !!url;
+  // 没开播时给的是上次记下的地址，流名一般不会变，说一句免得以为错了
+  const idle = (live.state || 'idle') === 'idle';
+  const memoNote = (ready && idle)
+    ? '<p class="small dim">PS5 现在没在播，这是上次的地址。流名不变的话，开播就是这个。</p>'
+    : '';
   box.innerHTML = `
     <div class="urlbox">
       <span class="mono" id="s5-url">${esc(url || '等 PS5 开始直播后出现地址')}</span>
-      ${ready ? '<button class="btn sm" onclick="copyUrl()">复制</button>' : ''}
+      ${ready ? '<button class="copy-btn" id="s5-copy" type="button">复制</button>' : ''}
     </div>
-    <p class="small dim">用 OBS 的「媒体源」，或 PotPlayer / VLC 打开这个地址就能本地看，不影响推 B 站。</p>
+    ${memoNote}
+    <details class="usage">
+      <summary>怎么用这个地址</summary>
+      <div class="usage-body">
+        <p><b>OBS</b>：加一个「媒体源」，把「本地文件」的勾去掉，地址粘进去，勾上「重启播放」。</p>
+        <p><b>PotPlayer / VLC</b>：打开网络串流，粘贴这个地址。</p>
+        <p>这是电脑直接取 PS5 的画面，比 B 站那边快一两秒，不影响同时推 B 站。</p>
+        <p>PS5 没开播时这里不会有画面，地址先记着，开播就能用。</p>
+        <p>换了电脑、或者收流端口被占用后换了端口，地址会变，以这里显示的为准。</p>
+      </div>
+    </details>
   `;
+  const btn = $('s5-copy');
+  if (btn) btn.addEventListener('click', copyUrl);
 }
 
-function copyUrl() {
+async function copyUrl() {
   const el = $('s5-url');
   if (!el) return;
-  navigator.clipboard.writeText(el.textContent.trim()).then(() => {
+  const text = el.textContent.trim();
+  if (!text) return;
+
+  const done = () => {
     el.textContent = '已复制';
     setTimeout(renderOutputMode, 1200);
-  });
+  };
+  // 用局域网 IP 打开界面时不是安全上下文，navigator.clipboard 是 undefined，
+  // 必须退回 execCommand，不然点了一点反应都没有（2026-11-15 用户报的）
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    if (ok) { done(); return; }
+    if (window.prompt) window.prompt('自动复制没成功，手动复制这个地址：', text);
+  };
+
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      done();
+      return;
+    } catch (e) {
+      fallback();
+      return;
+    }
+  }
+  fallback();
 }
 
 

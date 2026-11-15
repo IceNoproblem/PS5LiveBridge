@@ -1431,3 +1431,40 @@ select option:checked {
   opacity: .72;
   padding: 2px 0 8px;
 }
+
+/* 本地取流地址下面那个可折叠的使用说明 */
+.usage {
+  margin: 4px 0 10px;
+  font-size: 17.5px;
+  color: var(--muted);
+}
+.usage > summary {
+  cursor: pointer;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  color: var(--muted);
+  border-bottom: 1px dashed transparent;
+  transition: color .2s var(--ease), border-color .2s var(--ease);
+}
+.usage > summary::-webkit-details-marker { display: none; }
+.usage > summary::before {
+  content: '▸';
+  font-size: 14px;
+  transition: transform .2s var(--ease);
+}
+.usage[open] > summary::before { transform: rotate(90deg); }
+.usage > summary:hover { color: var(--text); border-bottom-color: var(--line-2); }
+.usage-body {
+  margin: 8px 0 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .035);
+  border: 1px solid var(--line);
+  line-height: 1.7;
+}
+.usage-body p { margin: 0 0 6px; }
+.usage-body p:last-child { margin-bottom: 0; }
+.usage-body b { color: var(--text); font-weight: 600; }

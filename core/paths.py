@@ -177,6 +177,9 @@ DEFAULT_CONFIG = {
     "RTMP_PORT": 1935,
     "IRC_PORT": 6667,
     "STAT_PORT": 8080,
+    # 上次开播时的流名。PS5 不开播时 live 里是空的，拼不出完整取流地址，
+    # 用这个补上。同一台机器上流名不会变，存下来就行。
+    "LOCAL_STREAM_MEMO": {"app": "", "name": ""},
     "TWITCH_CHANNEL": "",
     "TWITCH_PROXY": "",
 
