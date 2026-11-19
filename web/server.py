@@ -10,7 +10,7 @@ from flask import (Flask, Response, jsonify, render_template, request,
                      send_from_directory, stream_with_context)
 from werkzeug.exceptions import HTTPException
 
-from core import logbus, netutil, paths
+from core import logbus, netutil, paths, platforms, rtmf, xiaohongshu
 
 
 def create_app(orch, on_exit=None, on_restart=None) -> Flask:
@@ -187,6 +187,18 @@ def create_app(orch, on_exit=None, on_restart=None) -> Flask:
         ok, detail = orch.dns.selftest()
         return jsonify({"ok": ok, "detail": detail, "upstreams": servers})
 
+    @app.post("/api/danmaku/sources")
+    def api_danmaku_sources_save():
+        body = request.get_json(silent=True) or {}
+        return jsonify(orch.save_danmaku_src(body.get("sources") or {}))
+
+    @app.get("/api/platforms")
+    def api_platforms():
+        # 界面渲染用的静态信息，不含任何用户配置
+        return jsonify({"order": list(platforms.ORDER),
+                        "items": {k: dict(platforms.PLATFORMS[k])
+                                  for k in platforms.ORDER}})
+
     @app.post("/api/ps5net")
     def api_ps5net():
         body = request.get_json(silent=True) or {}
@@ -326,9 +338,56 @@ def create_app(orch, on_exit=None, on_restart=None) -> Flask:
 
     @app.post("/api/outputs")
     def api_outputs_set():
+        # 这个接口现在管两件事：原来那两个开关，和多平台的推流目标。
+        # 一次请求可能只带其中一部分，分别处理。
         body = request.get_json(silent=True) or {}
-        r = orch.set_outputs(body.get("push_bili"), body.get("local_stream"))
-        return jsonify(r)
+        if "outputs" in body:
+            r = orch.save_outputs(body.get("outputs") or {})
+            if not r.get("ok"):
+                return jsonify(r)
+        if "push_bili" in body or "local_stream" in body:
+            return jsonify(orch.set_outputs(body.get("push_bili"),
+                                            body.get("local_stream")))
+        return jsonify({"ok": True})
+
+    @app.post("/api/douyin/cookie")
+    def api_douyin_cookie():
+        """存抖音网页的登录信息，让弹幕昵称不再被平台打码。只回字段名。"""
+        body = request.get_json(silent=True) or {}
+        raw = str(body.get("cookie") or "")
+        if not raw.strip():
+            return jsonify({"ok": False, "detail": "没收到内容"}), 400
+        r = orch.save_douyin_cookie(raw)
+        return jsonify(r), (200 if r.get("ok") else 400)
+
+    @app.post("/api/xhs/cookie")
+    def api_xhs_cookie():
+        """存小红书的网页 cookie。只回能不能用电脑开播，不回 cookie 本身。"""
+        body = request.get_json(silent=True) or {}
+        raw = str(body.get("cookie") or "")
+        if not raw.strip():
+            return jsonify({"ok": False, "detail": "没收到内容"}), 400
+        saved = xiaohongshu.save_cookie(raw)
+        if not saved:
+            return jsonify({"ok": False, "detail": "cookie 保存失败"}), 400
+        a = xiaohongshu.auth()
+        if not a.get("ok"):
+            return jsonify({"ok": False, "detail": a.get("detail") or "登录信息无效"})
+        if not a.get("allow"):
+            return jsonify({"ok": False,
+                            "detail": "这个账号还没有电脑开播权限，先在手机 App 里开一次"})
+        return jsonify({"ok": True})
+
+    @app.post("/api/xhs/push")
+    def api_xhs_push():
+        """用手机 App 的 6 位码换推流地址，换到就直接填进多平台配置。"""
+        body = request.get_json(silent=True) or {}
+        r = xiaohongshu.push_url(body.get("code") or "")
+        if not r.get("ok"):
+            return jsonify(r), 400
+        # 地址就是密钥，不回给界面
+        orch.save_outputs({"xiaohongshu": {"enabled": True, "url": r["url"]}})
+        return jsonify({"ok": True})
 
     @app.get("/api/paths")
     def api_paths():
@@ -370,9 +429,11 @@ def create_app(orch, on_exit=None, on_restart=None) -> Flask:
         impl = (body.get("impl") or "").strip().lower()
         if impl not in ("nginx", "rtmpf"):
             return jsonify({"ok": False, "error": "只能是 nginx 或 rtmpf"}), 400
-        # 容器版没有 rtmf 二进制（镜像里只装了 nginx + libnginx-mod-rtmp），选了收流必失败
-        if impl == "rtmpf" and paths.PLATFORM == "docker":
-            return jsonify({"ok": False, "error": "容器版只能用 nginx"}), 400
+        # 切得过去的前提是包里真有这个二进制。桌面版随包带 rtmf，
+        # 镜像里也装了一份，但万一没下到就只剩 nginx。
+        if impl == "rtmpf" and not rtmf.find_exe():
+            return jsonify({"ok": False,
+                            "error": "这个包里没有 rtmp-forwarder，切过去收流起不来"}), 400
         # 空闲时直接重建收流端，切完就生效；正在直播才留给下次启动
         r = orch.switch_rtmp_impl(impl)
         if not r.get("ok") and r.get("error"):

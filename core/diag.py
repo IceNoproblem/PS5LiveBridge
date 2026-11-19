@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 
-from . import netutil, paths, routermatch
+from . import netutil, paths, routermatch, rtmf
 
 _FW_RULES = (
     ("DNS (UDP 53)", "PS5LiveBridge-DNS-UDP"),
@@ -149,7 +149,8 @@ def _relay_stat(orch) -> dict:
         if r is not None:
             out["running"] = bool(r.running)
             out["error"] = r.last_error or ""
-        out["impl"] = orch.cfg.get("RTMP_IMPL", "")
+        # 写实际在跑的实现，配置里 auto 看不出真实情况
+        out["impl"] = "rtmpf" if getattr(orch, "native_relay", False) else "nginx"
         out["bitrate"] = str(getattr(r, "bitrate", "") or "")
         out["restarts"] = int(getattr(r, "restarts", 0) or 0)
     except Exception:
@@ -397,15 +398,17 @@ def collect(orch, plan: str = "") -> dict:
     if sec.get("level") == "warn" and sec.get("detail"):
         issues.append({"level": "warn", "msg": sec["detail"]})
 
-    _impl = str(orch.cfg.get("RTMP_IMPL") or "rtmf").lower()
+    # 显示实际在跑的实现：auto 模式下配置里可能还写着旧的 nginx，
+    # 而真正收流的已经是 rtmp-forwarder。
+    _impl = "rtmpf" if getattr(orch, "native_relay", False) else "nginx"
     _other = "nginx" if _impl == "rtmf" else "rtmf"
-    # 容器里只有 nginx 能跑（rtmf 没有 Linux 二进制，换成它直接起不来），
-    # 所以「换个收流实现」这句建议只能在桌面版说。
-    _only_nginx = paths.PLATFORM == "docker"
+    # 「换个收流实现」这句建议只在包里真的带了另一个实现时才成立。
+    # 镜像以前只有 nginx，现在也装了 rtmp-forwarder，能不能换看有没有二进制。
+    _can_switch = _other == "nginx" or bool(rtmf.find_exe())
     if not rtmp["listening"]:
-        if _only_nginx:
-            msg = ("收流服务没在监听 %d，PS5 的推流进不来。容器版只有 nginx 一种收流实现，"
-                   "先看容器日志里 nginx 为什么没起来" % rtmp_port)
+        if not _can_switch:
+            msg = ("收流服务没在监听 %d，PS5 的推流进不来。这个包里没有第二种收流实现，"
+                   "先看容器日志里收流为什么没起来" % rtmp_port)
         else:
             msg = ("收流服务没在监听 %d，PS5 的推流进不来。"
                    "去第 5 步把「收流实现」从 %s 换成 %s 再试一次"
@@ -416,12 +419,12 @@ def collect(orch, plan: str = "") -> dict:
                        "msg": "%d 有进程在监听，但收流服务没起来，可能被 %s 占了"
                               % (rtmp_port, rtmp["process"] or "别的进程")})
 
-    # 当前收流实现反复重启 → 建议换另一种（容器版没有第二种，改看日志）
+    # 当前收流实现反复重启 → 建议换另一种（包里只有一种就改看日志）
     _ri = _relay_stat(orch)
     if int(_ri.get("restarts") or 0) >= 3:
-        if _only_nginx:
-            msg = ("收流实现 %s 已经重启过 %d 次，多半是不稳定。容器版换不了实现，"
-                   "去容器日志里看 nginx 报什么错"
+        if not _can_switch:
+            msg = ("收流实现 %s 已经重启过 %d 次，多半是不稳定。这个包换不了实现，"
+                   "去容器日志里看收流报什么错"
                    % (_impl, int(_ri.get("restarts") or 0)))
         else:
             msg = ("收流实现 %s 已经重启过 %d 次，多半是不稳定。去第 5 步换成 %s 试试"

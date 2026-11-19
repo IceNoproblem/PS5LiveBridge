@@ -8,7 +8,7 @@ import time
 
 APP_NAME = "PS5LiveBridge"
 APP_TITLE = "PS5 直播桥"
-APP_VERSION = "5.1.8"
+APP_VERSION = "5.2.0"
 
 IS_WINDOWS = sys.platform == "win32"
 IS_MACOS = sys.platform == "darwin"
@@ -183,10 +183,10 @@ DEFAULT_CONFIG = {
     "TWITCH_CHANNEL": "",
     "TWITCH_PROXY": "",
 
-    # 收流实现：Windows 用 rtmp-forwarder（单进程、省内存）；
-    # 容器和 Linux 继续用 nginx-rtmp —— rtmpf 的二进制没有 Linux 版，
-    # 容器里找不到会直接起不来收流。
-    "RTMP_IMPL": "nginx" if PLATFORM in ("docker", "linux") else "rtmpf",
+    # 收流实现：auto = 随包的 rtmp-forwarder 在就用它，没有就退回 nginx-rtmp。
+    # 桌面版和容器镜像里都带了 rtmp-forwarder（上游有 Linux 静态二进制）。
+    # macOS 恒用 MediaMTX，不看这个值。
+    "RTMP_IMPL": "auto",
 
     "DEBUG_LOG": False,
     "RELAY_VIDEO_BITRATE": 0,
@@ -195,6 +195,22 @@ DEFAULT_CONFIG = {
 
     "PUSH_BILI": True,
     "LOCAL_STREAM": True,
+
+    # 多平台推流。B 站还是走 PUSH_BILI 和开播接口，地址运行时拿；
+    # 另外四家靠用户把推流地址整段粘过来，程序只负责转发同一路流。
+    "OUTPUTS": {
+        "douyin": {"enabled": False, "url": ""},
+        "douyu": {"enabled": False, "url": ""},
+        "kuaishou": {"enabled": False, "url": ""},
+        "xiaohongshu": {"enabled": False, "url": ""},
+    },
+    # 弹幕来源。B 站沿用原来的通道，这里只放下四家的房间号。
+    "DANMAKU_SRC": {
+        "douyin": {"enabled": False, "room": ""},
+        "douyu": {"enabled": False, "room": ""},
+        "kuaishou": {"enabled": False, "room": ""},
+        "xiaohongshu": {"enabled": False, "room": ""},
+    },
 
     "AUTO_START_LIVE": True,
     "AUTO_RELAY": True,

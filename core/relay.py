@@ -32,7 +32,10 @@ def find_ffmpeg() -> str:
 
 
 class Relay(object):
-    def __init__(self):
+    def __init__(self, label: str = "B 站", slug: str = "bilibili"):
+        # 多平台之后每个目标一个实例，日志和 stderr 文件要能分清是谁
+        self.label = label or "B 站"
+        self.slug = slug or "bilibili"
         self.proc = None
         self.input_url = ""
         self.output_url = ""
@@ -79,6 +82,9 @@ class Relay(object):
             self._stopping = False
             self.input_url = input_url
             self.output_url = output_url
+            # 换了地址要先把上一条的错误清掉，否则界面上还挂着旧目标的报错，
+            # 看着像新地址也不通
+            self.last_error = ""
             self.started_at = time.time()
             return self._spawn()
 
@@ -147,7 +153,7 @@ class Relay(object):
             logbus.error(self.last_error, tag="转发")
             return False
 
-        logbus.ok("开始把 PS5 画面转发到 B 站", tag="转发")
+        logbus.ok("开始把 PS5 画面转发到 %s" % self.label, tag="转发")
         threading.Thread(target=self._read_stderr, args=(self.proc,), daemon=True).start()
         self._watch = None
         return True
@@ -162,7 +168,8 @@ class Relay(object):
         """
         fh = None
         try:
-            fh = open(os.path.join(paths.LOGS_DIR, "ffmpeg.stderr.log"),
+            fh = open(os.path.join(paths.LOGS_DIR,
+                                   "ffmpeg.%s.stderr.log" % self.slug),
                       "w", encoding="utf-8", errors="replace")
             fh.write("=== pid %s 启动 %s ===\n"
                      % (getattr(proc, "pid", "?"),
@@ -186,7 +193,7 @@ class Relay(object):
                 if any(k in low for k in ("error", "failed", "refused", "broken pipe",
                                           "unable", "invalid")):
                     self.last_error = line[:200]
-                    logbus.warn("转发告警：%s" % line[:200], tag="转发")
+                    logbus.warn("%s 转发告警：%s" % (self.label, line[:200]), tag="转发")
                 elif ("bitrate=" in low or "time=" in low) and self.last_error:
                     # ffmpeg 自己重连成功后会继续打进度行。这时候那条
                     # "Input/output error" 已经是过去式了，不清掉的话

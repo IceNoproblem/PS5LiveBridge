@@ -162,8 +162,8 @@
       <a data-step="1" href="#"><span class="num">1</span><span>方案选择<small>三条路选一条</small></span></a>
       <a data-step="2" href="#"><span class="num">2</span><span>DNS 检测<small>看有没有生效</small></span></a>
       <a data-step="3" href="#" id="nav-3"><span class="num">3</span><span id="nav-3-label">网络配置<small>PS5 上怎么填</small></span></a>
-      <a data-step="4" href="#"><span class="num">4</span><span>直播信息<small>频道 + 登录 B 站</small></span></a>
-      <a data-step="5" href="#"><span class="num">5</span><span>开播设置<small>画面与推流</small></span></a>
+      <a data-step="4" href="#"><span class="num">4</span><span>弹幕与登录<small>收谁家的弹幕</small></span></a>
+      <a data-step="5" href="#"><span class="num">5</span><span>直播状态<small>看画面和弹幕</small></span></a>
       <a data-step="faq" href="#"><span class="num">!</span><span>常见问题<small>遇到问题看这里</small></span></a>
       <a data-step="donate" href="#" id="nav-donate"><span class="num">♥</span><span>支持作者<small>请我喝瓶冰可乐</small></span></a>
     </nav>
@@ -193,21 +193,18 @@
         <div class="pick3" id="s1-pick">
           <button class="pickcard" id="pick-hosts" onclick="pickMode('hosts')">
             <b>方案一 · 改路由器 hosts</b>
-            <span>加速器装在路由器上，路由器后台能自定义 hosts。<br>
-              配一次永久生效，PS5 什么都不用改。</span>
-            <em>适合：小米 / 华硕 / 梅林 / OpenWrt，后台有「hosts 修改」这一项</em>
+            <span>加速器在路由器上，后台能改 hosts。配一次永久生效，PS5 不用动。</span>
+            <em>小米 / 华硕 / 梅林 / OpenWrt</em>
           </button>
           <button class="pickcard" id="pick-dns" onclick="pickMode('dns')">
             <b>方案二 · 路由器改不了 hosts</b>
-            <span>加速器在路由器上，但后台翻遍了也找不到 hosts。<br>
-              让这台电脑临时当 DNS，PS5 只改一个 DNS 地址。</span>
-            <em>适合：运营商送的光猫、后台功能被锁的路由器</em>
+            <span>路由器没有 hosts 功能。让这台电脑临时当 DNS，PS5 只改 DNS 一栏。</span>
+            <em>运营商光猫 / 后台被锁的路由器</em>
           </button>
           <button class="pickcard" id="pick-divert" onclick="pickMode('divert')">
             <b>方案三 · 路由器和 hosts 都动不了</b>
-            <span>加速器只能装在电脑上（UU / 迅游 PC 版），<br>
-              PS5 的流量本来就经过这台电脑。</span>
-            <em>适合：电脑上开加速器，PS5 走加速器的虚拟网卡</em>
+            <span>加速器只能装在电脑上（UU / 迅游 PC 版），PS5 流量本来就经过这里。</span>
+            <em>电脑开加速器，PS5 走它的虚拟网卡</em>
           </button>
         </div>
 
@@ -215,14 +212,11 @@
         <div id="mode-hosts" style="display:none">
           <h3>方案一 · 改路由器的 hosts</h3>
           <p class="small dim" style="margin-top:-4px">
-            把下面这几个推流域名指到这台电脑（<span class="mono" id="s1-ip2">—</span>），
-            PS5 保持自动获取就行。<br>
-            只动推流域名，PS5 上网、PSN、联机对战都不受影响。
-            这条路配一次就长期有效，PS5 重启也不丢。
+            把下面几个推流域名指到这台电脑（<span class="mono" id="s1-ip2">—</span>），PS5 保持自动获取。<br>
+            只动推流域名，上网、联机都不受影响，配一次长期有效。
           </p>
           <div class="note">
-            选这一条，本机会把<b>端口接管</b>和<b>内置 DNS</b>都关掉：方案一靠路由器转发，
-            本机不用再拦包。所以路由器里的这几个域名必须真的生效，本机不再兜底。
+            本机会把<b>端口接管</b>和<b>内置 DNS</b>关掉，所以路由器里这几条必须真的生效，本机不再兜底。
           </div>
           <div class="tabs" id="router-tabs"></div>
           <div id="router-body"></div>
@@ -278,14 +272,9 @@
           </div>
 
           <div class="note warn">
-            <b>为什么必须填代理：</b>
-            这条路会把 Twitch 的网页/API（443）也引到这台电脑。国内直连 Twitch 不通，
-            这台电脑必须有一个能上外网的通道把它转发出去，
-            <b>否则 Twitch 应用打不开，你也点不到「开始直播」</b>。
-            <br><br>
-            加速器是装在路由器上的，它只加速 PS5 的流量，帮不到这台电脑，所以这里要单独填一个。
-            写法：<span class="mono">http://主机:端口</span>（例 http://192.168.1.100:7890）。留空表示不使用代理。
-            （局域网里另一台跑 Clash/mihomo 的机器也可以）。
+            <b>必须填代理：</b>这条路把 Twitch 的 443 也引到本机，国内直连不通，
+            没有代理就打不开 Twitch、点不到「开始直播」。加速器只加速 PS5，帮不到电脑。<br>
+            写法 <span class="mono">http://主机:端口</span>，局域网里另一台跑 Clash 的机器也行，留空表示不用。
           </div>
 
           <div class="btn-row">
@@ -311,16 +300,13 @@
           <h3>方案三 · 开流量接管</h3>
           <p class="small dim" style="margin-top:-4px" id="s1-divert-desc">
             {% if caps and caps.platform == 'macos' %}
-            在本机网络栈加一条 pf 规则，把 PS5 的推流导向本机，不碰路由器、也不改 DNS。
-            <b>开启时会弹出一次系统密码框</b>，这是 macOS 对所有系统级网络配置的强制要求，
-            输一次就好，不用去「系统设置」里翻任何开关。<br>
-            前提是加速器装在<b>这台电脑</b>上，PS5 的流量真的经过本机 ——
-            如果是路由器版加速器，选方案一或方案二，那两个全程不需要任何授权。
+            在本机加一条 pf 规则把 PS5 推流导向这里，不碰路由器也不改 DNS。
+            <b>开启时会弹一次系统密码框</b>，输一次就好。<br>
+            前提是加速器装在<b>这台电脑</b>上；路由器版加速器请选方案一或二。
             {% else %}
-            在本机网卡层直接拦下 PS5 的推流，不碰路由器、也不改 DNS。
+            在本机网卡层拦下 PS5 的推流，不碰路由器也不改 DNS。
             <b>需要以管理员身份运行</b>，否则驱动加载不起来。<br>
-            前提是加速器装在<b>这台电脑</b>上，PS5 的流量真的经过本机 ——
-            如果是路由器版加速器，选方案一或方案二。
+            前提是加速器装在<b>这台电脑</b>上；路由器版加速器请选方案一或二。
             {% endif %}
           </p>
           <div class="flexline">
@@ -494,69 +480,145 @@
     <section class="stepc" id="step-4">
       <div class="card">
         <div class="card-h">
-          <h2>直播信息</h2>
+          <h2>弹幕与画面</h2>
           <span class="badge" id="s4-badge">未登录</span>
         </div>
         <p class="card-sub">
-          登录后能拿弹幕和推流地址，也能替你在 B 站开播。凭据只存本机
-          <span class="mono">bili_credential.json</span>。
+          这一页管弹幕和画面分发。弹幕目前支持 B 站和抖音；
+          要往别的平台推画面，用第一块「本地取流」给的地址。
         </p>
 
-        <div class="qrwrap">
-          <div class="qrbox empty" id="qrbox">点右边按钮生成二维码</div>
-          <div class="qrmeta">
-            <div id="s4-status"><p class="dim">还没开始。</p></div>
-            <div class="btn-row" style="margin-top:12px">
-              <button class="btn primary" id="s4-btn-qr" onclick="newQr()">生成二维码</button>
-              <button class="btn danger hidden" id="s4-btn-logout" onclick="doLogout()">退出登录</button>
-            </div>
-            <hr class="sep">
-            <div class="grid2">
-              <div class="field">
-                <label>分区</label>
-                <div class="combo" id="area-combo">
-                  <input type="text" id="area-input" class="combo-input"
-                         placeholder="登录后可选" autocomplete="off" spellcheck="false" disabled>
-                  <input type="hidden" id="sel-area" value="">
-                  <span class="combo-arrow" aria-hidden="true"></span>
-                  <div class="combo-pop" id="area-pop" hidden>
-                    <div class="combo-list" id="area-list" role="listbox"></div>
-                    <div class="combo-empty" id="area-empty" hidden>没找到匹配的分区</div>
+        <details class="mod" id="mod-local">
+          <summary>
+            <span class="mod-t">本地取流</span>
+            <span class="mod-s" id="mod-local-s">关</span>
+          </summary>
+          <div class="mod-b">
+            <label class="sw">
+              <input type="checkbox" id="sw-local" onchange="setOutputs()">
+              <span class="sw-t">开启本地取流</span>
+              <span class="sw-d">单独给一个拉流地址，OBS、PotPlayer 这类软件可以直接接，
+                和推 B 站互不影响</span>
+            </label>
+            <div id="s4-local"></div>
+
+                        <details class="usage">
+              <summary>想推到抖音、快手、小红书、斗鱼？</summary>
+              <div class="usage-body">
+                <p>本程序<b>不再直接替你把画面推给这四个平台</b>，改成给你一条流，
+                  你交给它们自己的软件，弹幕这边照旧由本程序收。</p>
+                <ol>
+                  <li>把上面的开关打开，等 PS5 开始直播后地址会出来，复制它</li>
+                  <li>打开那个平台的直播软件，添加视频或素材，选「网络流 / URL」，把地址粘进去</li>
+                  <li>软件不认网络地址的话，用 OBS：加一个「媒体源」，粘地址，
+                    勾上「重启播放」，再用 OBS 推给平台</li>
+                </ol>
+                <p>各家软件：抖音用直播伴侣，快手用快手直播伴侣，斗鱼用斗鱼开播工具，
+                  小红书要在手机上开播、电脑这边配合推流。</p>
+                <p>弹幕不用走这条路，在下面各平台的模块里填房间号就行。</p>
+              </div>
+            </details>
+          </div>
+        </details>
+
+        <details class="mod" id="mod-bili" open>
+          <summary>
+            <span class="mod-t">B 站</span>
+            <span class="mod-s" id="mod-bili-s">未登录</span>
+          </summary>
+          <div class="mod-b">
+            <p class="mod-tip">扫码登录后能自动拿弹幕、替你在 B 站开播。
+              凭据只存本机 <span class="mono">bili_credential.json</span>。</p>
+
+            <div class="qrwrap">
+              <div class="qrbox empty" id="qrbox">点右边生成二维码</div>
+              <div class="qrmeta">
+                <div id="s4-status"><p class="dim">还没开始。</p></div>
+                <div class="btn-row" style="margin-top:12px">
+                  <button class="btn primary" id="s4-btn-qr" onclick="newQr()">生成二维码</button>
+                  <button class="btn danger hidden" id="s4-btn-logout" onclick="doLogout()">退出登录</button>
+                </div>
+                <hr class="sep">
+                <div class="grid2">
+                  <div class="field">
+                    <label>分区</label>
+                    <div class="combo" id="area-combo">
+                      <input type="text" id="area-input" class="combo-input"
+                             placeholder="登录后可选" autocomplete="off" spellcheck="false" disabled>
+                      <input type="hidden" id="sel-area" value="">
+                      <span class="combo-arrow" aria-hidden="true"></span>
+                      <div class="combo-pop" id="area-pop" hidden>
+                        <div class="combo-list" id="area-list" role="listbox"></div>
+                        <div class="combo-empty" id="area-empty" hidden>没找到匹配的分区</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="field">
+                    <label>直播间标题</label>
+                    <input id="in-title" type="text" class="input-lg" placeholder="留空 = 跟随 PS5">
                   </div>
                 </div>
-              </div>
-              <div class="field">
-                <label>直播间标题（留空则自动跟随 PS5）</label>
-                <input id="in-title" class="input-lg" placeholder="留空 = 使用 PS5 上填的标题">
-              </div>
-            </div>
-            <div class="grid2" style="margin-top:10px">
-              <div class="field">
-                <label>Twitch 频道名（可选，一般不用填）</label>
-                <input id="in-twitch" class="input-lg" placeholder="留空即可 —— 自动从推流密钥识别">
-              </div>
-              <div class="field">
-                <label>Twitch 代理（抓标题要用）</label>
-                <div class="proxrow">
-                  <input id="in-proxy" class="input-lg"
-                         placeholder="留空 = 自动用本机代理；填了按填的来">
-                  <button class="btn" id="btn-proxy-4"
-                          onclick="checkProxy('4')">检测</button>
+                <div class="grid2" style="margin-top:10px">
+                  <div class="field">
+                    <label>Twitch 频道名</label>
+                    <input id="in-twitch" type="text" class="input-lg" placeholder="可选，留空自动识别">
+                  </div>
+                  <div class="field">
+                    <label>Twitch 代理</label>
+                    <div class="proxrow">
+                      <input id="in-proxy" type="text" class="input-lg"
+                             placeholder="留空 = 用本机代理">
+                      <button class="btn" id="btn-proxy-4"
+                              onclick="checkProxy('4')">检测</button>
+                    </div>
+                    <div class="proxmsg" id="prox-msg-4"></div>
+                  </div>
                 </div>
-                <div class="proxmsg" id="prox-msg-4"></div>
+                <p class="small dim" style="margin-top:6px">
+                  标题留空时，开播后会自动去 Twitch 抓 PS5 上填的标题再写进直播间。
+                  这一步要用到上面的代理（国内直连不上 Twitch）。填了标题就按你填的来，不抓。
+                </p>
+                <button class="btn sm" onclick="saveArea()">保存</button>
               </div>
             </div>
-            <p class="small dim" style="margin-top:6px">
-              标题留空时，开播后会自动去 Twitch 抓 PS5 上填的标题再写进直播间。
-              这一步要用到上面的代理（国内直连不上 Twitch）。填了标题就按你填的来，不抓。
-            </p>
-            <button class="btn sm" onclick="saveArea()">保存</button>
+
+            <label class="sw mod-sw">
+              <input type="checkbox" id="sw-push" onchange="setOutputs()">
+              <span class="sw-t">推流到 B 站</span>
+              <span class="sw-d">收流后自动开播并转发，直播间直接看到画面</span>
+            </label>
           </div>
-        </div>
+        </details>
+
+        <details class="mod" id="mod-douyin">
+          <summary>
+            <span class="mod-t">抖音</span>
+            <span class="mod-s" id="mod-douyin-s">未配置</span>
+          </summary>
+          <div class="mod-b">
+            <div id="s4-dm-douyin"></div>
+            <details class="usage">
+              <summary id="dy-login-sum">有些昵称被打码？（可选）</summary>
+              <div class="usage-body">
+                <p>不登录也能收弹幕。有些观众的昵称会显示成「茶***」「S..」这样，但不是所有人都会，同一条连接里完整昵称也很多。这是平台自己的处理，登录之后能不能全部恢复，我们还没验证过。</p>
+                <p>想试试的话，粘一次抖音网页的登录信息：浏览器打开
+                  <span class="mono">live.douyin.com</span> 并登录，按 F12，
+                  在 Network 里随便点一个请求，把请求头里 <span class="mono">Cookie</span>
+                  那一整行复制过来。</p>
+                <div class="xhs-row">
+                  <input id="dy-cookie" type="password" placeholder="Cookie: ... 整行粘进来">
+                  <button class="btn" onclick="saveDouyinCookie()">保存</button>
+                </div>
+                <div class="xhs-tip" id="dy-cookie-tip"></div>
+              </div>
+            </details>
+            <p class="mod-note">想在这里开播：用「本地取流」的地址，交给抖音直播伴侣。</p>
+          </div>
+        </details>
 
         <div class="btn-row">
           <button class="btn" onclick="goStep(3)">← 上一步</button>
-          <button class="btn primary" onclick="goStep(5)">登录好了 →</button>
+          <button class="btn primary" onclick="goStep(5)">下一步：看直播状态 →</button>
         </div>
       </div>
     </section>
@@ -581,7 +643,7 @@
 
       <div class="card">
         <div class="card-h">
-          <h2>开播设置</h2>
+          <h2>直播状态</h2>
           <span class="badge" id="s5-badge">等 PS5</span>
         </div>
         <p class="card-sub">
@@ -635,25 +697,11 @@
           </div>
         </div>
         {% endif %}
-        <h3>画面怎么用</h3>
-        <div class="swcol">
-          <label class="sw">
-            <input type="checkbox" id="sw-push" onchange="setOutputs()">
-            <span class="sw-t">推流到 B 站</span>
-            <span class="sw-d">收流后自动开播并转发，直播间直接看到画面</span>
-          </label>
-          <label class="sw">
-            <input type="checkbox" id="sw-local" onchange="setOutputs()">
-            <span class="sw-t">本地取流</span>
-            <span class="sw-d">给一个拉流地址，OBS 这类软件可以自己接</span>
-          </label>
-        </div>
-
-        <div id="s5-local"></div>
+        <div id="s5-msg"></div>
 
         <div id="s5-msg"></div>
 
-        <h3>直播状态</h3>
+        <h3>实时数据</h3>
         <div class="stats-row six">
           <div class="metric"><div class="k">PS5 → 本机</div><div class="v" id="m-ps5">—</div></div>
           <div class="metric"><div class="k">本机 → B 站</div><div class="v" id="m-bili">—</div></div>
@@ -864,11 +912,11 @@
 
               <p style="margin-top:12px"><b>可能的原因（从最常见的往下排）：</b></p>
               <ul class="faq-ul">
-                <li><b>上一场直播没断干净</b>——最常见。上次异常退出、断网、直接关机，
+                <li><b>上一场直播没断干净</b>，最常见。上次异常退出、断网、直接关机，
                     B 站那边还以为你在播</li>
-                <li><b>PS5 自己重连了一次</b>——网络抖动导致它建立了第二路推流，
+                <li><b>PS5 自己重连了一次</b>：网络抖动导致它建立了第二路推流，
                     两路打架，B 站就回这句</li>
-                <li><b>加速器或代理插了一脚</b>——把推流地址解析到别处，看着像另一个来源</li>
+                <li><b>加速器或代理插了一脚</b>，把推流地址解析到别处，看着像另一个来源</li>
                 <li><b>本程序上次异常退出</b>，推流进程还挂在后台没退</li>
                 <li><b>真的另一台设备</b>在用同一个账号推流（OBS、手机、另一台电脑）</li>
                 <li><b>账号在别处登录着</b>，那边正在直播</li>
@@ -911,12 +959,12 @@
               </ol>
 
               <p style="margin-top:12px"><b>情况 B：网页上能看到弹幕，但 PS5 上没有</b></p>
-              <p>说明弹幕收到了，但<b>本程序和 PS5 之间没通</b>——弹幕没送到 PS5 那边。</p>
+              <p>说明弹幕收到了，但<b>本程序和 PS5 之间没通</b>，弹幕没送到 PS5 那边。</p>
               <ol>
                 <li>看左侧「本机 → PS5 弹幕」这一行。显示「等待」说明 PS5 还没连上来</li>
                 <li>去基础信息页看「弹幕 6667」是不是「监听中」。这一条断了就直接重开本程序</li>
                 <li>确认 PS5 和这台电脑在同一个局域网里，中间没被防火墙挡</li>
-                <li>在 PS5 上把直播停掉，重新开一次——弹幕通道是在开播时建立的</li>
+                <li>在 PS5 上把直播停掉，重新开一次，弹幕通道是在开播时建立的</li>
                 <li>如果一直连不上，重启一次 PS5 的网络连接</li>
               </ol>
               <p class="faq-tip">
@@ -940,14 +988,14 @@
         <div class="donate-body">
           <p class="donate-lead">这软件不收钱，也没广告，用着顺手就好。</p>
 
-          <p class="donate-line">要是它帮你省了点事 —— </p>
+          <p class="donate-line">要是它帮你省了点事，</p>
           <p class="donate-slogan">一毛两毛不嫌少，一块两块不嫌多。</p>
 
           <div class="donate-qr-wrap">
             <img class="donate-qr" src="/static/donate-qr.png" alt="微信收款码">
           </div>
 
-          <p class="donate-thanks">不投也没关系 —— 用得开心，就是最好的支持。</p>
+          <p class="donate-thanks">不投也没关系，用得开心就是最好的支持。</p>
         </div>
       </div>
     </section>

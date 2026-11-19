@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 import threading
 import time
@@ -9,10 +10,11 @@ from collections import deque
 from . import bili as bilimod
 from . import mtx
 from . import rtmf
+from . import danmaku_douyin
 from . import (config_store, danmaku_history, danmaku_throttle, divert,
                dnscheck, dnsserver, eventbus, ffmpeg_mgr, logbus, netutil,
-               netwatch, nginxmgr, paths, relay, routercfg, services,
-               statemachine)
+               netwatch, nginxmgr, paths, platforms, relay, routercfg,
+               services, statemachine)
 
 
 class Orchestrator(object):
@@ -31,23 +33,34 @@ class Orchestrator(object):
             on_ps5_drop=self._on_ps5_drop,
         )
         _impl = (os.environ.get("PS5LB_RTMP_IMPL")
-                 or self.cfg.get("RTMP_IMPL") or "nginx").strip().lower()
+                 or self.cfg.get("RTMP_IMPL") or "auto").strip().lower()
         _rtmp_port = int(self.cfg.get("RTMP_PORT", 1935))
         if paths.PLATFORM == "macos":
             # macOS 上 rtmf 和 nginx 都没有现成的 macOS 二进制，
             # 换 MediaMTX 当收流端。它只收不转发，转发仍走 relay 的 ffmpeg。
             self.nginx = mtx.MediaMtxManager(rtmp_port=_rtmp_port)
             self.native_relay = False
-        elif _impl in ("rtmpf", "rtmp-forwarder", "rtmp_forwarder"):
-            self.nginx = rtmf.RtmpForwarderManager(rtmp_port=_rtmp_port)
-            self.native_relay = True
         else:
-            self.nginx = nginxmgr.NginxManager(
-                rtmp_port=_rtmp_port,
-                stat_port=int(os.environ.get("PS5LB_STAT_PORT", "8099")),
-            )
-            self.native_relay = False
+            # auto = 有 rtmp-forwarder 就用它，没有就退回 nginx-rtmp。
+            # 桌面版随包带 rtmf，容器镜像里也装了一份（官方有 Linux 静态二进制），
+            # 所以两条路都能走到。
+            _want_rtmf = _impl in ("auto", "rtmpf", "rtmp-forwarder", "rtmp_forwarder")
+            _rtmf_exe = rtmf.find_exe() if _want_rtmf else ""
+            if _rtmf_exe:
+                self.nginx = rtmf.RtmpForwarderManager(rtmp_port=_rtmp_port)
+                self.native_relay = True
+            else:
+                if _want_rtmf:
+                    # 显式写了 rtmpf 却没二进制，也别让收流直接起不来
+                    logbus.warn("没找到 rtmp-forwarder，收流端改用 nginx-rtmp", tag="收流")
+                self.nginx = nginxmgr.NginxManager(
+                    rtmp_port=_rtmp_port,
+                    stat_port=int(os.environ.get("PS5LB_STAT_PORT", "8099")),
+                )
+                self.native_relay = False
         self.relay = relay.Relay()
+        # 多平台推流：B 站用上面的 self.relay，其余平台各一个实例，按需建
+        self.relays = {}
         self.dns = None
         self.divert = None
         self.hijack_error = ""
@@ -109,6 +122,15 @@ class Orchestrator(object):
         self.services.set_channel(self.cfg.get("TWITCH_CHANNEL") or "ps5")
         self.services.start(int(self.cfg.get("IRC_PORT", 6667)))
 
+        # 斗鱼、抖音弹幕都不需要账号，配置里勾上就直接连
+        _dm = self.cfg.get("DANMAKU_SRC") or {}
+        _ds = _dm.get("douyu") or {}
+        if _ds.get("enabled") and _ds.get("room"):
+            self.services.start_douyu(_ds["room"])
+        _dt = _dm.get("douyin") or {}
+        if _dt.get("enabled") and _dt.get("room"):
+            self.services.start_douyin(_dt["room"])
+
         if self.bili.logged_in:
             threading.Thread(target=self._verify_login_bg, daemon=True).start()
 
@@ -145,6 +167,11 @@ class Orchestrator(object):
         except Exception:
             pass
         self.relay.stop()
+        for _r in list(self.relays.values()):
+            try:
+                _r.stop()
+            except Exception:
+                pass
         self.nginx.stop()
         if self.divert:
             self.divert.stop()
@@ -826,6 +853,8 @@ class Orchestrator(object):
                 self.live["local"] = {"app": app, "name": name}
             logbus.ok("本地流已就绪：%s" % self.local_play_url(app, name), tag="推流")
             self.services.notify_ps5("画面已就绪，可在电脑上拉取")
+            # 没开 B 站推送，但用户可能勾了抖音、斗鱼这些，照样要推出去
+            self._apply_destinations()
             return
 
         with self.lock:
@@ -847,6 +876,7 @@ class Orchestrator(object):
     def _on_ps5_unpublish(self) -> None:
         state = self.live["state"]
         logbus.warn("PS5 停止推流了", tag="推流")
+        self._stop_extra_outputs()
         if state in ("relaying", "live", "starting", "face_verify"):
             self.stop_live(reason="PS5 停止推流")
         with self.lock:
@@ -984,8 +1014,8 @@ class Orchestrator(object):
         """
         统一的推流入口：只转发，不转码。
 
-        · 收流端支持 set_destination（rtmf）→ 直通转发，连封装都不拆
-        · 不支持（nginx）→ ffmpeg 从本机 1935 拉流，做一次 remux 再推
+        · 收流端支持 set_destinations（rtmf）→ 一次下发多个目标，一份流复制出去
+        · 不支持（nginx / mediamtx）→ 每个目标一个 ffmpeg，从本机拉流再推
         """
         out_url = addr.rstrip("/") + "/" + code.lstrip("/")
         self._protect_relay_target(out_url, addr)
@@ -996,29 +1026,236 @@ class Orchestrator(object):
         self._last_addr = addr
         self._last_code = code
 
-        if hasattr(self.nginx, "set_destination"):
+        return self._apply_destinations(out_url)
+
+    def _extra_targets(self) -> list:
+        """
+        B 站之外的推流平台。
+
+        2026-11-18 定了方向：这四个平台不再由本程序直接推，画面改走「本地取流」，
+        用户自己把地址填进各家的直播软件。所以这里恒返回空，配置里的旧地址
+        也不再使用，免得升级后还在偷偷往外面推。
+        """
+        return []
+
+    def _apply_destinations(self, bili_url: str = "") -> bool:
+        """
+        把所有要推的平台一次性接上去。
+
+        bili_url 为空表示这次不推 B 站（用户关掉了推送），只走手填的那几个。
+        """
+        targets = []
+        if bili_url:
+            targets.append(("bilibili", bili_url))
+        targets.extend(self._extra_targets())
+        if not targets:
+            logbus.info("只在本机收流，不开播也不外推", tag="转发")
+            return True
+
+        # rtmp-forwarder 一条配置就能挂多个目标，一份流复制出去，不额外占 CPU
+        if hasattr(self.nginx, "set_destinations"):
             try:
-                ok = self.nginx.set_destination(addr, code)
-                if ok is False:
-                    self._fail_live(self.nginx.last_error or "转发启动失败")
-                    return False
-                self.services.notify_ps5("B 站已开播，画面正在同步")
-                return True
+                ok = self.nginx.set_destinations([u for _k, u in targets])
             except Exception as e:
                 self._fail_live("转发启动失败：%s" % e)
                 return False
+            if ok is False:
+                self._fail_live(self.nginx.last_error or "转发启动失败")
+                return False
+            self.services.notify_ps5("画面正在同步")
+            return True
 
+        # 其余收流端：每个目标一个 ffmpeg
         pub = self.live.get("ps5") or {}
         in_url = "rtmp://127.0.0.1:%d/%s/%s" % (
             int(self.cfg.get("RTMP_PORT", 1935)),
             pub.get("app", "app"), pub.get("name", ""))
-        if not self.relay.start(in_url, out_url):
-            self._fail_live(self.relay.last_error or "转发启动失败")
+        started = 0
+        bili_ok = not bili_url
+        for key, url in targets:
+            r = self._get_relay(key)
+            if not r.start(in_url, url):
+                detail = r.last_error or "转发启动失败"
+                if key == "bilibili":
+                    self._fail_live(detail)
+                    return False
+                logbus.warn("%s 没推上去：%s" % (platforms.name(key), detail),
+                            tag="转发")
+                continue
+            r.start_watchdog(
+                on_drop=(lambda reason, k=key: self._on_relay_drop(k, reason)))
+            started += 1
+            if key == "bilibili":
+                bili_ok = True
+        if bili_url and not bili_ok:
             return False
-        self.relay.start_watchdog(
-            on_drop=lambda reason: self._fail_live("转发中断：%s" % reason))
-        self.services.notify_ps5("B 站已开播，画面正在同步")
+        if not started:
+            self._fail_live("所有转发都没起来")
+            return False
+        self.services.notify_ps5("画面正在同步")
         return True
+
+    def save_outputs(self, items: dict) -> dict:
+        """
+        多平台推流已经停用，界面上的入口也撤了。
+
+        接口留着只为老页面不报错，直接拒绝，不写进配置也不启动任何转发。
+        """
+        return {"ok": False,
+                "detail": "本程序不再直接推这四个平台，改用「本地取流」的地址，"
+                          "填到对应平台的直播软件里"}
+
+    def _save_outputs_legacy(self, items: dict) -> dict:
+        cur = dict(self.cfg.get("OUTPUTS") or {})
+        for key, val in (items or {}).items():
+            if key not in platforms.MANUAL:
+                continue
+            old = dict(cur.get(key) or {})
+            enabled = bool(val.get("enabled", old.get("enabled", False)))
+            raw = str(val.get("url", old.get("url", "")) or "").strip()
+            # 小红书和快手固定服务器，用户只粘密钥，这里补前缀；
+            # 整条粘的原样用
+            url = platforms.full_url(key, raw)
+            if url and not url.lower().startswith(("rtmp://", "rtmps://")):
+                detail = "%s 的地址要以 rtmp:// 开头" % platforms.name(key)
+                if not platforms.PLATFORMS.get(key, {}).get("server"):
+                    detail = ("%s 要把整条推流地址粘进来，"
+                              "从 rtmp:// 开始" % platforms.name(key))
+                return {"ok": False, "detail": detail}
+            if enabled and not url:
+                return {"ok": False,
+                        "detail": "%s 还没填推流地址" % platforms.name(key)}
+            cur[key] = {"enabled": enabled, "url": url}
+        self.cfg = paths.save_config({"OUTPUTS": cur})
+        return {"ok": True}
+
+    def save_danmaku_src(self, items: dict) -> dict:
+        """保存弹幕来源设置，存完立刻生效，不用重启。"""
+        cur = dict(self.cfg.get("DANMAKU_SRC") or {})
+        for key, val in (items or {}).items():
+            if key not in platforms.MANUAL:
+                continue
+            old = dict(cur.get(key) or {})
+            enabled = bool(val.get("enabled", old.get("enabled", False)))
+            room = str(val.get("room", old.get("room", "")) or "").strip()
+            if enabled and not room:
+                return {"ok": False,
+                        "detail": "%s 还没填房间号" % platforms.name(key)}
+            cur[key] = {"enabled": enabled, "room": room}
+        self.cfg = paths.save_config({"DANMAKU_SRC": cur})
+
+        self._apply_danmaku_src(cur)
+        return {"ok": True}
+
+    def save_douyin_cookie(self, raw) -> dict:
+        """
+        存抖音登录信息。存完立刻重连那一路，用户不用自己去重启。
+        界面上只回字段名，cookie 本身不回传。
+        """
+        s = danmaku_douyin.save_cookie(raw)
+        if not s:
+            return {"ok": False, "detail": "没填内容，或者写入失败"}
+        names = danmaku_douyin.cookie_names(s)
+        has_ttwid = "ttwid" in names
+        if self.services.dm_douyin_room:
+            self.services.start_douyin(self.services.dm_douyin_room)
+        return {"ok": True, "names": names, "logged_in": True,
+                "need_ttwid": not has_ttwid}
+
+    def _apply_danmaku_src(self, cur: dict) -> None:
+        """按保存后的配置启停各平台弹幕，房间号变了就重连。"""
+        src = (cur or {})
+
+        _dy = src.get("douyu") or {}
+        if _dy.get("enabled") and _dy.get("room"):
+            if self.services.dm_douyu_room != _dy["room"]:
+                self.services.start_douyu(_dy["room"])
+        else:
+            self.services.stop_douyu()
+
+        _dt = src.get("douyin") or {}
+        if _dt.get("enabled") and _dt.get("room"):
+            if self.services.dm_douyin_room != _dt["room"]:
+                self.services.start_douyin(_dt["room"])
+        else:
+            self.services.stop_douyin()
+
+    def _short_relay_error(self, text: str) -> str:
+        """把 ffmpeg 的长报错压成一句原因，顺手抹掉里面的推流地址。"""
+        s = (text or "").strip()
+        if not s:
+            return ""
+        if ": " in s:
+            tail = s.rsplit(": ", 1)[-1].strip()
+            if len(tail) >= 6:
+                s = tail
+        s = re.sub(r"(?:rtmps?|tcp|http)://\S+", "", s).strip(" :：")
+        return s[:100]
+
+    def _danmaku_src_view(self) -> list:
+        """
+        界面用的弹幕来源状态。
+
+        ready 表示这个平台真能拉，没做的平台如实标出来，
+        免得用户填了半天房间号还以为程序坏了。
+        """
+        src = self.cfg.get("DANMAKU_SRC") or {}
+        ready = {"douyu", "douyin"}
+        rows = []
+        for key in platforms.MANUAL:
+            item = src.get(key) or {}
+            cli = None
+            if key == "douyu":
+                cli = self.services.dm_douyu
+            elif key == "douyin":
+                cli = self.services.dm_douyin
+            rows.append({
+                "key": key,
+                "name": platforms.name(key),
+                "enabled": bool(item.get("enabled")),
+                "room": str(item.get("room") or ""),
+                "ready": key in ready,
+                "connected": bool(getattr(cli, "connected", False)),
+                "state": getattr(cli, "state", "idle"),
+                "retry": int(getattr(cli, "retry", 0) or 0),
+                "retry_wait": int(getattr(cli, "retry_wait", 0) or 0),
+                "count": int(getattr(cli, "count", 0) or 0),
+                "anchor": getattr(cli, "anchor", "") or "",
+                "logged_in": bool(getattr(cli, "logged_in", False)),
+                "error": getattr(cli, "last_error", "") or "",
+                "hint": platforms.PLATFORMS.get(key, {}).get("dm_hint", ""),
+            })
+        return rows
+
+    def _get_relay(self, key: str):
+        """按平台取一个转发实例。B 站沿用原来的 self.relay。"""
+        if key == "bilibili":
+            return self.relay
+        with self.lock:
+            r = self.relays.get(key)
+            if r is None:
+                r = relay.Relay(label=platforms.name(key), slug=key)
+                self.relays[key] = r
+            return r
+
+    def _on_relay_drop(self, key: str, reason: str) -> None:
+        """
+        某一路转发断了。
+
+        B 站断了按直播失败处理；其它平台只记日志，不影响别的几路继续推。
+        """
+        if key == "bilibili":
+            self._fail_live("转发中断：%s" % reason)
+            return
+        logbus.warn("%s 转发中断：%s" % (platforms.name(key), reason), tag="转发")
+
+    def _stop_extra_outputs(self) -> None:
+        for key, r in list(self.relays.items()):
+            try:
+                r.stop()
+            except Exception:
+                pass
+            logbus.info("%s 转发已停" % platforms.name(key), tag="转发")
 
     def _fix_relay_url(self, url: str) -> str:
         """
@@ -1462,6 +1699,7 @@ class Orchestrator(object):
             self.relay.stop()
         except Exception:
             pass
+        self._stop_extra_outputs()
         if was_live and old_state in ("relaying", "live", "starting", "face_verify"):
             channel = old_bili.get("channel") or getattr(self.bili, "last_channel", "")
             for attempt in range(3):
@@ -1475,7 +1713,7 @@ class Orchestrator(object):
                     logbus.warn("关播异常（第 %d 次）：%s" % (attempt + 1, e), tag="B站")
                     time.sleep(1)
         try:
-            self.services.notify_ps5("B 站已关播")
+            self.services.notify_ps5("已关播")
         except Exception:
             pass
 
@@ -1760,7 +1998,8 @@ class Orchestrator(object):
             "dns_answer": self.dns_answer_hint(),
             "hijack": self.hijack_state(),
             "outputs": {"push_bili": self.push_bili(),
-                        "local_stream": self.local_stream()},
+                        "local_stream": self.local_stream(),
+                        },
             "rtmp_impl": "rtmpf" if getattr(self, "native_relay", False) else "nginx",
             "services": {
                 "dns": dns_state,
@@ -1781,7 +2020,24 @@ class Orchestrator(object):
                           "error": relay_error},
             "https_relay": {"running": _hr_on, "port": 443},
                 "danmaku": {"connected": self.services.danmaku_connected,
-                            "count": self.danmaku_total, "gift": self.gift_total},
+                            "count": self.danmaku_total, "gift": self.gift_total,
+                            # 斗鱼这一路不要账号，跟着 DANMAKU_SRC 里的房间号走
+                            "douyu": {"connected": self.services.douyu_connected,
+                                      "room": self.services.dm_douyu_room,
+                                      "real_room": self.services.dm_douyu.real_room,
+                                      "count": self.services.dm_douyu.count,
+                                      "state": self.services.dm_douyu_state},
+                            "sources": self._danmaku_src_view(),
+                            "cookie": {"set": bool(danmaku_douyin.load_cookie()),
+                                       "names": danmaku_douyin.cookie_names(
+                                           danmaku_douyin.load_cookie())},
+                            "douyin": {"connected": self.services.douyin_connected,
+                                       "room": self.services.dm_douyin_room,
+                                       "real_room": self.services.dm_douyin.real_room,
+                                       "anchor": self.services.dm_douyin.anchor,
+                                       "count": self.services.dm_douyin.count,
+                                       "state": self.services.dm_douyin_state,
+                                       "error": self.services.dm_douyin.last_error}},
             },
             "bili": {
                 "logged_in": self.bili.logged_in,

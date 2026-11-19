@@ -54,9 +54,32 @@ def _candidates():
 
 
 def find_exe() -> str:
-    for p in _candidates():
-        if os.path.exists(p):
-            return p
+    """
+    找收流端二进制。
+
+    容器镜像里它装在 /usr/local/bin，所以除了程序自己的目录和 tools，
+    还要扫 PATH。这里不用 shutil.which：它要求文件已经有执行位，
+    而解压或拷进容器时恰恰最容易丢这个位，丢了也要能找回来补上。
+    """
+    cands = list(_candidates())
+    _names = (("rtmf.exe", "rtmp-forwarder.exe") if os.name == "nt"
+              else ("rtmf", "rtmp-forwarder"))
+    for d in (os.environ.get("PATH") or "").split(os.pathsep):
+        d = (d or "").strip().strip('"')
+        if not d:
+            continue
+        for n in _names:
+            cands.append(os.path.join(d, n))
+
+    for p in cands:
+        if not os.path.isfile(p):
+            continue
+        if os.name != "nt" and not os.access(p, os.X_OK):
+            try:
+                os.chmod(p, os.stat(p).st_mode | 0o111)
+            except Exception:
+                continue
+        return p
     return ""
 
 
@@ -102,6 +125,32 @@ def split_rtmp_url(addr: str, key: str):
     if k.startswith("/"):
         k = k[1:]
     return host, app, k
+
+
+def split_full_url(url: str):
+    """
+    把一整条推流地址拆成 rtmp-forwarder 要的 (host:port, app, stream)。
+
+    用户从平台后台粘过来的是完整地址，形如
+        rtmp://push-rtmp.douyin.com/live/xxxx?expire=1700000000
+    最后一段是推流码（可能带查询串），前面几段是 app。
+    只有 host 加一段时（rtmp://host/key），app 留空。
+    """
+    u = (url or "").strip()
+    if not u:
+        return "", "", ""
+    if "://" in u:
+        u = u.split("://", 1)[1]
+    parts = u.strip("/").split("/")
+    if not parts or not parts[0]:
+        return "", "", ""
+    host = parts[0]
+    if ":" not in host:
+        host += ":1935"
+    rest = parts[1:]
+    if not rest:
+        return host, "", ""
+    return host, "/".join(rest[:-1]), rest[-1]
 
 
 def _explain_exit(rtmp_port: int, web_port: int, tail: str) -> str:
@@ -354,20 +403,38 @@ class RtmpForwarderManager(object):
         if not host or not stream:
             self.last_error = "推流地址解析不出来：%s / %s" % (addr, key[:8] + "...")
             return False
-        body = {
-            "forwarders": [{"addr": host, "app": app or None,
-                            "stream": stream, "enabled": True}],
-            "relay_addr": "",
-            "relay_enabled": False,
-        }
+        return self._push_forwarders([(host, app, stream)])
+
+    def set_destinations(self, urls) -> bool:
+        """
+        一次下发多个转发目标。
+
+        rtmp-forwarder 自己把一份流转发到每个目标，不额外占 CPU，
+        所以多平台推流在这条路上是零拷贝的。地址是用户粘过来的完整形式。
+        """
+        rows = []
+        for u in urls or ():
+            host, app, stream = split_full_url(u)
+            if not host or not stream:
+                self.last_error = "推流地址解析不出来：%s" % ((u or "")[:48] + "...")
+                return False
+            rows.append((host, app, stream))
+        return self._push_forwarders(rows)
+
+    def _push_forwarders(self, rows) -> bool:
+        fw = [{"addr": h, "app": a or None, "stream": s, "enabled": True}
+              for h, a, s in rows]
+        body = {"forwarders": fw, "relay_addr": "", "relay_enabled": False}
         try:
             _http("POST", self.base + "/api/config", body, timeout=8.0)
         except Exception as e:
             self.last_error = "下发转发配置失败：%s" % e
             return False
         with self._lock:
-            self._dest = host
-        logbus.info("转发目标已下发：%s/%s" % (host, app or "-"), tag="转发")
+            self._dest = fw[0]["addr"] if fw else None
+        if fw:
+            logbus.info("转发目标 %d 个：%s"
+                        % (len(fw), "、".join(x["addr"] for x in fw)), tag="转发")
         return True
 
     def clear_destination(self) -> None:

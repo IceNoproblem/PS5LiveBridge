@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import threading
 
-from . import danmaku, ircsrv, logbus
+from . import danmaku, danmaku_douyin, danmaku_douyu, ircsrv, logbus
 
 
 class Services(object):
@@ -14,11 +14,22 @@ class Services(object):
         self.irc = ircsrv.IrcServer()
         self.dm = danmaku.DanmakuClient(bili, on_message=on_danmaku,
                                         on_state=self._on_dm_state)
+        # 斗鱼弹幕不要账号，填个房间号就能拉，所以单独一份，
+        # 跟 B 站登录无关，各走各的配置
+        self.dm_douyu = danmaku_douyu.DouyuDanmaku(
+            on_message=on_danmaku, on_state=self._on_dm_state_douyu)
+        # 抖音同样不要账号，但握手要签名和 cookie，模块内部自己处理
+        self.dm_douyin = danmaku_douyin.DouyinDanmaku(
+            on_message=on_danmaku, on_state=self._on_dm_state_douyin)
         self.on_ps5_join = on_ps5_join
         self.on_ps5_drop = on_ps5_drop
         self._started = False
         self._ready = threading.Event()
         self.dm_state = "idle"
+        self.dm_douyu_state = "idle"
+        self.dm_douyu_room = ""
+        self.dm_douyin_state = "idle"
+        self.dm_douyin_room = ""
 
         self.irc.on_join = self._ps5_join
         self.irc.on_drop = self._ps5_drop_notify
@@ -71,6 +82,14 @@ class Services(object):
         except Exception:
             pass
         try:
+            await self.dm_douyu.stop()
+        except Exception:
+            pass
+        try:
+            await self.dm_douyin.stop()
+        except Exception:
+            pass
+        try:
             await self.irc.stop()
         except Exception:
             pass
@@ -105,6 +124,49 @@ class Services(object):
     @property
     def danmaku_connected(self) -> bool:
         return bool(self.dm.connected)
+
+    # ── 斗鱼 ──
+
+    def _on_dm_state_douyu(self, state: str):
+        self.dm_douyu_state = state
+
+    def start_douyu(self, room) -> None:
+        """房间号空着就是关掉，用户取消勾选时也走这里。"""
+        room = str(room or "").strip()
+        if not room:
+            self.stop_douyu()
+            return
+        self.dm_douyu_room = room
+        self.call(self.dm_douyu.start(room))
+
+    def stop_douyu(self) -> None:
+        self.dm_douyu_room = ""
+        self.call(self.dm_douyu.stop())
+
+    @property
+    def douyu_connected(self) -> bool:
+        return bool(self.dm_douyu.connected)
+
+    # ── 抖音 ──
+
+    def _on_dm_state_douyin(self, state: str):
+        self.dm_douyin_state = state
+
+    def start_douyin(self, room) -> None:
+        room = str(room or "").strip()
+        if not room:
+            self.stop_douyin()
+            return
+        self.dm_douyin_room = room
+        self.call(self.dm_douyin.start(room))
+
+    def stop_douyin(self) -> None:
+        self.dm_douyin_room = ""
+        self.call(self.dm_douyin.stop())
+
+    @property
+    def douyin_connected(self) -> bool:
+        return bool(self.dm_douyin.connected)
 
     def _ps5_join(self, channel: str):
         logbus.ok("PS5 弹幕通道就绪（%s）" % channel, tag="IRC")

@@ -359,7 +359,8 @@ h3 { font-size: 21.8px; font-weight: 650; margin: 18px 0 10px; color: var(--text
 .field { margin-bottom: 12px; }
 .field label { display: block; font-size: 18px; color: var(--dim); margin-bottom: 5px; }
 
-input[type="text"], input[type="number"], select, textarea {
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]):not([type="submit"]):not([type="button"]),
+select, textarea {
   width: 100%; padding: 8px 14px;
   border-radius: 12px;
   border: 1px solid var(--line-2);
@@ -1468,3 +1469,189 @@ select option:checked {
 .usage-body p { margin: 0 0 6px; }
 .usage-body p:last-child { margin-bottom: 0; }
 .usage-body b { color: var(--text); font-weight: 600; }
+
+/* 第 5 步的多平台推流：一行一个平台，勾选框 + 地址 + 状态 */
+.platrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+}
+.platrow:last-child { border-bottom: none; }
+.pltchk {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  /* 两个行标签字数不一样，给个固定宽度，下面那两个输入框才能左右对齐 */
+  width: 122px;
+  flex: 0 0 122px;
+  cursor: pointer;
+}
+.pltchk b { font-weight: 600; font-size: 15.5px; }
+.plat-url {
+  flex: 1;
+  min-width: 0;
+  font-size: 14.5px;
+  padding: 6px 10px;
+}
+.plat-state {
+  min-width: 82px;
+  text-align: right;
+  font-size: 13px;
+  opacity: .72;
+}
+.plat-state.ok { color: var(--ok); opacity: 1; }
+.plat-state.warn { color: var(--warn); opacity: 1; }
+.plat-state.err { color: var(--err); opacity: 1; }
+.plat-state.dim { opacity: .45; }
+
+/* 小红书那块：cookie 填一次，之后每次输 6 位数字换地址 */
+.xhs-help {
+  margin: 8px 0 2px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.xhs-row { display: flex; gap: 8px; align-items: center; }
+.xhs-row input { flex: 1; min-width: 0; }
+.xhs-help .btn { flex: none; padding: 7px 14px; font-size: 13.5px; }
+.xhs-tip { font-size: 12.5px; opacity: .72; min-height: 16px; }
+
+
+/* ── 第 4 步：可折叠模块 ───────────────────────────────── */
+.mod {
+  border: var(--glass-border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .03);
+  margin: 10px 0;
+  overflow: hidden;
+}
+.mod > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 16px;
+  background: rgba(255, 255, 255, .04);
+  transition: background .2s var(--ease);
+}
+.mod > summary::-webkit-details-marker { display: none; }
+.mod > summary:hover { background: rgba(255, 255, 255, .07); }
+.mod > summary::before {
+  content: '▸';
+  font-size: 17px;
+  line-height: 1;
+  color: var(--muted);
+  transition: transform .2s var(--ease);
+}
+.mod[open] > summary::before { transform: rotate(90deg); }
+.mod-t {
+  flex: 1;
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.mod-s {
+  font-size: 12.5px;
+  color: var(--dim);
+  padding: 2px 9px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+.mod-s.ok { color: var(--ok); border-color: rgba(59, 196, 123, .45); background: rgba(59, 196, 123, .10); }
+.mod-s.warn { color: var(--warn); border-color: rgba(255, 143, 73, .45); background: rgba(255, 143, 73, .10); }
+.mod-s.err { color: var(--err); border-color: rgba(229, 76, 74, .45); background: rgba(229, 76, 74, .10); }
+.mod-b { padding: 6px 16px 16px; }
+.mod-h {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: .04em;
+  margin: 14px 0 2px;
+}
+.mod-h:first-child { margin-top: 4px; }
+.mod-tip {
+  font-size: 13.5px;
+  color: var(--dim);
+  line-height: 1.6;
+  margin: 2px 0 10px;
+}
+.mod-sw { margin-top: 12px; }
+/* 模块内两列：地方不够就自动落成一列，标签和输入框不会被挤到换行 */
+.mod-b .grid2 {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 10px 14px;
+}
+.mod-b .field { margin-bottom: 8px; }
+.mod-b .field label { font-size: 15px; margin-bottom: 4px; }
+.dmrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+}
+.dmrow:last-child { border-bottom: none; }
+
+.mod-note {
+  font-size: 13.5px;
+  color: var(--dim);
+  line-height: 1.6;
+  margin: 8px 0 2px;
+}
+
+/* 模块内的说明块：字号收到和模块一致，条目别用全站那个大号 */
+.mod-b .usage { font-size: 14px; }
+.mod-b .usage > summary { font-size: 14px; }
+.usage-body ol { margin: 6px 0 8px; padding-left: 18px; }
+.usage-body li {
+  font-size: 13.5px;
+  color: var(--muted);
+  line-height: 1.7;
+  margin: 3px 0;
+}
+.usage-body .eg {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  background: rgba(255, 255, 255, .04);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  margin: 6px 0 8px;
+  line-height: 1.7;
+  word-break: break-all;
+}
+
+/* 本地取流里的嵌套分组：推流到其他平台 */
+.mod-sub {
+  margin: 14px 0 2px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .02);
+  overflow: hidden;
+}
+.mod-sub > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  transition: background .2s var(--ease);
+}
+.mod-sub > summary::-webkit-details-marker { display: none; }
+.mod-sub > summary:hover { background: rgba(255, 255, 255, .04); }
+.mod-sub > summary::before {
+  content: '▸';
+  font-size: 15px;
+  line-height: 1;
+  color: var(--muted);
+  transition: transform .2s var(--ease);
+}
+.mod-sub[open] > summary::before { transform: rotate(90deg); }
+.mod-sub-t { flex: 1; min-width: 0; font-size: 14px; font-weight: 500; }
+.mod-sub-b { padding: 2px 12px 12px; }

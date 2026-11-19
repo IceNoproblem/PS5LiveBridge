@@ -7,6 +7,8 @@ import time
 from . import logbus
 
 HEARTBEAT_TIMEOUT = 18000
+# 一条弹幕最长多少字。超长弹幕在 PS5 上会占满整屏，甚至盖住游戏画面
+MAX_TEXT_LEN = 72
 
 
 class IrcClient(object):
@@ -250,7 +252,12 @@ class IrcServer(object):
     def _format(self, user: str, text: str) -> str:
         safe = "".join(ch for ch in (user or "bili") if ch.isalnum() or ch in "_-") or "bili"
         target = "#" + (self.channel or "ps5")
-        return ":%s!%s@tmi.twitch.tv PRIVMSG %s :%s" % (safe, safe, target, text)
+        # 换行会被 IRC 当成新命令，先压成空格；再按长度截断。
+        # 这里是最外层出口，弹幕、礼物、系统提示和测试弹幕都走这里。
+        clean = " ".join(str(text or "").split())
+        if len(clean) > MAX_TEXT_LEN:
+            clean = clean[:MAX_TEXT_LEN - 1] + "…"
+        return ":%s!%s@tmi.twitch.tv PRIVMSG %s :%s" % (safe, safe, target, clean)
 
     async def say(self, user: str, text: str) -> bool:
         c = self._active()

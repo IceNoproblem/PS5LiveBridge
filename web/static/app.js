@@ -225,7 +225,7 @@ function applyState(st) {
         el.title = seen
           ? 'PS5 正在使用这台电脑的 DNS'
           : (onAirNow
-            ? 'PS5 没查这台电脑的 DNS，但推流是通的 —— 说明它在走路由器 hosts 那条路'
+            ? 'PS5 没查这台电脑的 DNS，但推流是通的，说明它在走路由器 hosts 那条路'
             : 'PS5 还没来查这台电脑的 DNS。检查 PS5 的网络设置里 DNS 是不是填了 ' + (st.lan_ip || '本机 IP'));
       }
     }
@@ -1899,9 +1899,14 @@ function renderOutputMode() {
   const st = S.state || {};
   const live = st.live || {};
   const outs = st.outputs || {};
-  renderOutputs(outs);
+  const dmList = ((st.services || {}).danmaku || {}).sources || [];
 
-  const box = $('s5-local');
+  renderOutputs(outs);
+  renderDanmakuSrc(dmList);
+  updateModuleStates(outs, dmList, st);
+  renderDouyinLogin(st);
+
+  const box = $('s4-local');
   if (!box) return;
   if (!outs.local_stream) { box.innerHTML = ''; return; }
 
@@ -1919,8 +1924,8 @@ function renderOutputMode() {
   const shown = ready ? url : '等 PS5 开始直播后出现地址';
   box.innerHTML = `
     <div class="urlbox">
-      <span class="mono" id="s5-url">${esc(shown)}</span>
-      ${ready ? ('<button class="copy-btn" id="s5-copy" type="button"'
+      <span class="mono" id="s4-url">${esc(shown)}</span>
+      ${ready ? ('<button class="copy-btn" id="s4-copy" type="button"'
                 + (copied ? ' disabled' : '') + '>'
                 + (copied ? '已复制' : '复制') + '</button>') : ''}
     </div>
@@ -1936,12 +1941,71 @@ function renderOutputMode() {
       </div>
     </details>
   `;
-  const btn = $('s5-copy');
+  const btn = $('s4-copy');
   if (btn) btn.addEventListener('click', copyUrl);
 }
 
+// 抖音那块：填过登录信息就把标题改成「已填」，不用点开也知道
+function renderDouyinLogin(st) {
+  const sum = $('dy-login-sum');
+  if (!sum) return;
+  const ck = (((st || {}).services || {}).danmaku || {}).cookie || {};
+  const names = ck.names || [];
+  if (ck.set) {
+    sum.textContent = '已填登录信息（' + names.slice(0, 3).join('、')
+      + (names.length > 3 ? '…' : '') + '）';
+  } else {
+    sum.textContent = '有些昵称被打码？（可选）';
+  }
+}
+
+// 六个折叠块右上角的状态，一眼能看出这块有没有在工作
+function setModState(id, text, cls) {
+  const el = $(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'mod-s' + (cls ? ' ' + cls : '');
+}
+
+function updateModuleStates(outs, dmList, st) {
+  if (!outs) return;
+  const dm = {};
+  (dmList || []).forEach((x) => { dm[x.key] = x; });
+
+  setModState('mod-local-s', outs.local_stream ? '开' : '关',
+              outs.local_stream ? 'ok' : '');
+
+  const b = (st && st.bili) || {};
+  if (b.logged_in) {
+    setModState('mod-bili-s', outs.push_bili ? '推流 · ' + (b.uname || '已登录') : '只登录，不推流',
+                outs.push_bili ? 'ok' : '');
+  } else {
+    setModState('mod-bili-s', outs.push_bili ? '未登录，只转发' : '未登录',
+                outs.push_bili ? 'warn' : '');
+  }
+
+  const extra = outs.extra || [];
+  const running = extra.filter((x) => x.running).length;
+  const filled = extra.filter((x) => x.url_set).length;
+  let pt = '未配置', pc = '';
+  if (running) { pt = running + ' 路在推'; pc = 'ok'; }
+  else if (filled) { pt = filled + ' 路已填'; pc = 'warn'; }
+  setModState('mod-push-s', pt, pc);
+
+  Object.keys(dm).forEach((k) => {
+    const d = dm[k] || {};
+    let t = '未配置', c = '';
+    if (!d.ready) { t = '暂不支持'; }
+    else if (d.connected) { t = '弹幕 ' + (d.count || 0); c = 'ok'; }
+    else if (d.state === 'reconnecting') { t = '重连 ' + (d.retry || 1) + ' 次'; c = 'warn'; }
+    else if (d.enabled && d.room) { t = '连接中'; c = 'warn'; }
+    else if (d.room) { t = '已填房间'; }
+    setModState('mod-' + k + '-s', t, c);
+  });
+}
+
 async function copyUrl() {
-  const el = $('s5-url');
+  const el = $('s4-url');
   if (!el) return;
   const text = el.textContent.trim();
   if (!text) return;
@@ -1997,6 +2061,87 @@ function renderOutputs(o) {
   const a = $('sw-push'), b = $('sw-local');
   if (a) a.checked = !!o.push_bili;
   if (b) b.checked = !!o.local_stream;
+}
+
+// 每个平台一块：推流一行、弹幕一行，各自塞进第 4 步对应的折叠块。
+// 输入框正在被编辑时不重绘，否则光标和已输入的内容会被刷掉。
+function typingIn(box) {
+  // 只有「正在往这个框里打字」才跳过重绘，光点了勾选框不算
+  const a = document.activeElement;
+  return !!(a && box.contains(a) && a.tagName === 'INPUT' && a.type === 'text');
+}
+
+function renderDanmakuSrc(list) {
+  (list || []).forEach((x) => {
+    const box = $('s4-dm-' + x.key);
+    if (!box) return;
+    if (typingIn(box)) return;
+    box.innerHTML = dmRowHtml(x);
+  });
+}
+
+function dmRowHtml(x) {
+  let state = '未配置', cls = 'dim';
+  if (!x.ready) { state = '暂不支持'; cls = 'dim'; }
+  else if (x.connected) { state = '已连 ' + (x.count || 0) + ' 条'; cls = 'ok'; }
+  else if (x.state === 'offline') { state = '未开播'; cls = 'dim'; }
+  else if (x.state === 'reconnecting') {
+    state = '重连中 ' + (x.retry || 1) + ' 次';
+    if (x.retry_wait) state += ' · ' + x.retry_wait + ' 秒后';
+    cls = 'warn';
+  }
+  else if (x.enabled && x.room) { state = '连接中'; cls = ''; }
+  else if (x.room) { state = '已填房间'; cls = ''; }
+  if (x.error && x.ready && !x.connected) { state = x.error.slice(0, 16); cls = 'err'; }
+  const ph = x.room ? '已保存：' + x.room : '房间号或直播间链接';
+  return '<div class="dmrow" data-key="' + esc(x.key) + '">'
+    + '<label class="pltchk"><input type="checkbox"'
+    + (x.enabled ? ' checked' : '')
+    + ' onchange="saveDmSrc(\'' + esc(x.key) + '\')">'
+    + '<b>收这里的弹幕</b></label>'
+    + '<input class="plat-url" id="dm-' + esc(x.key) + '" type="text"'
+    + ' placeholder="' + esc(ph) + '" title="' + esc(x.hint || '') + '">'
+    + '<span class="plat-state ' + cls + '">' + esc(state) + '</span>'
+    + '</div>';
+}
+
+async function saveDmSrc(key) {
+  const row = document.querySelector('.dmrow[data-key="' + key + '"]');
+  const chk = row && row.querySelector('input[type=checkbox]');
+  const inp = $('dm-' + key);
+  const item = { enabled: !!(chk && chk.checked) };
+  const typed = inp && inp.value.trim();
+  if (typed) item.room = typed;
+  const payload = { sources: {} };
+  payload.sources[key] = item;
+  const r = await api('/api/danmaku/sources', payload);
+  if (!r || !r.ok) {
+    alert((r && r.detail) || '保存失败');
+    if (chk) chk.checked = !chk.checked;
+    return;
+  }
+  if (inp) inp.value = '';
+  await tick();
+}
+
+async function saveDouyinCookie() {
+  const inp = $('dy-cookie'), tip = $('dy-cookie-tip');
+  const v = inp && inp.value.trim();
+  if (!v) { if (tip) tip.textContent = '先把 Cookie 那一整行粘进来'; return; }
+  if (tip) tip.textContent = '保存中…';
+  const r = await api('/api/douyin/cookie', { cookie: v });
+  if (!r || !r.ok) {
+    if (tip) tip.textContent = (r && (r.detail || r.msg)) || '保存失败';
+    return;
+  }
+  if (inp) inp.value = '';
+  const names = (r.names || []).slice(0, 4).join('、');
+  if (tip) {
+    tip.textContent = '已保存（' + names + (r.names.length > 4 ? '…' : '') + '）'
+      + (r.need_ttwid ? '，里面没有 ttwid，程序会自己补一颗' : '')
+      + '。正在重连抖音弹幕';
+  }
+  await tick();
 }
 
 function renderDanmaku(list) {
