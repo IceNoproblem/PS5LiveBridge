@@ -55,6 +55,7 @@ python3 -m PyInstaller --noconfirm --windowed \
   --add-data "README.md:." \
   --add-data "LICENSE:." \
   --add-data "config.example.json:." \
+  --add-data "使用说明.txt:." \
   --hidden-import brotli \
   --hidden-import qrcode \
   --hidden-import PIL._imaging \
@@ -87,6 +88,7 @@ fi
 # 改过 plist 必须重新签名，不然包会被判定损坏
 codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || echo "  签名跳过"
 
+cp "使用说明.txt" dist/ 2>/dev/null || true
 echo "[5/5] 完成"
 du -sh "$APP"
 echo "产物: $APP"

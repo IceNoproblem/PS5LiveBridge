@@ -1,5 +1,7 @@
 
 
+const MIRROR_URL = 'https://pan.quark.cn/s/49db38cb6b4a';
+
 const S = {
   step: 1,
   state: null,
@@ -204,6 +206,9 @@ function applyState(st) {
   if ($('ipchip')) $('ipchip').textContent = '本机 ' + (st.lan_ip || '未探测');
 
   if ($('rail-ver') && st.version) $('rail-ver').textContent = 'v' + st.version;
+  if ($('rail-ver-mirror')) {
+    $('rail-ver-mirror').href = st.mirror_url || MIRROR_URL;
+  }
   if ($('rail-ip')) $('rail-ip').textContent = st.lan_ip || '—';
 
 
@@ -2250,6 +2255,11 @@ async function restartApp() {
 }
 
 
+function mirrorHtml() {
+  return ' <a class="update-mirror" href="' + esc(MIRROR_URL)
+    + '" target="_blank" rel="noopener">网盘备用下载</a>';
+}
+
 function showUpdateBar(msg, btnLabel, btnFn) {
   $('update-msg').innerHTML = msg;
   const b = $('update-btn');
@@ -2265,12 +2275,12 @@ async function checkUpdate(force) {
   try {
     const r = await api('/api/update/check' + (force ? '?force=1' : ''));
     if (!r || r.state !== 'available') {
-      if (force) alert('当前已是最新版本 v' + (r && r.current || ''));
+      if (force) alert('当前已是最新版本 v' + (r && r.current || '') + '\n\n网盘备用下载：' + MIRROR_URL);
       return;
     }
     const ver = esc(r.latest);
     if (r.platform === 'docker') {
-      showUpdateBar(`发现新版本 v${ver}（当前 v${esc(r.current)}）`,
+      showUpdateBar(`发现新版本 v${ver}（当前 v${esc(r.current)}）${mirrorHtml()}`,
         '复制更新命令', () => {
           const cmd = r.install_hint || 'docker compose pull && docker compose up -d';
           navigator.clipboard && navigator.clipboard.writeText(cmd);
@@ -2280,10 +2290,10 @@ async function checkUpdate(force) {
     } else if (r.scope === 'web') {
       const kb = Math.round((r.web_size || 0) / 1024);
       showUpdateBar(
-        `发现新版本 v${ver}（只有界面文件变了，要下载 ${kb} KB）`,
+        `发现新版本 v${ver}（只有界面文件变了，要下载 ${kb} KB）${mirrorHtml()}`,
         '立即更新', doUpdate);
     } else {
-      showUpdateBar(`发现新版本 v${ver}（当前 v${esc(r.current)}）`,
+      showUpdateBar(`发现新版本 v${ver}（当前 v${esc(r.current)}）${mirrorHtml()}`,
         '立即更新', doUpdate);
     }
   } catch (e) {  }
@@ -2317,7 +2327,7 @@ async function doUpdate() {
       clearInterval(timer);
       b.disabled = false;
       b.textContent = '重试';
-      alert('更新失败：' + (s.error || '未知原因'));
+      alert('更新失败：' + (s.error || '未知原因') + '\n\n网盘备用下载：' + MIRROR_URL);
     }
   }, 800);
 }

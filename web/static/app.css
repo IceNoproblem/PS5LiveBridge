@@ -1655,3 +1655,11 @@ select option:checked {
 .mod-sub[open] > summary::before { transform: rotate(90deg); }
 .mod-sub-t { flex: 1; min-width: 0; font-size: 14px; font-weight: 500; }
 .mod-sub-b { padding: 2px 12px 12px; }
+
+/* 版本栏与升级提示里的备用下载入口 */
+.rail-mirror {
+  flex: 0 0 auto; font-size: 14.5px; color: var(--muted);
+  text-decoration: none; border-bottom: 1px dotted var(--muted);
+}
+.rail-mirror:hover { color: var(--brand); border-color: var(--brand); }
+.update-mirror { color: #fff; text-decoration: underline; }

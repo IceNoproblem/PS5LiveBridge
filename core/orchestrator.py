@@ -1860,7 +1860,7 @@ class Orchestrator(object):
             "twitch": {"ok": False, "ms": 0, "detail": ""},
             "github": {"ok": False, "ms": 0, "detail": ""},
             "version": {"current": paths.APP_VERSION, "latest": "",
-                        "is_latest": None},
+                        "is_latest": None, "mirror": paths.MIRROR_URL},
         }
 
         proxy = (self.cfg.get("TWITCH_PROXY") or "").strip()
@@ -1988,6 +1988,7 @@ class Orchestrator(object):
             "caps": paths.caps(),
             "platform": paths.PLATFORM,
             "version": paths.APP_VERSION,
+            "mirror_url": paths.MIRROR_URL,
             "step": self.progress.get("step", 1),
             "progress_dns_ok": bool(self.progress.get("dns_verified"))
                                or bool(self.dns and self.dns.running)

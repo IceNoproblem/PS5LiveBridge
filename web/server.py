@@ -575,10 +575,13 @@ def create_app(orch, on_exit=None, on_restart=None) -> Flask:
                 "detail": "容器版不能自己替换自己。在 NAS 上执行：\n\n"
                           "docker compose pull && docker compose up -d\n\n"
                           "想要全自动：compose 里启用 auto-update profile（watchtower），"
-                          "每天凌晨 4 点自动拉新版重启。",
+                          "每天凌晨 4 点自动拉新版重启。\n\n"
+                          "桌面安装包下载慢可以用网盘：%s" % paths.MIRROR_URL,
             })
         if paths.PLATFORM != "windows":
-            return jsonify({"ok": False, "detail": "当前形态不支持自动安装，请手动更新"})
+            return jsonify({"ok": False,
+                            "detail": "当前形态不支持自动安装，请手动更新。\n"
+                                      "下载慢可以用网盘：%s" % paths.MIRROR_URL})
 
         def _before_exit():
             try:

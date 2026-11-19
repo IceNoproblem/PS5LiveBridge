@@ -167,6 +167,7 @@ class Updater(object):
             "percent": 0,
             "error": "",
             "checked_at": 0.0,
+            "mirror_url": paths.MIRROR_URL,
         }
         self._stop = False
         self._thread = None
@@ -333,12 +334,16 @@ class Updater(object):
             return {"ok": False, "detail": "没有可安装的更新"}
         if paths.PLATFORM == "docker":
             return {"ok": False, "detail": "容器版不能自我替换，请在宿主机执行：\n"
-                                          "docker compose pull && docker compose up -d"}
+                                          "docker compose pull && docker compose up -d\n\n"
+                                          "桌面安装包下载慢可以用网盘：%s" % paths.MIRROR_URL}
         if paths.PLATFORM == "macos":
             return {"ok": False, "detail": "macOS 版暂不支持自动更新。\n"
-                                          "请到 GitHub Releases 手动下载新版 .app 替换。"}
+                                          "请到 GitHub Releases 手动下载新版 .app 替换。\n"
+                                          "下载慢可以用网盘：%s" % paths.MIRROR_URL}
         if paths.PLATFORM != "windows":
-            return {"ok": False, "detail": "当前平台不支持自动更新。"}
+            return {"ok": False,
+                    "detail": "当前平台不支持自动更新，去 GitHub Releases 下载。\n"
+                              "下载慢可以用网盘：%s" % paths.MIRROR_URL}
 
         t = threading.Thread(target=self._install_bg,
                              args=(on_before_exit,), daemon=True)
