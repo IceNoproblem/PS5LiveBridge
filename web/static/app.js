@@ -1088,9 +1088,21 @@ async function loadRtmpImpl() {
     const hint = $('impl-hint');
     if (sel && r) sel.value = r.impl || 'nginx';
     if (hint) {
-      hint.textContent = r && r.impl === r.active
-        ? '当前生效'
-        : '下次启动生效（正在直播时切换会这样）';
+      // 收流端起不来时，把真正的失败原因放在这里。原来只显示「当前生效」，
+      // 端口被系统占着、进程秒退这些用户完全看不到。
+      const ng = ((S.state || {}).services || {}).nginx || {};
+      if (ng.error) {
+        hint.className = 'impl-hint err';
+        hint.textContent = ng.error;
+      } else if (ng.port_note) {
+        hint.className = 'impl-hint';
+        hint.textContent = ng.port_note;
+      } else {
+        hint.className = 'impl-hint';
+        hint.textContent = r && r.impl === r.active
+          ? '当前生效'
+          : '下次启动生效（正在直播时切换会这样）';
+      }
     }
   } catch (e) {}
 }

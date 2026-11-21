@@ -135,6 +135,8 @@ class NginxManager(object):
     def __init__(self, rtmp_port=1935, stat_port=8080):
         self.rtmp_port = int(rtmp_port)
         self.stat_port = int(stat_port)
+        # 统计口撞上系统保留段时会被自动换掉，这里记下换的原因给界面看
+        self.stat_port_note = ""
         self.proc = None
         self.prefix = ""
         self.exe = ""
@@ -187,6 +189,14 @@ class NginxManager(object):
             except Exception:
                 pass
 
+        # 统计口不是关键端口，撞了就让一个。Windows 上 8080/8099 这类很常见
+        # 会被 Hyper-V 的保留段吃掉，死守固定值会直接起不来。
+        _pick = netutil.pick_port(self.stat_port)
+        if _pick["port"] and _pick["port"] != self.stat_port:
+            self.stat_port_note = _pick["reason"]
+            self.stat_port = _pick["port"]
+            logbus.warn(_pick["reason"], tag="收流")
+
         self.exe = os.path.join(self.prefix, "nginx.exe" if netutil.IS_WINDOWS else "nginx")
         if not os.path.exists(self.exe):
             alt = shutil.which("nginx")
@@ -200,13 +210,20 @@ class NginxManager(object):
         return True
 
     def _prepare_posix(self) -> bool:
+        # 先把统计口定下来。端口被占时提前让位，后面才不用带着错的值写配置。
+        _pick = netutil.pick_port(self.stat_port)
+        if _pick["port"] and _pick["port"] != self.stat_port:
+            self.stat_port_note = _pick["reason"]
+            self.stat_port = _pick["port"]
+            logbus.warn(_pick["reason"], tag="收流")
+
         exe = shutil.which("nginx") or ""
         for cand in ("/usr/sbin/nginx", "/usr/local/sbin/nginx", "/usr/bin/nginx",
                      "/usr/local/bin/nginx", "/opt/homebrew/bin/nginx"):
             if not exe and os.path.exists(cand):
                 exe = cand
         if not exe:
-            if sys.platform == "darwin":
+            if paths.PLATFORM == "macos":
                 self.last_error = ("找不到 nginx。macOS 上请用 Homebrew 安装：\n"
                                    "brew install nginx-full（含 RTMP 模块）")
             else:
@@ -290,6 +307,9 @@ class NginxManager(object):
             guard = netutil.free_port_for_receiver(_port)
             if not guard["ok"]:
                 self.last_error = guard["detail"]
+                if _port == self.rtmp_port:
+                    self.last_error += ("。PS5 推流必须走这个端口，"
+                                        "先关掉占用它的程序（别的直播软件、虚拟机、Docker）再试")
                 logbus.error(self.last_error, tag="收流")
                 return False
             if guard["killed"]:

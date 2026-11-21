@@ -6,7 +6,7 @@ import time
 
 from . import logbus
 
-HEARTBEAT_TIMEOUT = 18000
+HEARTBEAT_TIMEOUT = 900
 # 一条弹幕最长多少字。超长弹幕在 PS5 上会占满整屏，甚至盖住游戏画面
 MAX_TEXT_LEN = 72
 
@@ -24,6 +24,9 @@ class IrcClient(object):
         except Exception:
             self.peer = "?"
         self.last_active = time.time()
+        # 收和发分开记：PING 是我们发的，拿它续命会让半开的僵尸连接永远不断，
+        # PS5 停播再开播时新连接进来了、旧连接还排在前面，弹幕就全写进死连接。
+        self.last_rx = time.time()
         self.alive = True
         self.joined = False
 
@@ -31,7 +34,7 @@ class IrcClient(object):
         if not self.writer or self.writer.is_closing():
             self.alive = False
             return False
-        if time.time() - self.last_active > HEARTBEAT_TIMEOUT:
+        if time.time() - self.last_rx > HEARTBEAT_TIMEOUT:
             logbus.warn("PS5（%s）心跳超时，断开" % self.peer, tag="IRC")
             self.alive = False
             return False
@@ -142,6 +145,7 @@ class IrcClient(object):
                     continue
                 if not data:
                     break
+                self.last_rx = time.time()
                 line = data.decode("utf-8", "ignore").strip()
                 if line:
                     await self.handle(line)
@@ -217,7 +221,18 @@ class IrcServer(object):
 
     async def _handle(self, reader, writer):
         c = IrcClient(reader, writer, self)
-        self.clients.append(c)
+        # PS5 每次开播都会新建一条 IRC 连接。旧连接如果是半开的（PS5 断网、
+        # 休眠、直接退直播），它不会自己断，于是弹幕一直往死连接上写。
+        # 这里只留最新一条，旧的直接关掉。
+        stale = [x for x in self.clients if x.alive]
+        self.clients = [c]
+        for old in stale:
+            old.alive = False
+            try:
+                old.writer.close()
+            except Exception:
+                pass
+            logbus.info("PS5 重新连入，已断开旧连接（%s）" % old.peer, tag="IRC")
         logbus.info("PS5 已连上弹幕通道（%s）" % c.peer, tag="IRC")
         await c.run()
 
@@ -244,7 +259,7 @@ class IrcServer(object):
         return any(c.alive for c in self.clients)
 
     def _active(self):
-        for c in list(self.clients):
+        for c in reversed(list(self.clients)):
             if c.alive:
                 return c
         return None
@@ -260,11 +275,14 @@ class IrcServer(object):
         return ":%s!%s@tmi.twitch.tv PRIVMSG %s :%s" % (safe, safe, target, clean)
 
     async def say(self, user: str, text: str) -> bool:
-        c = self._active()
-        if not c:
-            return False
-        await c.send(self._format(user, text))
-        return True
+        line = self._format(user, text)
+        for c in reversed(list(self.clients)):
+            if not c.alive:
+                continue
+            await c.send(line)
+            if c.alive:
+                return True
+        return False
 
     async def notify(self, text: str) -> bool:
         return await self.say("系统", text)

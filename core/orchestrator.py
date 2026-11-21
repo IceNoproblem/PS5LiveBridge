@@ -798,6 +798,11 @@ class Orchestrator(object):
         was_publishing = False
         last_pub = 0.0
         nginx_retry_at = 0.0
+        # 僵尸推流的判定：推流位还占着，但字节数不再增长。
+        # PS5 断电、休眠、直接拔网线时不会发 unpublish，收流端就一直以为
+        # 有人在推，用户再开播就被拒（PS5 报「有其他设备正在向同一频道播放」）。
+        last_bytes = -1
+        last_data_at = 0.0
         while not self._stop:
             try:
                 now = time.time()
@@ -814,6 +819,18 @@ class Orchestrator(object):
 
                 if publishing:
                     last_pub = now
+                    _total = int(pub.get("bytes_total") or 0)
+                    if _total != last_bytes:
+                        last_bytes = _total
+                        last_data_at = now
+                    elif last_data_at and (now - last_data_at) >= 20:
+                        logbus.warn("推流位还占着，但 20 秒没有新数据，按残留会话处理", tag="收流")
+                        last_data_at = 0.0
+                        last_bytes = -1
+                        self._on_ps5_unpublish()
+                        was_publishing = False
+                        time.sleep(1.0)
+                        continue
                     if not was_publishing:
                         self._on_ps5_publish(pub)
                 elif last_pub and (now - last_pub) >= 3.0:
@@ -821,6 +838,8 @@ class Orchestrator(object):
                                               "relaying", "live", "error"):
                         self._on_ps5_unpublish()
                     last_pub = 0.0
+                    last_bytes = -1
+                    last_data_at = 0.0
 
                 was_publishing = publishing
 
@@ -834,6 +853,9 @@ class Orchestrator(object):
             time.sleep(1.0)
 
     def _on_ps5_publish(self, pub: dict) -> None:
+        # 开播了，之前排的「清收流端」任务作废，别把新流打断
+        with self.lock:
+            self._reset_seq = int(getattr(self, "_reset_seq", 0) or 0) + 1
         app = pub.get("app", "app")
         name = pub.get("name", "")
         res = "%dx%d" % (pub.get("width", 0), pub.get("height", 0)) \
@@ -885,6 +907,48 @@ class Orchestrator(object):
             self.live["local"] = {}
             self.live["since"] = 0.0
             self.live["face_url"] = ""
+        if state in ("relaying", "live", "starting", "face_verify"):
+            self._schedule_receiver_reset()
+
+    def _schedule_receiver_reset(self) -> None:
+        """
+        PS5 停播后清一次收流端。
+
+        为什么需要：PS5 走的时候连接经常是半开的（休眠、断网、直接退直播），
+        收流端以为还有人推着，publisher 位置一直占着。用户再点开播，
+        推上来就被拒，PS5 报「有其他设备正在向同一频道播放」。
+
+        nginx 有 drop_idle_publisher 能自己踢，rtmf 不一定那么快。
+        所以停播 3 秒后看一眼：如果推流位还占着，就主动重启收流端。
+        期间用户又开播就跳过，不打断新流。
+        """
+        with self.lock:
+            self._reset_seq = int(getattr(self, "_reset_seq", 0) or 0) + 1
+            seq = self._reset_seq
+
+        def _run():
+            time.sleep(3.0)
+            with self.lock:
+                if int(getattr(self, "_reset_seq", 0) or 0) != seq:
+                    return
+                st = str((self.live or {}).get("state") or "idle")
+            if st != "idle":
+                return
+            # 要问收流端本身，不能看 live["ps5"]：unpublish 时那份已经清空了，
+            # 拿它判断永远是「没在推」，兜底就成了摆设。
+            try:
+                pub = self.nginx.publisher() or {}
+            except Exception:
+                pub = {}
+            if pub.get("publishing"):
+                logbus.warn("PS5 已停播但推流位还占着，清一次收流端", tag="收流")
+                r = self.repair_receiver()
+                if r.get("ok"):
+                    logbus.ok("收流端已清空，下次开播不会被占", tag="收流")
+                else:
+                    logbus.warn("清收流端没成功：%s" % (r.get("detail") or "未知原因"), tag="收流")
+
+        threading.Thread(target=_run, name="receiver-reset", daemon=True).start()
 
     def _fetch_twitch_title(self, stream_key: str = "") -> str:
         """
@@ -2007,7 +2071,15 @@ class Orchestrator(object):
                 "irc": {"running": self.services.irc.running,
                         "ps5": self.services.ps5_connected},
                 "nginx": {"running": self.nginx.running(),
-                          "publisher": self._publisher_view(live)},
+                          "publisher": self._publisher_view(live),
+                          # 收流端的端口与失败原因：端口撞了要靠这几个字段
+                          # 把「哪个口、被谁占、换到哪」直接摆到界面上
+                          "rtmp_port": int(self.cfg.get("RTMP_PORT", 1935)),
+                          "web_port": int(getattr(self.nginx, "web_port", 0)
+                                          or getattr(self.nginx, "stat_port", 0) or 0),
+                          "error": getattr(self.nginx, "last_error", "") or "",
+                          "port_note": (getattr(self.nginx, "web_port_note", "")
+                                        or getattr(self.nginx, "stat_port_note", "") or "")},
                 # 这里原来只有一个 running，但它是 nginx.forwarding（rtmpf 的转发状态），
                 # 跟 ffmpeg 编码进程没关系。排查时拿它判断 ffmpeg 死活会完全看错，
                 # 所以把两个状态分开暴露：

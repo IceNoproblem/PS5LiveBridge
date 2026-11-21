@@ -197,6 +197,8 @@ class RtmpForwarderManager(object):
         self.proc = None
         self._logfh = None
         self.last_error = ""
+        # HTTP-FLV 口撞了系统保留段会被换掉，记下原因给界面看
+        self.web_port_note = ""
         self._lock = threading.RLock()
         # 停掉的 Popen 挂这儿不就地析构：Python 3.13 的 Popen.__del__
         # 会递归爆栈，在请求线程里触发会直接带走整个进程。
@@ -266,12 +268,22 @@ class RtmpForwarderManager(object):
             guard = netutil.free_port_for_receiver(_port)
             if not guard["ok"]:
                 self.last_error = guard["detail"]
+                if _port == self.rtmp_port:
+                    self.last_error += ("。PS5 推流必须走这个端口，"
+                                        "先关掉占用它的程序（别的直播软件、虚拟机、Docker）再试")
                 logbus.error(self.last_error, tag="收流")
                 return False
             if guard["killed"]:
                 logbus.warn("%s端口 %d：%s" % (_label, _port, guard["detail"]), tag="收流")
 
         os.makedirs(paths.DATA_DIR, exist_ok=True)
+        # HTTP-FLV 口只服务于「本地取流」，被占就让一个，别把收流整个搞挂
+        _pick = netutil.pick_port(self.web_port)
+        if _pick["port"] and _pick["port"] != self.web_port:
+            self.web_port_note = _pick["reason"]
+            self.web_port = _pick["port"]
+            self.base = "http://127.0.0.1:%d" % self.web_port
+            logbus.warn(_pick["reason"], tag="收流")
         self._write_config([])
         args = [self.exe,
                 "-l", "0.0.0.0:%d" % self.rtmp_port,

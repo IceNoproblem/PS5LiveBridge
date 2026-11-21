@@ -816,6 +816,60 @@ def _win_tcp_listeners():
     return out
 
 
+def can_bind(port: int, host: str = "0.0.0.0") -> bool:
+    """
+    真去 bind 一次，判断这个端口现在能不能用。
+
+    Windows 上有些端口落在 Hyper-V / WinNAT 的保留区间里，netstat 看不到
+    任何监听，bind 却直接失败（报 10013）。只看 LISTENING 会漏掉这种，
+    所以这里必须实测。
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        if IS_WINDOWS:
+            # Windows 的 SO_REUSEADDR 允许绑到已被占用的端口，判不出占用；
+            # 只有 SO_EXCLUSIVEADDRUSE 才会如实失败。
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        else:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind((host, int(port)))
+        # macOS/BSD 上只有 bind 判不出占用：两个都带 SO_REUSEADDR 的 socket
+        # 能绑同一个口，直到 listen 才报错。所以这里必须 listen 一下。
+        s.listen(1)
+        return True
+    except OSError:
+        return False
+    finally:
+        try:
+            s.close()
+        except Exception:
+            pass
+
+
+def pick_port(preferred: int, span: int = 40) -> dict:
+    """
+    首选端口能用就用，不能用就往后找一个能 bind 的。
+
+    返回 {"port": 实际用的, "changed": bool, "reason": 说明}
+    收流端的统计口、HTTP-FLV 口都用它：这些口换一个不影响 PS5，
+    死守固定值只会在撞上系统保留段时把功能整个搞死。
+    """
+    preferred = int(preferred or 0)
+    if not preferred:
+        return {"port": 0, "changed": False, "reason": ""}
+    if not port_listening(preferred) and can_bind(preferred):
+        return {"port": preferred, "changed": False, "reason": ""}
+    owner, name = port_owner(preferred)
+    who = ("%s（PID %d）" % (name or "未知程序", owner)) if owner else "系统保留"
+    for p in range(preferred + 1, min(preferred + max(1, span), 65535)):
+        if not port_listening(p) and can_bind(p):
+            return {"port": p, "changed": True,
+                    "reason": "端口 %d 被 %s 占着，已改用 %d" % (preferred, who, p)}
+    return {"port": preferred, "changed": False,
+            "reason": "端口 %d 被 %s 占着，后面 %d 个也没找到空位"
+                      % (preferred, who, span)}
+
+
 def port_listening(port: int, proto: str = "tcp") -> bool:
     """只看 LISTENING，不发起连接（避免污染 PS5 连接日志）。"""
     if IS_WINDOWS:
