@@ -6,7 +6,7 @@ import time
 
 from . import logbus
 
-HEARTBEAT_TIMEOUT = 900
+HEARTBEAT_TIMEOUT = 18000
 # 一条弹幕最长多少字。超长弹幕在 PS5 上会占满整屏，甚至盖住游戏画面
 MAX_TEXT_LEN = 72
 

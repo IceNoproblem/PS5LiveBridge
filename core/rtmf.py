@@ -278,12 +278,22 @@ class RtmpForwarderManager(object):
 
         os.makedirs(paths.DATA_DIR, exist_ok=True)
         # HTTP-FLV 口只服务于「本地取流」，被占就让一个，别把收流整个搞挂
+        # 先看上次用的是哪个口，能沿用就沿用，别让重启把本地取流地址改掉
+        if not os.environ.get("PS5LB_RTMPF_PORT"):
+            _saved = netutil.recall_port("rtmf_web")
+            if _saved and _saved != self.web_port:
+                self.web_port = _saved
+                self.base = "http://127.0.0.1:%d" % self.web_port
         _pick = netutil.pick_port(self.web_port)
         if _pick["port"] and _pick["port"] != self.web_port:
             self.web_port_note = _pick["reason"]
             self.web_port = _pick["port"]
             self.base = "http://127.0.0.1:%d" % self.web_port
             logbus.warn(_pick["reason"], tag="收流")
+        else:
+            self.web_port_note = ""
+        if not os.environ.get("PS5LB_RTMPF_PORT"):
+            netutil.remember_port("rtmf_web", self.web_port)
         self._write_config([])
         args = [self.exe,
                 "-l", "0.0.0.0:%d" % self.rtmp_port,

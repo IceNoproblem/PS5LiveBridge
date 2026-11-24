@@ -846,6 +846,48 @@ def can_bind(port: int, host: str = "0.0.0.0") -> bool:
             pass
 
 
+def _ports_file() -> str:
+    from . import paths
+    return os.path.join(paths.DATA_DIR, "ports.json")
+
+
+def recall_port(key: str) -> int:
+    """读上次实际用的端口。
+
+    为什么要记：服务端 socket 关掉后，之前的连接会短时间留在 TIME_WAIT，
+    这时候 bind 同一个口会失败，pick_port 就换一个。问题是本地取流地址
+    是带端口的，用户填进 OBS 之后，程序重启一次地址就变了。
+    记住上次用过的值，重启优先用它。
+    """
+    try:
+        import json
+        with open(_ports_file(), "r", encoding="utf-8") as f:
+            d = json.load(f)
+        return int(d.get(key) or 0)
+    except Exception:
+        return 0
+
+
+def remember_port(key: str, port: int) -> None:
+    try:
+        import json
+        path = _ports_file()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        d = {}
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                d = json.load(f) or {}
+        except Exception:
+            d = {}
+        d[str(key)] = int(port)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(d, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
+    except Exception:
+        pass
+
+
 def pick_port(preferred: int, span: int = 40) -> dict:
     """
     首选端口能用就用，不能用就往后找一个能 bind 的。

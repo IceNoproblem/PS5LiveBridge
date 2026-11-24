@@ -154,6 +154,28 @@ class NginxManager(object):
         except UnicodeEncodeError:
             return False
 
+    def _fix_stat_port(self) -> None:
+        """
+        定统计口。
+
+        统计口不是关键端口，撞了就让一个：Windows 上 8080/8099 这类很常见
+        会被 Hyper-V 的保留段吃掉，死守固定值会直接起不来。
+        上次用过又没冲突的值优先沿用，免得每次重启都跳一个。
+        """
+        if not os.environ.get("PS5LB_STAT_PORT"):
+            _saved = netutil.recall_port("nginx_stat")
+            if _saved and _saved != self.stat_port:
+                self.stat_port = _saved
+        _pick = netutil.pick_port(self.stat_port)
+        if _pick["port"] and _pick["port"] != self.stat_port:
+            self.stat_port_note = _pick["reason"]
+            self.stat_port = _pick["port"]
+            logbus.warn(_pick["reason"], tag="收流")
+        else:
+            self.stat_port_note = ""
+        if not os.environ.get("PS5LB_STAT_PORT"):
+            netutil.remember_port("nginx_stat", self.stat_port)
+
     def prepare(self) -> bool:
         """
         选定 nginx 运行目录。
@@ -189,13 +211,7 @@ class NginxManager(object):
             except Exception:
                 pass
 
-        # 统计口不是关键端口，撞了就让一个。Windows 上 8080/8099 这类很常见
-        # 会被 Hyper-V 的保留段吃掉，死守固定值会直接起不来。
-        _pick = netutil.pick_port(self.stat_port)
-        if _pick["port"] and _pick["port"] != self.stat_port:
-            self.stat_port_note = _pick["reason"]
-            self.stat_port = _pick["port"]
-            logbus.warn(_pick["reason"], tag="收流")
+        self._fix_stat_port()
 
         self.exe = os.path.join(self.prefix, "nginx.exe" if netutil.IS_WINDOWS else "nginx")
         if not os.path.exists(self.exe):
@@ -211,11 +227,7 @@ class NginxManager(object):
 
     def _prepare_posix(self) -> bool:
         # 先把统计口定下来。端口被占时提前让位，后面才不用带着错的值写配置。
-        _pick = netutil.pick_port(self.stat_port)
-        if _pick["port"] and _pick["port"] != self.stat_port:
-            self.stat_port_note = _pick["reason"]
-            self.stat_port = _pick["port"]
-            logbus.warn(_pick["reason"], tag="收流")
+        self._fix_stat_port()
 
         exe = shutil.which("nginx") or ""
         for cand in ("/usr/sbin/nginx", "/usr/local/sbin/nginx", "/usr/bin/nginx",
@@ -411,7 +423,7 @@ class NginxManager(object):
             {publishing: bool, app, name, uptime, bw_in(kbps), width, height, fps}
         """
         empty = {"publishing": False, "app": "", "name": "", "uptime": 0,
-                 "bw_in": 0, "width": 0, "height": 0, "fps": 0}
+                 "bw_in": 0, "bytes_total": 0, "width": 0, "height": 0, "fps": 0}
         xml = self.stat_xml()
         if not xml:
             return empty
@@ -458,6 +470,9 @@ class NginxManager(object):
                     "name": name,
                     "uptime": num("time"),
                     "bw_in": num("bw_in", 1024),
+                    # 累计收进来的字节数。监控循环靠它判断还有没有新数据，
+                    # 少这个字段会把正常推流当成残留会话清掉。
+                    "bytes_total": num("bytes_in"),
                     "width": width, "height": height, "fps": fps,
                 }
         return empty

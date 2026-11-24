@@ -8,7 +8,7 @@ import time
 
 APP_NAME = "PS5LiveBridge"
 APP_TITLE = "PS5 直播桥"
-APP_VERSION = "5.2.1"
+APP_VERSION = "5.2.2"
 MIRROR_URL = "https://pan.quark.cn/s/49db38cb6b4a"
 
 IS_WINDOWS = sys.platform == "win32"

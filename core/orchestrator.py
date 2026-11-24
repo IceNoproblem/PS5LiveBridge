@@ -819,15 +819,21 @@ class Orchestrator(object):
 
                 if publishing:
                     last_pub = now
-                    _total = int(pub.get("bytes_total") or 0)
-                    if _total != last_bytes:
-                        last_bytes = _total
+                    # 字段缺失时绝对不能用 0 当基准：那会让每一拍都判成
+                    # 「没有新数据」，正常直播也会被 20 秒清一次。
+                    # 缺了就不判，宁可漏掉僵尸，也不能把好好的流掐了。
+                    _raw = pub.get("bytes_total")
+                    if _raw is None:
+                        last_data_at = 0.0
+                        last_bytes = -1
+                    elif int(_raw) != last_bytes:
+                        last_bytes = int(_raw)
                         last_data_at = now
-                    elif last_data_at and (now - last_data_at) >= 20:
+                    elif last_bytes > 0 and last_data_at and (now - last_data_at) >= 20:
                         logbus.warn("推流位还占着，但 20 秒没有新数据，按残留会话处理", tag="收流")
                         last_data_at = 0.0
                         last_bytes = -1
-                        self._on_ps5_unpublish()
+                        self._on_ps5_unpublish(force_reset=True)
                         was_publishing = False
                         time.sleep(1.0)
                         continue
@@ -895,7 +901,7 @@ class Orchestrator(object):
         threading.Thread(target=self._start_bili_and_relay, args=(app, name),
                          name="start-live", daemon=True).start()
 
-    def _on_ps5_unpublish(self) -> None:
+    def _on_ps5_unpublish(self, force_reset: bool = False) -> None:
         state = self.live["state"]
         logbus.warn("PS5 停止推流了", tag="推流")
         self._stop_extra_outputs()
@@ -907,7 +913,9 @@ class Orchestrator(object):
             self.live["local"] = {}
             self.live["since"] = 0.0
             self.live["face_url"] = ""
-        if state in ("relaying", "live", "starting", "face_verify"):
+        # 僵尸推流的路径要强制清：那时 state 可能是 error（B 站失败）或 local
+        # （只本地收流），按状态判断会漏掉，推流位就一直被死会话占着。
+        if force_reset or state in ("relaying", "live", "starting", "face_verify"):
             self._schedule_receiver_reset()
 
     def _schedule_receiver_reset(self) -> None:

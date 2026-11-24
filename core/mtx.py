@@ -322,4 +322,5 @@ class MediaMtxManager(object):
             "height": height,
             "fps": 0,
             "bw_in": bw,
+            "bytes_total": total,
         }
