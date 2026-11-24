@@ -1078,8 +1078,7 @@ class Orchestrator(object):
 
         out_url = addr.rstrip("/") + "/" + code.lstrip("/")
 
-        self._protect_relay_target(out_url, addr)
-
+        # 白名单保护统一在 _start_push 里做，这里不再重复解析 DNS
         self._start_push(addr, code)
 
     def _start_push(self, addr: str, code: str) -> bool:
@@ -1134,6 +1133,7 @@ class Orchestrator(object):
             if ok is False:
                 self._fail_live(self.nginx.last_error or "转发启动失败")
                 return False
+            self._ensure_rtmf_watch()
             self.services.notify_ps5("画面正在同步")
             return True
 
@@ -1310,6 +1310,56 @@ class Orchestrator(object):
                 self.relays[key] = r
             return r
 
+    def _ensure_rtmf_watch(self) -> None:
+        """
+        rtmp-forwarder 那条路的看门狗。
+
+        为什么需要：ffmpeg 那条路有 relay 自己的 watchdog，rtmf 只是
+        下发一次转发配置就不管了。B 站那边断开、rtmf 进程自己重启后，
+        转发目标可能丢，界面还一直显示「转发中」。
+        这里每 15 秒看一眼，发现进程没了或者转发状态断了，就重新下发。
+        """
+        with self.lock:
+            if getattr(self, "_rtmf_watch_on", False):
+                return
+            self._rtmf_watch_on = True
+
+        def loop():
+            misses = 0
+            while not self._stop:
+                time.sleep(15)
+                try:
+                    with self.lock:
+                        st = str((self.live or {}).get("state") or "")
+                    if st not in ("relaying", "live", "starting", "face_verify"):
+                        misses = 0
+                        continue
+                    if not hasattr(self.nginx, "set_destinations"):
+                        continue
+                    running = self.nginx.running()
+                    fwd = bool(getattr(self.nginx, "forwarding", False))
+                    if running and fwd:
+                        misses = 0
+                        continue
+                    misses += 1
+                    if misses < 2:
+                        continue
+                    logbus.warn("rtmf 转发状态异常（进程 %s / 转发 %s），重新下发目标"
+                                % ("在" if running else "不在", "在" if fwd else "断"),
+                                tag="转发")
+                    if not self._last_out_url:
+                        continue
+                    ok = self._apply_destinations(self._last_out_url)
+                    if not ok:
+                        self._fail_live("转发目标重新下发失败：%s"
+                                        % (self.nginx.last_error or "未知原因"))
+                        return
+                    misses = 0
+                except Exception as e:
+                    logbus.debug("rtmf 看门狗异常：%s" % e, tag="转发")
+
+        threading.Thread(target=loop, name="rtmf-watch", daemon=True).start()
+
     def _on_relay_drop(self, key: str, reason: str) -> None:
         """
         某一路转发断了。
@@ -1388,14 +1438,29 @@ class Orchestrator(object):
             host = ""
 
         if host:
-            try:
-                import socket
+            # getaddrinfo 是阻塞的，DNS 慢会把开播线程卡住。
+            # 放进线程里等 3 秒，超时就放弃解析（后面会 warn，不会硬撑）。
+            import socket
+            import concurrent.futures
+
+            def _resolve():
+                out = []
                 for info in socket.getaddrinfo(host, None, socket.AF_INET):
                     ip = info[4][0]
-                    if ip and ip not in ips:
-                        ips.append(ip)
+                    if ip and ip not in out:
+                        out.append(ip)
+                return out
+
+            try:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                    ips = ex.submit(_resolve).result(timeout=3.0)
+            except concurrent.futures.TimeoutError:
+                logbus.warn("解析 B 站推流地址超过 3 秒（%s），先继续，"
+                            "转发可能被端口劫持挡住" % host, tag="转发")
+                ips = []
             except Exception as e:
                 logbus.warn("解析 B 站推流地址失败（%s）：%s" % (host, e), tag="转发")
+                ips = []
 
         if not ips:
             logbus.warn("没解析到 B 站推流 IP，转发可能推不出去", tag="转发")
@@ -1409,8 +1474,9 @@ class Orchestrator(object):
 
     def _confirm_bili_live(self) -> None:
         """B 站 live_status 变成 1 才算真的开播成功。"""
-        self.live["confirm_tries"] += 1
-        tries = self.live["confirm_tries"]
+        with self.lock:
+            self.live["confirm_tries"] += 1
+            tries = self.live["confirm_tries"]
         if tries % 3 != 1:
             return
         status = self.bili.live_status()
@@ -1441,9 +1507,13 @@ class Orchestrator(object):
             threading.Thread(target=_notify_after_join, daemon=True).start()
         elif status == 2:
             logbus.info("B 站显示轮播中，等待切换为直播…", tag="直播")
-        elif tries >= 30:
-            logbus.warn("等了 30 秒 B 站仍显示未开播。可能是推流地址/密钥不对，"
-                        "或 B 站审核延迟。", tag="直播")
+        elif tries >= 60:
+            # 一直卡在「转发中」用户不知道发生了什么。一分钟还没开播就转错误，
+            # 错误里说清楚可能是审核延迟，让用户自己决定要不要重试。
+            logbus.warn("等了 60 秒 B 站仍显示未开播", tag="直播")
+            self._fail_live("B 站一直显示未开播（已等 60 秒）。"
+                            "可能是分区/标题不合规正在审核，或者推流地址过期。"
+                            "等一会儿再点开播试试。")
 
     def _fail_live(self, msg: str) -> None:
         logbus.error(msg, tag="直播")
@@ -1556,7 +1626,6 @@ class Orchestrator(object):
 
         out_url = addr.rstrip("/") + "/" + code.lstrip("/")
         out_url = self._fix_relay_url(out_url)
-        self._protect_relay_target(out_url, addr)
 
         if not self._start_push(addr, code):
             return
@@ -2055,7 +2124,10 @@ class Orchestrator(object):
         # forwarding 单独暴露，老前端读 running 也拿到对的语义。
         relay_running = self.relay.running
         relay_uptime = self.relay.uptime
-        relay_error = self.relay.last_error or self.nginx.last_error
+        # 转发的错误和收流的错误分开，别把收流端的报错挂在「转发」那一栏
+        relay_error = self.relay.last_error
+        if not relay_error and not self.relay.running and self.relay.started_at:
+            relay_error = self.nginx.last_error
         return {
             "caps": paths.caps(),
             "platform": paths.PLATFORM,

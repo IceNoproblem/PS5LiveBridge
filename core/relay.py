@@ -120,6 +120,8 @@ class Relay(object):
                         pass
             netutil.disarm_popen(oldp)
             self._retired.append(oldp)
+            if len(self._retired) > 20:
+                del self._retired[:10]
 
         args = [
             self.ffmpeg,
@@ -168,10 +170,12 @@ class Relay(object):
         """
         fh = None
         try:
+            # 追加写：每次重连都覆盖会让排障只剩最后一段，
+            # 崩溃前的几轮尝试全丢
             fh = open(os.path.join(paths.LOGS_DIR,
                                    "ffmpeg.%s.stderr.log" % self.slug),
-                      "w", encoding="utf-8", errors="replace")
-            fh.write("=== pid %s 启动 %s ===\n"
+                      "a", encoding="utf-8", errors="replace")
+            fh.write("\n=== pid %s 启动 %s ===\n"
                      % (getattr(proc, "pid", "?"),
                         time.strftime("%Y-%m-%d %H:%M:%S")))
             fh.flush()
@@ -278,6 +282,8 @@ class Relay(object):
             if p is not None:
                 netutil.disarm_popen(p)
                 self._retired.append(p)
+                if len(self._retired) > 20:
+                    del self._retired[:10]
             self.proc = None
         if not _internal:
             self.started_at = 0.0

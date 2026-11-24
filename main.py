@@ -476,7 +476,9 @@ def _main() -> int:
     # 顺序反过来的话那行永远写 5000，跟实际地址对不上，排查时很误导。
     cfg = paths.load_config()
     port = args.port or int(cfg.get("WEB_PORT", 5000))
-    host = str(cfg.get("WEB_HOST") or ("0.0.0.0" if headless else "127.0.0.1"))
+    # WEB_HOST 是空的话按模式定：headless / 容器要让局域网访问（OBS、别的机器看界面），
+    # 桌面版只听本机就够，少开一个口少一分风险
+    host = str(cfg.get("WEB_HOST") or "").strip() or ("0.0.0.0" if headless else "127.0.0.1")
     # 只有 macOS 需要让端口：系统的「隔空播放接收器」常年占着 5000，
     # 我们再绑 127.0.0.1:5000 会成功，但浏览器的连接被它接走返回 403，
     # 界面一片空白，日志还写着「就绪」。Windows 和容器上 5000 一般没人抢，

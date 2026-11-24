@@ -391,8 +391,8 @@ def collect(orch, plan: str = "") -> dict:
     if paths.PLATFORM == "windows" and not checks["admin"]:
         issues.append({"level": "err",
                        "msg": "程序不是以管理员身份运行。方案三要加载 WinDivert 驱动、"
-                              "要改防火墙规则，没有管理员权限会静默失败。"
-                              "请退出后右键「以管理员身份运行」"})
+                              "要改防火墙规则，没有管理员权限会静默失败。",
+                       "hint": "退出程序，右键桌面图标，选「以管理员身份运行」，再开一次"})
     if env.get("detail") and env.get("level") in ("warn", "err"):
         issues.append({"level": env["level"], "msg": env["detail"]})
     if sec.get("level") == "warn" and sec.get("detail"):
@@ -417,7 +417,8 @@ def collect(orch, plan: str = "") -> dict:
     elif not nginx_running:
         issues.append({"level": "err",
                        "msg": "%d 有进程在监听，但收流服务没起来，可能被 %s 占了"
-                              % (rtmp_port, rtmp["process"] or "别的进程")})
+                              % (rtmp_port, rtmp["process"] or "别的进程"),
+                       "hint": "去任务管理器结束那个占用端口的程序，或者第 5 步里把收流实现换一个"})
 
     # 当前收流实现反复重启 → 建议换另一种（包里只有一种就改看日志）
     _ri = _relay_stat(orch)
@@ -433,14 +434,16 @@ def collect(orch, plan: str = "") -> dict:
 
     if not irc["listening"]:
         issues.append({"level": "warn",
-                       "msg": "弹幕通道没在监听 %d，PS5 画面上的弹幕不会出来" % irc_port})
+                       "msg": "弹幕通道没在监听 %d，PS5 画面上的弹幕不会出来" % irc_port,
+                       "hint": "右上角点「重启」让程序自己重新占端口，多半是上次没退干净"})
 
     fw = _firewall()
     missing = [k for k, v in fw.items() if v is False]
     if missing:
         issues.append({"level": "warn",
                        "msg": "防火墙还缺 %d 条放行规则：%s"
-                              % (len(missing), "、".join(missing))})
+                              % (len(missing), "、".join(missing)),
+                       "hint": "一次性放行最省事：允许程序通过防火墙，或把 1935 / 6667 / 53 放行"})
 
 
     hijack_mode = hj.get("mode") or ""

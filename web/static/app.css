@@ -145,13 +145,16 @@ a:hover { text-decoration: underline; }
 /* 窄屏逐步收窄，避免主区域被挤没 */
 @media (max-width: 1560px) {
   .shell { grid-template-columns: 276px 190px minmax(0, 1fr) 312px; }
+  .shell.log-hidden { grid-template-columns: 276px 190px minmax(0, 1fr) 48px; }
 }
 @media (max-width: 1360px) {
   .shell { grid-template-columns: 200px minmax(0, 1fr) 300px; }
+  .shell.log-hidden { grid-template-columns: 200px minmax(0, 1fr) 48px; }
   .rail-status { display: none; }
 }
 @media (max-width: 1100px) {
   .shell { grid-template-columns: minmax(0, 1fr) 280px; }
+  .shell.log-hidden { grid-template-columns: minmax(0, 1fr) 48px; }
   .rail-steps { display: none; }
 }
 
@@ -885,7 +888,9 @@ select option:checked {
 .logpanel-vbar { display: none; }
 
 
-.shell.log-hidden { grid-template-columns: 320px minmax(0, 1fr) 48px; }
+/* 收起日志时只把最后一列收窄，前几列一个都不能少。
+   少写一列，主内容就掉到 48px 那一列，页面看着像坏掉。 */
+.shell.log-hidden { grid-template-columns: 292px 200px minmax(0, 1fr) 48px; }
 .shell.log-hidden .logpanel-h,
 .shell.log-hidden .logpanel-body { display: none; }
 .shell.log-hidden .logpanel-vbar {
@@ -1663,3 +1668,46 @@ select option:checked {
 }
 .rail-mirror:hover { color: var(--brand); border-color: var(--brand); }
 .update-mirror { color: #fff; text-decoration: underline; }
+
+/* ── 自检页新手引导 ── */
+.guide-box {
+  margin: 10px 0 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.guide-box summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--brand);
+  list-style: none;
+  user-select: none;
+}
+.guide-box summary::-webkit-details-marker { display: none; }
+.guide-box summary::before { content: "▸ "; }
+.guide-box[open] summary::before { content: "▾ "; }
+.guide-box ol {
+  margin: 10px 0 4px;
+  padding-left: 22px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.85;
+}
+.guide-box li b.ok { color: var(--ok); }
+.guide-box li b.warn { color: var(--warn); }
+.guide-box li b.err { color: var(--err); }
+
+/* 问题列表下面的「怎么办」 */
+.diagissues .issue-hint {
+  margin-top: 4px;
+  padding: 6px 10px;
+  border-left: 3px solid var(--brand);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.7;
+  border-radius: 4px;
+}
+.diagissues li.err .issue-hint { border-left-color: var(--err); }
+.diagissues li.warn .issue-hint { border-left-color: var(--warn); }

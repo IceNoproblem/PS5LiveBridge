@@ -8,7 +8,7 @@ import time
 
 APP_NAME = "PS5LiveBridge"
 APP_TITLE = "PS5 直播桥"
-APP_VERSION = "5.2.2"
+APP_VERSION = "5.2.3"
 MIRROR_URL = "https://pan.quark.cn/s/49db38cb6b4a"
 
 IS_WINDOWS = sys.platform == "win32"
@@ -143,7 +143,10 @@ def resource_path(*parts: str) -> str:
 
 DEFAULT_CONFIG = {
     "WEB_PORT": 5000,
-    "WEB_HOST": "127.0.0.1",
+    # 空值表示「没配过」，main 里按 headless 决定绑 0.0.0.0 还是 127.0.0.1。
+    # 原来默认写死 127.0.0.1，cfg.get() 永远非空，容器模式想绑 0.0.0.0 的
+    # 那个分支一辈子走不到。
+    "WEB_HOST": "",
 
     "LAN_IP": "",
     "LOCAL_IP_FORCE": "",

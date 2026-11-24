@@ -5,6 +5,9 @@ const MIRROR_URL = 'https://pan.quark.cn/s/49db38cb6b4a';
 const S = {
   step: 1,
   state: null,
+  // 第 1 步选的方案。空值表示还没选过，渲染时要按运行状态猜，
+  // 所以初始化成空串而不是 undefined，逻辑判断才好写
+  modePick: '',
   env: null,
   guides: null,
   qrTimer: null,
@@ -89,8 +92,9 @@ function applyCaps(st) {
   show('rail-mode-row', false);
   show('s3-desktop', false);
   show('s3-docker', true);
-  // 容器里只有 nginx，没有 rtmf.exe。这个下拉选了 rtmf 收流就起不来，干脆不给选。
-  show('impl-block', false);
+  // 镜像里 nginx 和 rtmp-forwarder 都装了，两条路都能走，下拉要给用户选。
+  // 以前只有 nginx 所以藏掉，注释也写死了「容器只有 nginx」，那已经过时了。
+  show('impl-block', true);
   show('btn-quit', false);
   if ($('s3-docker-ip')) $('s3-docker-ip').textContent = st.lan_ip || '—';
   setHtml('nav-3-label', '网络配置<small>PS5 保持自动</small>');
@@ -251,10 +255,17 @@ function applyState(st) {
   });
 
 
-  if (!window._twitchFilled && $('in-twitch') && st.config) {
-    $('in-twitch').value = st.config.twitch_channel || '';
-    if ($('in-proxy')) $('in-proxy').value = st.config.twitch_proxy || '';
-    window._twitchFilled = true;
+  // 只填一次会让后端改过配置后前端一直显示旧值。
+  // 改成「用户没在输入时」就同步，覆盖用户正在打的字才算问题。
+  if ($('in-twitch') && st.config && document.activeElement !== $('in-twitch')) {
+    const want = st.config.twitch_channel || '';
+    if ($('in-twitch').value !== want && !$('in-twitch').dataset.touched) {
+      $('in-twitch').value = want;
+    }
+    if ($('in-proxy') && document.activeElement !== $('in-proxy')
+        && !$('in-proxy').dataset.touched) {
+      $('in-proxy').value = st.config.twitch_proxy || '';
+    }
   }
 
 
@@ -270,6 +281,34 @@ function applyState(st) {
   };
   const [stageText, stageCls] = stageMap[live.state] || [live.state || '—', ''];
   setRail('rail-state', stageText, stageCls);
+
+  // B 站返回的「通道」（网页 / 客户端 / 直播姬）以前显示过，后来丢了。
+  // 人脸验证的时候尤其要看这个：不同通道处理方式不一样，不知道是哪条就没法判断。
+  {
+    // 这行始终显示。藏起来的话用户根本不知道有这个字段，
+    // 等到人脸验证时想不起来去哪看，那就白加了。
+    const chRow = $('rail-channel-row');
+    const chEl = $('rail-channel');
+    const ch = String(channel || '').trim();
+    if (chRow && chEl) {
+      chRow.style.display = '';
+      chEl.textContent = ch || '未开播';
+      chEl.className = 'rail-v ' + (ch ? 'ok' : '');
+    }
+  }
+
+  // 开播失败原来只显示「出错」两个字，用户不知道错在哪。
+  // 紧挨着阶段下面给出原因，翻到哪一步都能看到。
+  {
+    const errRow = $('rail-err-row');
+    const errEl = $('rail-err');
+    const msg = String(live.error || '').trim();
+    if (errRow && errEl) {
+      errRow.style.display = msg ? '' : 'none';
+      errEl.textContent = msg || '—';
+      errEl.title = msg || '';
+    }
+  }
 
 
   // 两段链路分开：PS5→本机 / 本机→B站
@@ -602,6 +641,7 @@ function applyState(st) {
       const fu = live.face_url || '';
       $('s5-msg').innerHTML = `<div class="note warn">
         <b>B 站要求人脸验证。</b>请在手机 B 站 App 里完成认证，软件会每 30 秒自动重试。
+        ${channel ? `<br>这次开播走的是<b>「${esc(channel)}」</b>通道，验证入口一般在同一个入口里。` : ''}
         ${fu ? `<br>验证链接：<a href="${esc(fu)}" target="_blank">${esc(fu.slice(0, 50))}…</a>` : ''}
         <br>完成验证后等一会儿就能自动开播，也可以
         <a href="#" onclick="manualStart();return false">点这里手动重试</a>。</div>`;
@@ -874,12 +914,15 @@ async function loadDiag(force) {
   rows.push(['__group__', '通用 · 三种方案都要看']);
   rows.push(['网络环境', env.detail || '未判定', env.level === 'ok' ? 'ok' : (env.level || '')]);
   const rt = L.router || {};
-  const capTxt = { yes: '（能改 hosts）', hard: '（有 hosts 但很麻烦）',
-                   no: '（没有 hosts）', oem: '（光猫，改不了）' }[rt.hosts] || '';
+  // 小米这类走手机 App 改 hosts，实际一点都不麻烦，文案别吓人，
+  // 也别标颜色。只有「根本改不了」才值得标出来。
+  const capTxt = { yes: '（能改 hosts）', hard: '（能改，部分型号进手机 App 或管理页）',
+                   no: '（没有 hosts，这条路走不通）', oem: '（光猫，改不了）' }[rt.hosts] || '';
+  const capCls = (rt.hosts === 'no' || rt.hosts === 'oem') ? 'warn' : '';
   rows.push(['路由器',
     rt.brand ? (rt.brand + (rt.model ? ' ' + rt.model : '') + capTxt)
              : (rt.reachable ? '后台能打开，型号没认出来' : '没连上后台页面'),
-    rt.hosts === 'yes' ? 'ok' : (rt.brand ? 'warn' : '')]);
+    capCls]);
   rows.push(['本机 IP', d.lan_ip || '—', '']);
   rows.push(['网关', d.gateway || (env.gateway || '—'), '']);
   // 管理员权限和安全软件都是 Windows 那套才有的东西。容器里 is_admin 看的是
@@ -926,11 +969,37 @@ async function loadDiag(force) {
   if ($('diag-local')) $('diag-local').innerHTML = kvRows(rows);
 
   const box = $('diag-issues');
+  const list = d.issues || [];
   if (box) {
-    const list = d.issues || [];
     box.innerHTML = list.length
-      ? list.map((i) => '<li class="' + esc(i.level) + '">' + esc(i.msg) + '</li>').join('')
+      ? list.map((i) => {
+          let one = '<li class="' + esc(i.level) + '">' + esc(i.msg);
+          if (i.hint) one += '<div class="issue-hint">怎么办：' + esc(i.hint) + '</div>';
+          one += '</li>';
+          return one;
+        }).join('')
       : '<li class="ok">没发现明显问题。</li>';
+  }
+
+  // 自检结论下面给「接下来做什么」。原来只有一句结论，
+  // 新手不知道下一步该点哪里。
+  const next = $('diag-next');
+  if (next) {
+    const acts = [];
+    const err = list.filter((x) => x.level === 'err');
+    const warn = list.filter((x) => x.level === 'warn');
+    if (err.length) {
+      acts.push('先把上面标「err」的 ' + err.length + ' 项解决掉，这些会直接挡住推流。');
+    }
+    if (warn.length) {
+      acts.push('标「warn」的 ' + warn.length + ' 项不一定会挡住开播，但多半会影响弹幕或稳定性。');
+    }
+    if (!err.length && !warn.length) {
+      acts.push('本机这边看没问题。开播还是不通的话，去看第 5 步的「收流实现」，换一个试试。');
+      acts.push('PS5 上报「有其他设备正在向这个频道播放」，先在第 5 步点「修复收流」。');
+      acts.push('还是不行，点右上角「重启」，再不行把诊断包发到 QQ 群里。');
+    }
+    next.innerHTML = acts.map((a) => '<li>' + esc(a) + '</li>').join('');
   }
 
   if (bar) {
@@ -1086,7 +1155,13 @@ async function loadRtmpImpl() {
     const r = await api('/api/rtmp_impl');
     const sel = $('rtmp-impl');
     const hint = $('impl-hint');
-    if (sel && r) sel.value = r.impl || 'nginx';
+    if (sel && r) {
+      // 后端配置里是 auto，下拉只有 rtmpf / nginx 两项，直接赋值会选不中，
+      // 第一次打开就是一片空白。用「当前生效」那个值兜底。
+      const want = (r.impl === 'auto' || !r.impl) ? (r.active || 'rtmpf') : r.impl;
+      sel.value = want;
+      if (!sel.value) sel.value = r.active || 'rtmpf';
+    }
     if (hint) {
       // 收流端起不来时，把真正的失败原因放在这里。原来只显示「当前生效」，
       // 端口被系统占着、进程秒退这些用户完全看不到。

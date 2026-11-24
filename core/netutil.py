@@ -56,11 +56,21 @@ def _patch_popen_del() -> None:
         if getattr(orig, "_ps5lb_safe", False):
             return
 
+        # 析构过程本身可能又触发别的 Popen 析构（比如顺手起一个子进程去收尾），
+        # 于是一层层套下去直到递归上限。用一个标志挡住重入：已经在一个
+        # 析构里了，再进来的直接跳过，不给它卷成递归的机会。
+        _in_del = [False]
+
         def safe_del(self, *a, **kw):
+            if _in_del[0]:
+                return
+            _in_del[0] = True
             try:
                 orig(self, *a, **kw)
             except BaseException:
                 pass
+            finally:
+                _in_del[0] = False
 
         safe_del._ps5lb_safe = True
         _sp.Popen.__del__ = safe_del

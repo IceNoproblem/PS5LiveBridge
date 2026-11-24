@@ -103,6 +103,14 @@
         <span class="rail-k">阶段</span>
         <span class="rail-v" id="rail-state">空闲</span>
       </div>
+      <div class="rail-row" id="rail-channel-row" style="display:none">
+        <span class="rail-k">通道</span>
+        <span class="rail-v" id="rail-channel" style="word-break:break-all">—</span>
+      </div>
+      <div class="rail-row" id="rail-err-row" style="display:none">
+        <span class="rail-k">原因</span>
+        <span class="rail-v err" id="rail-err" style="word-break:break-all">—</span>
+      </div>
       <div class="rail-row">
         <span class="rail-k">PS5→本机</span>
         <span class="rail-v" id="rail-ps5-link">未连</span>
@@ -686,7 +694,9 @@
             <span class="impl-hint" id="impl-hint"></span>
           </div>
           <p class="small dim" style="margin:2px 0 10px">
-            默认选中的那个就行，<b>不用动</b>。换一个会立刻生效，不用重启程序。
+            <b style="color:var(--warn)">非必要，不修改。</b>
+            默认选中的那个就行。换一个会立刻生效，不用重启程序。
+            只有开播一直失败、或者 PS5 报「有其他设备正在向这个频道播放」时才需要换。
           </p>
           <div class="note warn">
             <b>开播时 PS5 报「有其他设备正在向这个频道播放」？</b><br>
@@ -1011,10 +1021,31 @@
           <button class="btn sm" onclick="loadDiag(1)">重新自检</button>
         </div>
         <p class="card-sub">
-          本机相关服务、接口、端口、全面自检
+          本机相关服务、接口、端口，全查一遍。播不出来先在这里看。
         </p>
 
+        <details class="guide-box">
+          <summary>第一次用？点这里看怎么读这份报告</summary>
+          <ol>
+            <li>每条后面的颜色：<b class="ok">绿色</b> 是正常，
+                <b class="warn">黄色</b> 是要注意，
+                <b class="err">红色</b> 是现在就有问题，得先处理。</li>
+            <li>上面的列表按「通用 · 三种方案都要看」分组。你只用了其中一种方案，
+                另外两组的检查项不影响你，可以先不管。</li>
+            <li>最常踩的三个坑：程序没用管理员身份运行、1935 端口被别的软件占了、
+                防火墙没放行。先看这三条。</li>
+            <li>每条问题下面写了「怎么办」，照着做就行，不用去查百度。</li>
+            <li>全绿还是播不出去？去第 5 步看「收流实现」，
+                或者点一下旁边的「修复收流」。</li>
+          </ol>
+        </details>
+
         <div class="diagbar" id="diag-verdict">还没采集</div>
+
+        <div class="diagbox" id="diag-next-box" style="margin-top:10px">
+          <div class="diagbox-h">接下来做什么</div>
+          <ul class="diagissues" id="diag-next"><li class="dim">先点右上角「重新自检」</li></ul>
+        </div>
 
         <div class="diaggrid" style="grid-template-columns:1fr">
           <div class="diagbox">
@@ -1041,6 +1072,9 @@
         </div>
 
         <div class="diagbox-h" style="margin-top:16px">发现的问题</div>
+        <p class="small dim" style="margin:4px 0 8px">
+          按影响从大到小排。红色的先处理，黄色的可以先放着。
+        </p>
         <ul class="diagissues" id="diag-issues"><li class="dim">—</li></ul>
 
         <div id="sniff-block">

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import json
 import os
 import sys
@@ -11,6 +12,24 @@ from flask import (Flask, Response, jsonify, render_template, request,
 from werkzeug.exceptions import HTTPException
 
 from core import logbus, netutil, paths, platforms, rtmf, xiaohongshu
+
+
+def only_local(fn):
+    """
+    只允许本机调用。
+
+    服务在 headless / 容器模式下会绑 0.0.0.0，局域网里任何人都能打开界面。
+    关机、重启、改路由器这类操作不能跟着一起开放，否则连上你的 Wi-Fi
+    就能把机器关掉。
+    """
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        ip = (request.remote_addr or "").strip()
+        if ip not in ("127.0.0.1", "::1", "localhost"):
+            return jsonify({"ok": False,
+                            "msg": "这个操作只允许在本机执行（%s 不行）" % ip}), 403
+        return fn(*args, **kwargs)
+    return wrapper
 
 
 def create_app(orch, on_exit=None, on_restart=None) -> Flask:
@@ -116,6 +135,7 @@ def create_app(orch, on_exit=None, on_restart=None) -> Flask:
         return jsonify(orch.router_detect(ip=body.get("ip", "")))
 
     @app.post("/api/router/apply")
+    @only_local
     def api_router_apply():
         body = request.get_json(silent=True) or {}
         return jsonify(orch.router_apply(
@@ -124,6 +144,7 @@ def create_app(orch, on_exit=None, on_restart=None) -> Flask:
             password=body.get("password", "")))
 
     @app.post("/api/router/restore")
+    @only_local
     def api_router_restore():
         body = request.get_json(silent=True) or {}
         return jsonify(orch.router_restore(
@@ -146,10 +167,12 @@ def create_app(orch, on_exit=None, on_restart=None) -> Flask:
         return jsonify(orch.divert_status())
 
     @app.post("/api/divert/start")
+    @only_local
     def api_divert_start():
         return jsonify(orch.enable_divert())
 
     @app.post("/api/divert/stop")
+    @only_local
     def api_divert_stop():
         return jsonify(orch.disable_divert())
 
@@ -158,6 +181,7 @@ def create_app(orch, on_exit=None, on_restart=None) -> Flask:
         return jsonify(orch.hijack_state())
 
     @app.post("/api/builtin/start")
+    @only_local
     def api_builtin_start():
         return jsonify(orch.enable_builtin_dns())
 
@@ -170,6 +194,7 @@ def create_app(orch, on_exit=None, on_restart=None) -> Flask:
                         "upstreams": orch.dns.upstreams})
 
     @app.post("/api/builtin/stop")
+    @only_local
     def api_builtin_stop():
         return jsonify(orch.disable_builtin_dns())
 
@@ -272,6 +297,7 @@ def create_app(orch, on_exit=None, on_restart=None) -> Flask:
         return jsonify(orch.ensure_nginx())
 
     @app.post("/api/shutdown")
+    @only_local
     def api_shutdown():
         def _bye():
             try:
@@ -283,6 +309,7 @@ def create_app(orch, on_exit=None, on_restart=None) -> Flask:
         return jsonify({"ok": True})
 
     @app.post("/api/restart")
+    @only_local
     def api_restart():
         """退出前拉起一份新的。延迟由 main 那边控制，等本进程放掉端口和锁。"""
         if not on_restart:

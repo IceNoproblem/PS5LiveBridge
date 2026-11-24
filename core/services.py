@@ -41,8 +41,13 @@ class Services(object):
                                        name="async-services", daemon=True)
         self.thread.start()
         self._ready.wait(6.0)
+        # 就绪事件置位只表示 boot 跑完，不代表 IRC 真的听上了。
+        # 这里看一眼实际监听状态再返回，免得上层拿到一个假 True。
         self._started = True
-        return self._started
+        try:
+            return bool(self.irc.running)
+        except Exception:
+            return False
 
     def _run(self, irc_port: int):
         self.loop = asyncio.new_event_loop()
