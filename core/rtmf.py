@@ -220,8 +220,18 @@ class RtmpForwarderManager(object):
 
     @property
     def forwarding(self) -> bool:
+        """
+        有没有在转发：PS5 正在推 + 已经下发过目标。
+
+        判据原来读 _snap["stream_key"]，但 _poll_once 里根本没写这个键
+        （写的是 publishing 和 name），所以这个属性从上线起就一直返回 False。
+        5.2.3 拿它做看门狗判据之后，后果才显出来：每 30 秒认为转发断了、
+        重新下发一次，PS5 上「画面正在同步」就跟着刷屏。
+        """
         with self._lock:
-            return bool(self._snap.get("stream_key")) and self._dest is not None
+            publishing = bool(self._snap.get("publishing")
+                              or self._snap.get("name"))
+            return publishing and self._dest is not None
 
     @property
     def uptime(self) -> float:

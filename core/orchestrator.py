@@ -1109,11 +1109,14 @@ class Orchestrator(object):
         """
         return []
 
-    def _apply_destinations(self, bili_url: str = "") -> bool:
+    def _apply_destinations(self, bili_url: str = "",
+                            notify: bool = True) -> bool:
         """
         把所有要推的平台一次性接上去。
 
         bili_url 为空表示这次不推 B 站（用户关掉了推送），只走手填的那几个。
+        notify 只在第一次下发时开。看门狗重试会再走一遍这里，
+        再发一遍「画面正在同步」，PS5 上就成了刷屏。
         """
         targets = []
         if bili_url:
@@ -1134,7 +1137,8 @@ class Orchestrator(object):
                 self._fail_live(self.nginx.last_error or "转发启动失败")
                 return False
             self._ensure_rtmf_watch()
-            self.services.notify_ps5("画面正在同步")
+            if notify:
+                self.services.notify_ps5("画面正在同步")
             return True
 
         # 其余收流端：每个目标一个 ffmpeg
@@ -1164,7 +1168,8 @@ class Orchestrator(object):
         if not started:
             self._fail_live("所有转发都没起来")
             return False
-        self.services.notify_ps5("画面正在同步")
+        if notify:
+            self.services.notify_ps5("画面正在同步")
         return True
 
     def save_outputs(self, items: dict) -> dict:
@@ -1349,7 +1354,9 @@ class Orchestrator(object):
                                 tag="转发")
                     if not self._last_out_url:
                         continue
-                    ok = self._apply_destinations(self._last_out_url)
+                    # 静默重试：成功了也不要再发「画面正在同步」，
+                    # PS5 上那条会变成刷屏
+                    ok = self._apply_destinations(self._last_out_url, notify=False)
                     if not ok:
                         self._fail_live("转发目标重新下发失败：%s"
                                         % (self.nginx.last_error or "未知原因"))
